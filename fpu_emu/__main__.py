@@ -13,9 +13,9 @@ import fpu_emu.alu.logic  # noqa: F401
 import fpu_emu.alu.lzc  # noqa: F401
 import fpu_emu.alu.shifter  # noqa: F401
 import fpu_emu.dispatcher  # noqa: F401
-import fpu_emu.memory.ram  # noqa: F401
-import fpu_emu.memory.registers  # noqa: F401
-import fpu_emu.memory.rom  # noqa: F401
+import fpu_emu.hardware.memory  # noqa: F401
+import fpu_emu.hardware.registers  # noqa: F401
+import fpu_emu.hardware.rom  # noqa: F401
 import fpu_emu.micro_code  # noqa: F401
 
 
