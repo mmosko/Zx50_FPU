@@ -168,7 +168,7 @@ def test_user_opcode_div_i64_underflow_empty_stack(fpga: FpgaModel) -> None:
 
     assert fpga.reg_file.sp.read_int() == 0
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR) is True
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW) is True
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
 
 
 def test_user_opcode_div_i64_underflow_partial_stack(fpga: FpgaModel) -> None:
@@ -177,7 +177,7 @@ def test_user_opcode_div_i64_underflow_partial_stack(fpga: FpgaModel) -> None:
     user_push32(fpga, 10)
     assert fpga.reg_file.sp.read_int() == 1
     fpga.dispatcher.execute(UserOpcode.DIV_I64)
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW) is True
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR) is True
 
     # Reset stack and push 1 64-bit operand (2 words)
@@ -186,7 +186,7 @@ def test_user_opcode_div_i64_underflow_partial_stack(fpga: FpgaModel) -> None:
     user_push64(fpga, 10)
     assert fpga.reg_file.sp.read_int() == 2
     fpga.dispatcher.execute(UserOpcode.DIV_I64)
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW) is True
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR) is True
 
     # Reset stack and push 3 words
@@ -196,5 +196,5 @@ def test_user_opcode_div_i64_underflow_partial_stack(fpga: FpgaModel) -> None:
     user_push32(fpga, 5)
     assert fpga.reg_file.sp.read_int() == 3
     fpga.dispatcher.execute(UserOpcode.DIV_I64)
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW) is True
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR) is True

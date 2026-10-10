@@ -8,30 +8,30 @@ from fpu_emu.user_opcodes import UserOpcode
 
 
 @pytest.mark.parametrize(
-    "a,b,expected_res,exp_cf,exp_zf,exp_sf,desc",
+    "a,b,expected_res,exp_cf,exp_zf,exp_sf,exp_vf,desc",
     [
-        (0, 0, 0, False, True, False, "zero * zero"),
-        (10, 25, 250, False, False, False, "small positive integers: 10 * 25"),
-        (6, 7, 42, False, False, False, "6 * 7 = 42"),
-        (100, 200, 20000, False, False, False, "100 * 200 = 20000"),
+        (0, 0, 0, False, True, False, False, "zero * zero"),
+        (10, 25, 250, False, False, False, False, "small positive integers: 10 * 25"),
+        (6, 7, 42, False, False, False, False, "6 * 7 = 42"),
+        (100, 200, 20000, False, False, False, False, "100 * 200 = 20000"),
         # Positive * Negative
-        (10, 0xFFFFFFFB, 0xFFFFFFCE, False, False, True, "10 * (-5) = -50"),
-        (0xFFFFFFFB, 10, 0xFFFFFFCE, False, False, True, "(-5) * 10 = -50"),
+        (10, 0xFFFFFFFB, 0xFFFFFFCE, False, False, True, False, "10 * (-5) = -50"),
+        (0xFFFFFFFB, 10, 0xFFFFFFCE, False, False, True, False, "(-5) * 10 = -50"),
         # Negative * Negative
-        (0xFFFFFFF6, 0xFFFFFFFB, 50, False, False, False, "(-10) * (-5) = 50"),
+        (0xFFFFFFF6, 0xFFFFFFFB, 50, False, False, False, False, "(-10) * (-5) = 50"),
         # Multiplying by 1 and -1
-        (0x12345678, 1, 0x12345678, False, False, False, "X * 1 = X"),
-        (0x12345678, 0xFFFFFFFF, 0xEDCBA988, False, False, True, "X * (-1) = -X"),
+        (0x12345678, 1, 0x12345678, False, False, False, False, "X * 1 = X"),
+        (0x12345678, 0xFFFFFFFF, 0xEDCBA988, False, False, True, False, "X * (-1) = -X"),
         # Truncation / 32-bit wrap (high word non-zero)
-        (0x00010000, 0x00010000, 0, False, False, False, "65536 * 65536 = 2^32 -> low 32 bits 0"),
-        (0x00010000, 0x00020000, 0, False, False, False, "65536 * 131072 = 2 * 2^32 -> low 32 bits 0"),
-        (0x7FFFFFFF, 2, 0xFFFFFFFE, False, False, False, "max int32 * 2 -> 64-bit product is positive (+4294967294)"),
-        (0x80000000, 1, 0x80000000, False, False, True, "min int32 * 1 -> 64-bit product is negative (-2147483648)"),
-        (0x80000000, 0xFFFFFFFF, 0x80000000, False, False, False, "min int32 * (-1) -> 64-bit product is positive (+2147483648)"),
+        (0x00010000, 0x00010000, 0, False, False, False, True, "65536 * 65536 = 2^32 -> low 32 bits 0"),
+        (0x00010000, 0x00020000, 0, False, False, False, True, "65536 * 131072 = 2 * 2^32 -> low 32 bits 0"),
+        (0x7FFFFFFF, 2, 0xFFFFFFFE, False, False, False, True, "max int32 * 2 -> 64-bit product is positive (+4294967294)"),
+        (0x80000000, 1, 0x80000000, False, False, True, False, "min int32 * 1 -> 64-bit product is negative (-2147483648)"),
+        (0x80000000, 0xFFFFFFFF, 0x80000000, False, False, False, True, "min int32 * (-1) -> 64-bit product is positive (+2147483648)"),
     ],
 )
 def test_user_opcode_mul_i32(
-    fpga: FpgaModel, a: int, b: int, expected_res: int, exp_cf: bool, exp_zf: bool, exp_sf: bool, desc: str
+    fpga: FpgaModel, a: int, b: int, expected_res: int, exp_cf: bool, exp_zf: bool, exp_sf: bool, exp_vf: bool, desc: str
 ) -> None:
     """Tests executing UserOpcode.MUL_I32 via dispatcher with stack operands (a * b)."""
     # Push operand a then operand b
@@ -48,11 +48,11 @@ def test_user_opcode_mul_i32(
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
 
     # Status flags: CARRY (cleared by MUL), ZERO, and SIGN are preserved from MUL;
-    # OVERFLOW and ERR are cleared by the subsequent successful PUSH.
+    # OVERFLOW (VF) is preserved from MUL; ERR is cleared by the subsequent successful PUSH.
     assert fpga.reg_file.status.is_bit_set(StatusFlag.CARRY) == exp_cf
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ZERO) == exp_zf
     assert fpga.reg_file.status.is_bit_set(StatusFlag.SIGN) == exp_sf
-    assert not fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW) == exp_vf
 
     # Pop result from stack
     res = user_pop32(fpga)
@@ -68,7 +68,7 @@ def test_mul_i32_underflow_empty_stack(fpga: FpgaModel) -> None:
 
     assert fpga.reg_file.sp.read_int() == 0
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR) is True
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW) is True
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
 
 
 def test_mul_i32_underflow_single_operand(fpga: FpgaModel) -> None:
@@ -80,7 +80,7 @@ def test_mul_i32_underflow_single_operand(fpga: FpgaModel) -> None:
 
     assert fpga.reg_file.sp.read_int() == 0
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR) is True
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW) is True
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
 
 
 def test_mul_i32_timing_cycles(fpga: FpgaModel) -> None:

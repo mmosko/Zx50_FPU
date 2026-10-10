@@ -76,7 +76,7 @@ def format_micro_instruction(inst: MicroInstruction) -> str:
             parts.append(f"src=FpuTable.{inst.src.name}")
         else:
             parts.append(f"src=Reg.{inst.src.name}")
-    if inst.op in (MicroOp.JZ, MicroOp.JNZ) or inst.flag.value != 0:
+    if inst.op in (MicroOp.JZ, MicroOp.JNZ) or (inst.op == MicroOp.LDI and inst.dst == Reg.NONE) or inst.flag.value != 0:
         parts.append(f"flag=StatusFlag.{inst.flag.name}")
     if (
         inst.imm != 0

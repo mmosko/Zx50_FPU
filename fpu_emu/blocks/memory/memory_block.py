@@ -101,8 +101,7 @@ class MemoryBlock(FunctionalBlock):
             case _:
                 raise HardwareBusError(f"Unsupported opcode: {instr.op}")
 
-    STATUS_OVERFLOW_ERR_MASK = (1 << StatusFlag.OVERFLOW.value) | (1 << StatusFlag.ERR.value)
-    STATUS_UNDERFLOW_ERR_MASK = (1 << StatusFlag.UNDERFLOW.value) | (1 << StatusFlag.ERR.value)
+    STATUS_ERR_MASK = 1 << StatusFlag.ERR.value
 
     def _push(self, instr: MicroInstruction) -> None:
         """push src to TOS"""
@@ -148,15 +147,15 @@ class MemoryBlock(FunctionalBlock):
 
         self._outputs.block_res.set(0)
         self._outputs.block_res_sel.set(Reg.NONE.value)
-        self._outputs.status_wr_sel.set(self.STATUS_OVERFLOW_ERR_MASK)
+        self._outputs.status_wr_sel.set(self.STATUS_ERR_MASK)
 
         if self._stack_adder.is_overflow:
-            # Stack overflow: set VF and ERR, do not write memory or update SP
-            self._outputs.res_status.set(self.STATUS_OVERFLOW_ERR_MASK)
+            # Stack overflow: set ERR, do not write memory or update SP
+            self._outputs.res_status.set(self.STATUS_ERR_MASK)
             # calls to _writeback() done in caller
             return
 
-        # No overflow: clear VF and ERR
+        # No overflow: clear ERR
         self._outputs.res_status.set(0)
 
         # 1 cycle to present address and data
@@ -221,16 +220,16 @@ class MemoryBlock(FunctionalBlock):
 
         self._outputs.block_res.set(0)
         self._outputs.block_res_sel.set(Reg.NONE.value)
-        self._outputs.status_wr_sel.set(self.STATUS_UNDERFLOW_ERR_MASK)
+        self._outputs.status_wr_sel.set(self.STATUS_ERR_MASK)
 
         if self._stack_adder.is_underflow:
-            # Stack underflow: set UF and ERR, do not write memory or update SP
-            self._outputs.res_status.set(self.STATUS_UNDERFLOW_ERR_MASK)
+            # Stack underflow: set ERR, do not write memory or update SP
+            self._outputs.res_status.set(self.STATUS_ERR_MASK)
             return
 
         new_sp = self._stack_adder.read_int()
 
-        # No underflow: clear UF and ERR
+        # No underflow: clear ERR
         self._outputs.res_status.set(0)
         self._clock.tick()
 
@@ -600,8 +599,8 @@ class MemoryBlock(FunctionalBlock):
         self._outputs.block_res.set(0)
         self._outputs.block_res_sel.set(Reg.NONE)
         self._outputs.res_status.set(status)
-        # Does not write BUSY (bit 7) or ERR (bit 1)
-        self._outputs.status_wr_sel.set(0x7D)
+        # Does not write BUSY (bit 7) or ERR (bit 6)
+        self._outputs.status_wr_sel.set(0x3F)
         self._outputs.exec_done.set(1)
         self._writeback()
 

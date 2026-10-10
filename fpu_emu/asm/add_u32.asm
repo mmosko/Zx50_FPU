@@ -23,5 +23,6 @@
 USER_ADD_U32:
     CALL POP_TWO_32             ; AL <- A (NOS), BL <- B (TOS)
     ADD AL, BL                  ; AL <- A + B (sets CARRY on unsigned overflow)
-    PUSH AL                     ; Push result (clears OVERFLOW to 0)
+    LDI VF, 0                   ; Clear VF to 0 in unsigned mode
+    PUSH AL                     ; Push result
     HALT

@@ -28,7 +28,7 @@ def test_user_opcode_dup4(fpga: FpgaModel) -> None:
 def test_user_opcode_dup4_underflow(fpga: FpgaModel) -> None:
     """Tests DUP4 underflow on empty stack."""
     fpga.dispatcher.execute(UserOpcode.DUP4)
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
     assert fpga.reg_file.sp.read_int() == 0
 
@@ -56,11 +56,11 @@ def test_user_opcode_dup8_underflow(fpga: FpgaModel) -> None:
     """Tests DUP8 underflow on empty or incomplete stack."""
     # Empty stack
     fpga.dispatcher.execute(UserOpcode.DUP8)
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
 
     # Only 32-bit pushed
     user_push32(fpga, 0x12345678)
     fpga.dispatcher.execute(UserOpcode.DUP8)
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR)

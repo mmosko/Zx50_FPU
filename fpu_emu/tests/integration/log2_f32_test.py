@@ -108,10 +108,10 @@ def test_log2_f32_nan(fpga: FpgaModel) -> None:
 
 
 def test_log2_f32_stack_underflow(fpga: FpgaModel) -> None:
-    """Tests executing LOG2_F32 on an empty stack asserts UNDERFLOW and ERR."""
+    """Tests executing LOG2_F32 on an empty stack asserts ERR (not UNDERFLOW)."""
     assert fpga.reg_file.sp.read_int() == 0
     fpga.dispatcher.execute(UserOpcode.LOG2_F32)
 
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
     assert fpga.reg_file.sp.read_int() == 0

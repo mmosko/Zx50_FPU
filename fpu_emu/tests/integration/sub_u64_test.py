@@ -46,14 +46,14 @@ def test_user_opcode_sub_u64(
 
 
 def test_sub_u64_underflow_empty_stack(fpga: FpgaModel) -> None:
-    """Executing SUB_U64 with empty stack must trigger underflow and set ERR & UNDERFLOW."""
+    """Executing SUB_U64 with empty stack must trigger underflow and set ERR (not UNDERFLOW)."""
     assert fpga.reg_file.sp.read_int() == 0
 
     fpga.dispatcher.execute(UserOpcode.SUB_U64)
 
     assert fpga.reg_file.sp.read_int() == 0
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR) is True
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW) is True
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
 
 
 def test_sub_u64_underflow_single_word(fpga: FpgaModel) -> None:
@@ -64,7 +64,7 @@ def test_sub_u64_underflow_single_word(fpga: FpgaModel) -> None:
     fpga.dispatcher.execute(UserOpcode.SUB_U64)
 
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR) is True
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW) is True
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
 
 
 def test_sub_u64_underflow_single_operand(fpga: FpgaModel) -> None:
@@ -75,7 +75,7 @@ def test_sub_u64_underflow_single_operand(fpga: FpgaModel) -> None:
     fpga.dispatcher.execute(UserOpcode.SUB_U64)
 
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR) is True
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW) is True
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
 
 
 def test_sub_u64_underflow_three_words(fpga: FpgaModel) -> None:
@@ -87,4 +87,4 @@ def test_sub_u64_underflow_three_words(fpga: FpgaModel) -> None:
     fpga.dispatcher.execute(UserOpcode.SUB_U64)
 
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR) is True
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW) is True
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)

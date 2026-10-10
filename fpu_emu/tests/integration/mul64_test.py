@@ -64,14 +64,14 @@ def test_user_opcode_mul_i64(
 
 
 def test_mul_i64_underflow_empty_stack(fpga: FpgaModel) -> None:
-    """Executing MUL_I64 with empty stack must trigger underflow and set ERR & UNDERFLOW."""
+    """Executing MUL_I64 with empty stack must trigger underflow and set ERR (not UNDERFLOW)."""
     assert fpga.reg_file.sp.read_int() == 0
 
     fpga.dispatcher.execute(UserOpcode.MUL_I64)
 
     assert fpga.reg_file.sp.read_int() == 0
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR) is True
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW) is True
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
 
 
 def test_mul_i64_underflow_single_32bit_operand(fpga: FpgaModel) -> None:
@@ -83,7 +83,7 @@ def test_mul_i64_underflow_single_32bit_operand(fpga: FpgaModel) -> None:
 
     assert fpga.reg_file.sp.read_int() == 0
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR) is True
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW) is True
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
 
 
 def test_mul_i64_underflow_single_64bit_operand(fpga: FpgaModel) -> None:
@@ -95,7 +95,7 @@ def test_mul_i64_underflow_single_64bit_operand(fpga: FpgaModel) -> None:
 
     assert fpga.reg_file.sp.read_int() == 0
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR) is True
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW) is True
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
 
 
 def test_mul_i64_timing_cycles(fpga: FpgaModel) -> None:

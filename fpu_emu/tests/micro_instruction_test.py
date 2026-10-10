@@ -248,5 +248,28 @@ def test_micro_instruction_from_bytes_invalid_length():
         MicroInstruction.from_bytes(b"\x00\x01\x02")
 
 
+def test_status_flags_bit_encoding_roundtrip():
+    expected_flags = [
+        (StatusFlag.ZERO, 0),
+        (StatusFlag.DIFF_SIGN, 1),
+        (StatusFlag.UNDERFLOW, 2),
+        (StatusFlag.OVERFLOW, 3),
+        (StatusFlag.CARRY, 4),
+        (StatusFlag.SIGN, 5),
+        (StatusFlag.ERR, 6),
+        (StatusFlag.BUSY, 7),
+    ]
+    for flag, expected_val in expected_flags:
+        assert flag.value == expected_val
+        inst = MicroInstruction(op=MicroOp.JNZ, flag=flag, imm=0)
+        word = inst.to_int()
+        # FLAG_COND is at [16:14]
+        flag_in_word = (word >> 14) & 0x07
+        assert flag_in_word == expected_val
+        recovered = MicroInstruction.from_int(word)
+        assert recovered.flag == flag
+
+
+
 
 

@@ -28,5 +28,6 @@ USER_MUL_U32:
     JZ VF, MUL_U32_NO_CARRY     ; If VF == 0 (no overflow), skip setting CARRY
     LDI CARRY, 1                ; High 32-bit product non-zero: set CARRY = 1
 MUL_U32_NO_CARRY:
-    PUSH AL                     ; Push low 32 bits of product (clears VF to 0)
+    LDI VF, 0                   ; In unsigned mode, VF is cleared to 0
+    PUSH AL                     ; Push low 32 bits of product
     HALT

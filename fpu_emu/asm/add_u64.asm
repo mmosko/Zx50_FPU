@@ -23,5 +23,6 @@
 USER_ADD_U64:
     CALL POP_TWO_64             ; AX <- A (NOS), BX <- B (TOS)
     ADD AX, BX                  ; AX <- A + B (sets CARRY on unsigned overflow)
-    PUSH AX                     ; Push 64-bit result {AH, AL} (clears OVERFLOW to 0)
+    LDI VF, 0                   ; Clear VF to 0 in unsigned mode
+    PUSH AX                     ; Push 64-bit result {AH, AL}
     HALT

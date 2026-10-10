@@ -99,15 +99,15 @@ def test_mul_f32_underflow(fpga: FpgaModel) -> None:
 
 
 def test_mul_f32_stack_underflow(fpga: FpgaModel) -> None:
-    """Tests that MUL_F32 with empty stack asserts UNDERFLOW and ERR."""
+    """Tests that MUL_F32 with empty stack asserts ERR (not UNDERFLOW)."""
     fpga.dispatcher.execute(UserOpcode.MUL_F32)
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
 
 
 def test_mul_f32_stack_single_operand(fpga: FpgaModel) -> None:
-    """Tests that MUL_F32 with only one operand on stack asserts UNDERFLOW and ERR."""
+    """Tests that MUL_F32 with only one operand on stack asserts ERR (not UNDERFLOW)."""
     user_push32(fpga, f32_to_bits(1.0))
     fpga.dispatcher.execute(UserOpcode.MUL_F32)
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)

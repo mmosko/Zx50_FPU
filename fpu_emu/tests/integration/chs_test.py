@@ -44,7 +44,7 @@ def test_user_opcode_chs_i32(
 
 def test_user_opcode_chs_i32_underflow(fpga: FpgaModel) -> None:
     fpga.dispatcher.execute(UserOpcode.CHS_I32)
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
 
 
@@ -85,13 +85,13 @@ def test_user_opcode_chs_i64(
 def test_user_opcode_chs_i64_underflow(fpga: FpgaModel) -> None:
     # Empty stack
     fpga.dispatcher.execute(UserOpcode.CHS_I64)
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
 
     # Partial (only 32-bit pushed)
     user_push32(fpga, 42)
     fpga.dispatcher.execute(UserOpcode.CHS_I64)
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
 
 

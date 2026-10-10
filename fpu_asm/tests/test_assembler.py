@@ -361,3 +361,83 @@ def test_mulu_divu_assembly():
     assert prog_dict[3].src == Reg.BL
 
 
+def test_status_flag_encodings():
+    code = """
+        JZ ZERO, 0x10
+        JZ ZF, 0x10
+        JZ Z, 0x10
+        JZ DIFF_SIGN, 0x10
+        JZ DF, 0x10
+        JZ D, 0x10
+        JZ UNDERFLOW, 0x10
+        JZ UF, 0x10
+        JZ U, 0x10
+        JZ OVERFLOW, 0x10
+        JZ VF, 0x10
+        JZ V, 0x10
+        JZ CARRY, 0x10
+        JZ CF, 0x10
+        JZ SIGN, 0x10
+        JZ SF, 0x10
+        JZ S, 0x10
+        JZ ERR, 0x10
+        JZ EF, 0x10
+        JZ BUSY, 0x10
+        JZ BF, 0x10
+        JZ BSY, 0x10
+        LDI ERR, 1
+        LDI DF, 0
+    """
+    asm = Assembler()
+    prog = dict(asm.assemble(code))
+
+    # ZERO (0)
+    assert prog[0].flag == StatusFlag.ZERO == 0
+    assert prog[1].flag == StatusFlag.ZERO == 0
+    assert prog[2].flag == StatusFlag.ZERO == 0
+
+    # DIFF_SIGN (1)
+    assert prog[3].flag == StatusFlag.DIFF_SIGN == 1
+    assert prog[4].flag == StatusFlag.DIFF_SIGN == 1
+    assert prog[5].flag == StatusFlag.DIFF_SIGN == 1
+
+    # UNDERFLOW (2)
+    assert prog[6].flag == StatusFlag.UNDERFLOW == 2
+    assert prog[7].flag == StatusFlag.UNDERFLOW == 2
+    assert prog[8].flag == StatusFlag.UNDERFLOW == 2
+
+    # OVERFLOW (3)
+    assert prog[9].flag == StatusFlag.OVERFLOW == 3
+    assert prog[10].flag == StatusFlag.OVERFLOW == 3
+    assert prog[11].flag == StatusFlag.OVERFLOW == 3
+
+    # CARRY (4)
+    assert prog[12].flag == StatusFlag.CARRY == 4
+    assert prog[13].flag == StatusFlag.CARRY == 4
+
+    # SIGN (5)
+    assert prog[14].flag == StatusFlag.SIGN == 5
+    assert prog[15].flag == StatusFlag.SIGN == 5
+    assert prog[16].flag == StatusFlag.SIGN == 5
+
+    # ERR (6)
+    assert prog[17].flag == StatusFlag.ERR == 6
+    assert prog[18].flag == StatusFlag.ERR == 6
+
+    # BUSY (7)
+    assert prog[19].flag == StatusFlag.BUSY == 7
+    assert prog[20].flag == StatusFlag.BUSY == 7
+    assert prog[21].flag == StatusFlag.BUSY == 7
+
+    # LDI ERR (6), 1
+    assert prog[22].op == MicroOp.LDI
+    assert prog[22].flag == StatusFlag.ERR == 6
+    assert prog[22].imm == 1
+
+    # LDI DF (1), 0
+    assert prog[23].op == MicroOp.LDI
+    assert prog[23].flag == StatusFlag.DIFF_SIGN == 1
+    assert prog[23].imm == 0
+
+
+

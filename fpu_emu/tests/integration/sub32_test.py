@@ -45,12 +45,12 @@ def test_user_opcode_sub_i32(
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
 
-    # Status flags: CARRY (borrow), ZERO, and SIGN are preserved from SUB;
-    # OVERFLOW and ERR are cleared by the subsequent successful PUSH.
+    # Status flags: CARRY (borrow), ZERO, SIGN, and OVERFLOW are preserved from SUB;
+    # ERR is cleared by the subsequent successful PUSH.
     assert fpga.reg_file.status.is_bit_set(StatusFlag.CARRY) == exp_cf
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ZERO) == exp_zf
     assert fpga.reg_file.status.is_bit_set(StatusFlag.SIGN) == exp_sf
-    assert not fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW) == exp_vf
 
     # Pop result from stack
     res = user_pop32(fpga)
@@ -59,14 +59,14 @@ def test_user_opcode_sub_i32(
 
 
 def test_sub_i32_underflow_empty_stack(fpga: FpgaModel) -> None:
-    """Executing SUB_I32 with empty stack must trigger underflow and set ERR & UNDERFLOW."""
+    """Executing SUB_I32 with empty stack must trigger underflow and set ERR (not UNDERFLOW)."""
     assert fpga.reg_file.sp.read_int() == 0
 
     fpga.dispatcher.execute(UserOpcode.SUB_I32)
 
     assert fpga.reg_file.sp.read_int() == 0
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR) is True
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW) is True
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
 
 
 def test_sub_i32_underflow_single_operand(fpga: FpgaModel) -> None:
@@ -78,4 +78,4 @@ def test_sub_i32_underflow_single_operand(fpga: FpgaModel) -> None:
 
     assert fpga.reg_file.sp.read_int() == 0
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR) is True
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW) is True
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)

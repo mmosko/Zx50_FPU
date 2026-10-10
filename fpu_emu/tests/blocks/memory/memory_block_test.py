@@ -68,7 +68,7 @@ def test_push_multiple(fpga: FpgaModel):
 
 
 def test_push_overflow(fpga: FpgaModel):
-    """PUSH when SP=127 should assert OVERFLOW and ERR, without updating SP or memory."""
+    """PUSH when SP=127 should assert ERR (not OVERFLOW), without updating SP or memory."""
     # Set SP to max value (127)
     fpga.reg_file.sp.write(127)
     fpga.reg_file.al.write(0xDEADBEEF)
@@ -85,13 +85,13 @@ def test_push_overflow(fpga: FpgaModel):
     # Memory at address 127 should NOT have been written
     assert fpga.memory.read(0, 127) == 0
 
-    # Status flags should indicate overflow and error
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
+    # Status flags should indicate error, preserving ALU flags like OVERFLOW
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
 
 
-def test_push_clears_previous_overflow(fpga: FpgaModel):
-    """A successful PUSH clears previously raised OVERFLOW and ERR flags."""
+def test_push_clears_previous_err(fpga: FpgaModel):
+    """A successful PUSH clears previously raised ERR flag, preserving ALU flags."""
     fpga.reg_file.status.set_bit(StatusFlag.OVERFLOW, True)
     fpga.reg_file.status.set_bit(StatusFlag.ERR, True)
     fpga.reg_file.sp.write(0)
@@ -104,7 +104,7 @@ def test_push_clears_previous_overflow(fpga: FpgaModel):
     fpga.dispatcher._run(microcode)
 
     assert fpga.reg_file.sp.read_int() == 1
-    assert not fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
 
 
@@ -184,12 +184,12 @@ def test_pop32_underflow(fpga: FpgaModel):
 
     assert fpga.reg_file.sp.read_int() == 0
     assert fpga.reg_file.bl.read_int() == 0xCAFEBABE
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
 
 
 def test_pop64_underflow_empty(fpga: FpgaModel):
-    """64-bit POP when SP=0 asserts UNDERFLOW and ERR; neither dst register is modified."""
+    """64-bit POP when SP=0 asserts ERR (not UNDERFLOW); neither dst register is modified."""
     fpga.reg_file.bl.write(0x11111111)
     fpga.reg_file.bh.write(0x22222222)
     assert fpga.reg_file.sp.read_int() == 0
@@ -203,7 +203,7 @@ def test_pop64_underflow_empty(fpga: FpgaModel):
     assert fpga.reg_file.sp.read_int() == 0
     assert fpga.reg_file.bl.read_int() == 0x11111111
     assert fpga.reg_file.bh.read_int() == 0x22222222
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
 
 
@@ -224,7 +224,7 @@ def test_pop64_underflow_one_item(fpga: FpgaModel):
     assert fpga.reg_file.sp.read_int() == 0
     assert fpga.reg_file.bh.read_int() == 0x55556666  # Hi word popped from TOS
     assert fpga.reg_file.bl.read_int() == 0xAAAAAAAA  # Lo word untouched on underflow
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
 
 
@@ -242,7 +242,7 @@ def test_push64_overflow_at_127(fpga: FpgaModel):
 
     assert fpga.reg_file.sp.read_int() == 127
     assert fpga.memory.read(0, 127) == 0
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
 
 
@@ -260,12 +260,12 @@ def test_push64_overflow_at_126(fpga: FpgaModel):
 
     assert fpga.reg_file.sp.read_int() == 127  # Incremented once by low word
     assert fpga.memory.read(0, 126) == 0x12345678  # Low word was written
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
 
 
-def test_pop32_clears_previous_underflow(fpga: FpgaModel):
-    """A successful 32-bit POP clears previously asserted UNDERFLOW and ERR flags."""
+def test_pop32_clears_previous_err(fpga: FpgaModel):
+    """A successful 32-bit POP clears previously asserted ERR flag, preserving ALU flags."""
     fpga.reg_file.status.set_bit(StatusFlag.UNDERFLOW, True)
     fpga.reg_file.status.set_bit(StatusFlag.ERR, True)
     fpga.reg_file.al.write(0x1234)
@@ -278,12 +278,12 @@ def test_pop32_clears_previous_underflow(fpga: FpgaModel):
     fpga.dispatcher._run(microcode)
 
     assert fpga.reg_file.bl.read_int() == 0x1234
-    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
 
 
-def test_pop64_clears_previous_underflow(fpga: FpgaModel):
-    """A successful 64-bit POP clears previously asserted UNDERFLOW and ERR flags."""
+def test_pop64_clears_previous_err(fpga: FpgaModel):
+    """A successful 64-bit POP clears previously asserted ERR flag, preserving ALU flags."""
     fpga.reg_file.status.set_bit(StatusFlag.UNDERFLOW, True)
     fpga.reg_file.status.set_bit(StatusFlag.ERR, True)
     fpga.reg_file.al.write(0x11112222)
@@ -298,7 +298,7 @@ def test_pop64_clears_previous_underflow(fpga: FpgaModel):
 
     assert fpga.reg_file.bl.read_int() == 0x11112222
     assert fpga.reg_file.bh.read_int() == 0x33334444
-    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
 
 
@@ -531,7 +531,7 @@ def test_ssav_sres_basic(fpga: FpgaModel):
 
 
 def test_sres_preserves_err_and_busy(fpga: FpgaModel):
-    """SRES mask 0x7D does not overwrite ERR (bit 1) or BUSY (bit 7)."""
+    """SRES mask 0x3F does not overwrite ERR (bit 6) or BUSY (bit 7)."""
     # Initially ERR is 0
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
 
@@ -544,7 +544,7 @@ def test_sres_preserves_err_and_busy(fpga: FpgaModel):
     # Simulate subroutine encountering an error (ERR set to 1)
     fpga.reg_file.status.set_bit(StatusFlag.ERR, True)
 
-    # SRES should NOT clear ERR because mask 0x7D excludes bit 1
+    # SRES should NOT clear ERR because mask 0x3F excludes bit 6
     fpga.reg_file.upc.write(0)
     microcode = [
         MicroInstruction(op=MicroOp.SRES),

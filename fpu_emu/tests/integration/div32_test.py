@@ -68,11 +68,11 @@ def test_user_opcode_div_i32_underflow(fpga: FpgaModel) -> None:
     """Tests DIV_I32 underflow with insufficient stack depth."""
     # Stack empty
     fpga.dispatcher.execute(UserOpcode.DIV_I32)
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
 
     # Only 1 operand on stack
     user_push32(fpga, 10)
     fpga.dispatcher.execute(UserOpcode.DIV_I32)
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR)

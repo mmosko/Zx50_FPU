@@ -100,8 +100,9 @@ def test_user_opcode_pow_f32_zero_neg_exp(fpga: FpgaModel) -> None:
 
 
 def test_user_opcode_pow_f32_stack_underflow(fpga: FpgaModel) -> None:
-    """Tests that POW_F32 with < 2 stack entries asserts UF=1."""
+    """Tests that POW_F32 with < 2 stack entries asserts ERR (not UNDERFLOW)."""
     user_push32(fpga, f32_to_bits(2.0))
     fpga.dispatcher.execute(UserOpcode.POW_F32)
 
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR)

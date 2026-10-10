@@ -16,7 +16,7 @@
 ;   POP_TWO_64: BX = TOS (64-bit), AX = NOS (64-bit)
 ;   POP_ONE_64: AX = TOS (64-bit)
 ;   Status flags:
-;     UNDERFLOW (UF) set if stack contains fewer operands than requested.
+;     ERR (EF) set if stack contains fewer operands than requested.
 ;
 ; Register Allocation:
 ;   AX (AL, AH) : Received operand (NOS for two, TOS for one)
@@ -26,10 +26,10 @@
 
 POP_TWO_64:
     POP BX                      ; Pop 64-bit TOS into BX
-    JNZ UF, POP_TWO_64_HALT     ; If stack underflow: halt
+    JNZ ERR, POP_TWO_64_HALT    ; If stack error (underflow): halt
 POP_ONE_64:
     POP AX                      ; Pop 64-bit NOS (or TOS for POP_ONE_64) into AX
-    JNZ UF, POP_TWO_64_HALT     ; If stack underflow: halt
+    JNZ ERR, POP_TWO_64_HALT    ; If stack error (underflow): halt
     RET
 POP_TWO_64_HALT:
     HALT

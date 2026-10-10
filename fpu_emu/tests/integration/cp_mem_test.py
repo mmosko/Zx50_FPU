@@ -53,8 +53,8 @@ def test_cp_mem_tos_underflow(fpga: FpgaModel) -> None:
     # Stack is now empty: attempt to store to slot 3
     fpga.dispatcher.execute(UserOpcode.CP_MEM3_TOS)
 
-    # Must flag UNDERFLOW and ERR
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
+    # Must flag ERR (not UNDERFLOW, since UNDERFLOW is an ALU flag)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
 
     # Slot 3 must remain unmodified (0xCAFEBABE)
@@ -72,8 +72,8 @@ def test_cp_tos_mem_overflow(fpga: FpgaModel) -> None:
     # Attempt to push from memory slot 0
     fpga.dispatcher.execute(UserOpcode.CP_TOS_MEM0)
 
-    # Must flag OVERFLOW and ERR
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
+    # Must flag ERR (not OVERFLOW, since OVERFLOW is an ALU flag)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
     assert fpga.reg_file.sp.read_int() == 127
 

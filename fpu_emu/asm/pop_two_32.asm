@@ -16,7 +16,7 @@
 ;   POP_TWO_32: BL = TOS (32-bit), AL = NOS (32-bit)
 ;   POP_ONE_32: AL = TOS (32-bit)
 ;   Status flags:
-;     UNDERFLOW (UF) set if stack contains fewer operands than requested.
+;     ERR (EF) set if stack contains fewer operands than requested.
 ;
 ; Register Allocation:
 ;   AL : Received operand (NOS for two, TOS for one)
@@ -26,10 +26,10 @@
 
 POP_TWO_32:
     POP BL                      ; Pop TOS into BL
-    JNZ UF, POP_TWO_32_HALT     ; If stack underflow: halt
+    JNZ ERR, POP_TWO_32_HALT    ; If stack error (underflow): halt
 POP_ONE_32:
     POP AL                      ; Pop NOS (or TOS for POP_ONE_32) into AL
-    JNZ UF, POP_TWO_32_HALT     ; If stack underflow: halt
+    JNZ ERR, POP_TWO_32_HALT    ; If stack error (underflow): halt
     RET
 POP_TWO_32_HALT:
     HALT
