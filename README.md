@@ -1,22 +1,30 @@
 # Zx50 FPU: Hardware Floating-Point & Stack Coprocessor
 
-The **Zx50 FPU** is a high-performance, FPGA-based hardware floating-point and stack coprocessor designed for the **Zx50 distributed computing cluster** (specifically integrated on the **Zx50 CPU Card Rev C4**). 
+The **Zx50 FPU** is a high-performance, FPGA-based hardware floating-point and stack coprocessor designed for high-throughput arithmetic acceleration. While originally developed for the **Zx50 distributed computing cluster** (specifically integrated on the **Zx50 CPU Card Rev C4** with a Zilog Z80 host), the coprocessor architecture is **fundamentally CPU-agnostic**.
 
-It tightly couples to a vintage or modern host **Zilog Z80 CPU** (running at 5–10 MHz) and accelerates 32-bit and 64-bit integer, single-precision (`f32`), and double-precision (`f64`) IEEE-754 floating-point arithmetic using an internal micro-sequencer clocked at up to 80 MHz.
+### Universal Stack-Based Architecture (Any CPU)
+
+The Zx50 FPU is decoupled from the host CPU architecture through a clean, high-level **stack-based interface**:
+* **Host CPU Agnostic:** Any microprocessor (e.g., Z80, 6502, 68000, 8086, ARM, or RISC-V) can leverage the coprocessor. Operands are pushed onto a 64-word hardware stack, an 8-bit opcode triggers execution, and results are popped in return.
+* **Modular Bus Interface vs. Core FPU:** The particulars of the bus interface—such as address decoding, strobe qualification (`~IORQ`/`~RD`/`~WR` vs. `R/~W`/`PHI2`), and handshake signaling (`~WAIT` vs. `READY` vs. polling)—are localized to a thin front-end bus-adapter layer. The **underlying stack-based FPU core on the Lattice MachXO2** (datapath blocks, 64-word stack, micro-sequencer, register file, and microcode ROM) remains completely identical across different host systems.
+* **Autonomous High-Speed Execution:** The internal execution engine runs independently at up to 80 MHz, accelerating 32-bit and 64-bit integer, single-precision (`f32`), and double-precision (`f64`) IEEE-754 floating-point arithmetic with zero CPU overhead.
 
 ---
 
 ## Architecture Overview
 
+The diagram below illustrates the reference integration with a Z80 host CPU:
+
 ```
                       +---------------------------------------+
-                      |         Host Z80 CPU (5.0V)           |
+                      |         Host CPU (e.g. Z80 5.0V)      |
                       |          Base I/O Ports:              |
                       |  Port 0x70: Data Stack (Push / Pop)   |
                       |  Port 0x71: Opcode & Status Register  |
                       +---------------------------------------+
                                           |
-                      [ 74CBTD3861 5V <-> 3.3V Level Shifters ]
+                      [ Host Bus Adapter / Level Shifters     ]
+                      [ (e.g., 74CBTD3861 5V <-> 3.3V)        ]
                                           |
                       +---------------------------------------+
                       | Lattice MachXO2-2000HC FPGA (3.3V)    |
@@ -38,17 +46,17 @@ It tightly couples to a vintage or modern host **Zilog Z80 CPU** (running at 5�
                       |  +---------------------------------+  |
                       |                  |                    |
                       |  +---------------------------------+  |
-                      |  | Wait-State Generator (BWAIT_N)  | ---> Q4 (2N7002) -> ~WAIT
+                      |  | Wait/Ready Handshake (BWAIT_N)  | ---> Open-drain / Q4 -> ~WAIT
                       |  +---------------------------------+  |
                       +---------------------------------------+
 ```
 
 ### Key Technical Highlights
 
-* **Host Port Interface:** Controlled via just two Z80 I/O ports:
+* **Host Port Interface:** Controlled via just two 8-bit I/O ports (or memory-mapped registers):
   * **Port `0x70` (`DATA`):** Bi-directional 8-bit portal to the 64-word hardware operand stack. Pushing 4 or 8 bytes pushes an `i32`, `u32`, `f32`, `i64`, `u64`, or `f64` operand; reading pops the result in Little-Endian byte order.
   * **Port `0x71` (`CMD` / `STATUS`):** Write an 8-bit UserOpcode to trigger an operation; read to query the 8-bit `STATUS` register (`BUSY`, `ERR`, `ZERO`, `SIGN`, `OVERFLOW`, `UNDERFLOW`, `CARRY`).
-* **Zero-Overhead Hardware Wait States:** Dedicated open-drain handshake circuitry (`BWAIT_N` driving MOSFET `Q4`) automatically holds the Z80's `~WAIT` line low during calculation in **Blocking Mode**. The Z80 issues an `OUT (0x71), A` instruction and resumes execution the instant calculation finishes—requiring zero software polling loops. Non-blocking polling mode is also supported.
+* **Zero-Overhead Hardware Wait States:** Dedicated open-drain handshake circuitry (`BWAIT_N` driving MOSFET `Q4`) automatically holds the host CPU's wait/ready line low during calculation in **Blocking Mode**. The CPU issues an opcode and resumes execution the instant calculation finishes—requiring zero software polling loops. Non-blocking polling mode is also supported.
 * **FPGA Logic Optimized for MachXO2:** Implemented entirely in soft logic and embedded block RAM (SysMEM EBR) on a Lattice MachXO2-2000HC / MachXO3:
   * **0 DSP blocks used** (synthesizes cleanly into CCU2C carry-chains and PFU slices).
   * **8 EBR 9Kb blocks total** (4 blocks for 2KB Data RAM & stack, 4 blocks for 1,024-word microcode ROM).
@@ -99,7 +107,7 @@ zx50_fpu/
 │   │   ├── logic_block.py  # Bitwise logic & sign manipulation
 │   │   ├── memory/         # SysMEM EBR stack & scratchpad memory
 │   │   └── control/        # Microcode program counter, call stack, sequencer
-│   └── tests/              # 996 automated unit and integration tests (100% pass)
+│   └── tests/              # 1,057 automated unit and integration tests (100% pass)
 ├── src/                    # Verilog HDL synthesizable modules
 ├── sim/                    # Verilog testbenches (Icarus Verilog)
 └── syn/                    # Lattice Diamond synthesis constraints and scripts
