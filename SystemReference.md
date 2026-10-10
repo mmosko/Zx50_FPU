@@ -20,8 +20,7 @@ The physical registers are 32-bits each (unless stated otherwise):
 - SP (8-bit hardware math stack pointer)
 - OSP (5-bit batch operation stack pointer)
 - UPC (10-bit microcode program counter, addressing 1,024 words in CODE_ROM)
-- CALL_STACK (16 words x 10 bit, return address stack in distributed LUT RAM with 4-bit CSP pointer)
-- STATUS (8-bit status flags register)
+- STATUS (8-bit status flags register: [7: BSY, 6: ERR, 5: S, 4: C, 3: V, 2: U, 1: D, 0: Z]; refer to [ProgrammersGuide.md](ProgrammersGuide.md#2-status-register-status70) for complete bitfield definitions, system vs. ALU flag separation, and Z80 polling idioms)
 
 In the assembly, pseudo-registers AX, BX, CX, DX, and FX denote 64-bit operations, e.g `ADD AX, BX`.
 
@@ -52,7 +51,7 @@ The following table summarizes the complete microcode instruction set, organized
 
 ### Instruction Set Summary Table
 
-| Block | Mnemonic | Operands | W | Clock Cycles | Opcode (Hex / Bin) | BSY | D | S | C | V | U | ERR | Z | Operation Performed |
+| Block | Mnemonic | Operands | W | Clock Cycles | Opcode (Hex / Bin) | BSY | ERR | S | C | V | U | DF | Z | Operation Performed |
 | :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
 | **Math**<br>`0b000`<br>`0b001` | `ADC` | `dst, src2` | 0 | 1 | `0x01` (`0b000_001`) | • | • | X | X | X | • | • | X | `dst <- dst + src2 + C` |
 | | `ADC` | `dst, src1, src2` | 0 | 1 | `0x01` (`0b000_001`) | • | • | X | X | X | • | • | X | `dst <- src1 + src2 + C` |
@@ -62,10 +61,10 @@ The following table summarizes the complete microcode instruction set, organized
 | | `ADD` | `AX, BX` | 1 | 2 | `0x00` (`0b000_000`) | • | • | X | X | X | • | • | X | `AX <- AX + BX` (64-bit) |
 | | `CMP` | `src1, src2` | 0 | 1 | `0x04` (`0b000_100`) | • | • | X | X | X | • | • | X | `src1 - src2` (discards result) |
 | | `CMP` | `AX, BX` | 1 | 2 | `0x04` (`0b000_100`) | • | • | X | X | X | • | • | X | `AX - BX` (64-bit compare) |
-| | `DIV` | `dst, src2` | 0 | 32 | `0x0B` (`0b001_011`) | • | • | X | 0 | X | • | X | X | `dst <- dst / src2, DL <- rem` (ERR & V on div 0) |
-| | `DIV` | `AX, BX` | 1 | 64 | `0x0B` (`0b001_011`) | • | • | X | 0 | X | • | X | X | `AX <- AX / BX, DX <- rem` (64-bit) |
-| | `DIVU` | `dst, src2` | 0 | 32 | `0x0F` (`0b001_111`) | • | • | X | 0 | X | • | X | X | `dst <- dst / src2, DL <- rem` (unsigned, ERR & V on div 0) |
-| | `DIVU` | `AX, BX` | 1 | 64 | `0x0F` (`0b001_111`) | • | • | X | 0 | X | • | X | X | `AX <- AX / BX, DX <- rem` (64-bit) |
+| | `DIV` | `dst, src2` | 0 | 32 | `0x0B` (`0b001_011`) | • | X | X | 0 | X | • | • | X | `dst <- dst / src2, DL <- rem` (ERR & V on div 0) |
+| | `DIV` | `AX, BX` | 1 | 64 | `0x0B` (`0b001_011`) | • | X | X | 0 | X | • | • | X | `AX <- AX / BX, DX <- rem` (64-bit) |
+| | `DIVU` | `dst, src2` | 0 | 32 | `0x0F` (`0b001_111`) | • | X | X | 0 | X | • | • | X | `dst <- dst / src2, DL <- rem` (unsigned, ERR & V on div 0) |
+| | `DIVU` | `AX, BX` | 1 | 64 | `0x0F` (`0b001_111`) | • | X | X | 0 | X | • | • | X | `AX <- AX / BX, DX <- rem` (64-bit) |
 | | `EXP_ADD` | `dst, src2` | 0 | 1 | `0x05` (`0b000_101`) | • | • | X | 0 | X | X | • | X | `dst <- dst + src2` (12-bit exp; V if > 1023, U if < -1022) |
 | | `EXP_ADD` | `dst, src1, src2` | 0 | 1 | `0x05` (`0b000_101`) | • | • | X | 0 | X | X | • | X | `dst <- src1 + src2` (12-bit exp) |
 | | `EXP_SUB` | `dst, src2` | 0 | 1 | `0x06` (`0b000_110`) | • | • | X | 0 | X | X | • | X | `dst <- dst - src2` (12-bit exp; V if > 1023, U if < -1022) |
@@ -84,8 +83,8 @@ The following table summarizes the complete microcode instruction set, organized
 | | `SUB` | `dst, src2` | 0 | 1 | `0x02` (`0b000_010`) | • | • | X | X | X | • | • | X | `dst <- dst - src2` |
 | | `SUB` | `dst, src1, src2` | 0 | 1 | `0x02` (`0b000_010`) | • | • | X | X | X | • | • | X | `dst <- src1 - src2` |
 | | `SUB` | `AX, BX` | 1 | 2 | `0x02` (`0b000_010`) | • | • | X | X | X | • | • | X | `AX <- AX - BX` (64-bit) |
-| | `UNPACK` | `dst, src1` | 0 | 1 | `0x09` (`0b001_001`) | • | X | X | • | • | • | • | X | `src1 <- dst.exp, dst <- dst.mantissa`; D=`sA ^ sB` |
-| | `UNPACK` | `AX, src1` | 1 | 2 | `0x09` (`0b001_001`) | • | X | X | • | • | • | • | X | `src1 <- AX.exp, AX <- AX.mantissa` (64-bit double) |
+| | `UNPACK` | `dst, src1` | 0 | 1 | `0x09` (`0b001_001`) | • | • | X | • | • | • | X | X | `src1 <- dst.exp, dst <- dst.mantissa`; DF=`sA ^ sB` |
+| | `UNPACK` | `AX, src1` | 1 | 2 | `0x09` (`0b001_001`) | • | • | X | • | • | • | X | X | `src1 <- AX.exp, AX <- AX.mantissa` (64-bit double) |
 | **Logic**<br>`0b010` | `AND` | `dst, src2` | 0 | 1 | `0x10` (`0b010_000`) | • | • | X | **0** | **0** | • | • | X | `dst <- dst & src2` (**clears C and V**) |
 | | `AND` | `dst, src1, src2` | 0 | 1 | `0x10` (`0b010_000`) | • | • | X | **0** | **0** | • | • | X | `dst <- src1 & src2` (**clears C and V**) |
 | | `AND` | `AX, BX` | 1 | 2 | `0x10` (`0b010_000`) | • | • | X | **0** | **0** | • | • | X | `AX <- AX & BX` (**clears C and V**) |
@@ -121,11 +120,11 @@ The following table summarizes the complete microcode instruction set, organized
 | | `LDU` | `AX, addr` | 1 | 2 | `0x28` (`0b101_000`) | • | • | • | • | • | • | • | • | 64-bit load from user scratchpad |
 | | `MOV` | `dst, src2` | 0 | 1 | `0x26` (`0b100_110`) | • | • | • | • | • | • | • | • | `dst <- src2` |
 | | `MOV` | `AX, BX` | 1 | 2 | `0x26` (`0b100_110`) | • | • | • | • | • | • | • | • | `AX <- BX` (64-bit copy) |
-| | `POP` | `dst` | 0 | 1 | `0x21` (`0b100_001`) | • | • | • | • | • | **0\*** | **0\*** | • | `dst <- TOS, SP <- SP - 1` (\*clears U/ERR) |
-| | `POP` | `AX` | 1 | 2 | `0x21` (`0b100_001`) | • | • | • | • | • | **0\*** | **0\*** | • | `AX <- TOS, SP <- SP - 2` (\*clears U/ERR) |
-| | `PUSH` | `src2` | 0 | 1 | `0x20` (`0b100_000`) | • | • | • | • | **0\*** | • | **0\*** | • | `TOS <- src2, SP <- SP + 1` (\*clears V/ERR) |
-| | `PUSH` | `AX` | 1 | 2 | `0x20` (`0b100_000`) | • | • | • | • | **0\*** | • | **0\*** | • | `TOS <- AX, SP <- SP + 2` (\*clears V/ERR) |
-| | `SRES` | — | 0 | 1 | `0x2F` (`0b101_111`) | X | X | X | X | X | X | X | X | `STATUS <- SHADOW_STATUS` (restores flags) |
+| | `POP` | `dst` | 0 | 1 | `0x21` (`0b100_001`) | • | **X\*** | • | • | • | • | • | • | `dst <- TOS, SP <- SP - 1` (\*sets ERR on underflow) |
+| | `POP` | `AX` | 1 | 2 | `0x21` (`0b100_001`) | • | **X\*** | • | • | • | • | • | • | `AX <- TOS, SP <- SP - 2` (\*sets ERR on underflow) |
+| | `PUSH` | `src2` | 0 | 1 | `0x20` (`0b100_000`) | • | **X\*** | • | • | • | • | • | • | `TOS <- src2, SP <- SP + 1` (\*sets ERR on overflow) |
+| | `PUSH` | `AX` | 1 | 2 | `0x20` (`0b100_000`) | • | **X\*** | • | • | • | • | • | • | `TOS <- AX, SP <- SP + 2` (\*sets ERR on overflow) |
+| | `SRES` | — | 0 | 1 | `0x2F` (`0b101_111`) | • | • | X | X | X | X | X | X | `STATUS <- SHADOW_STATUS` (restores ALU flags with mask `0x3F`) |
 | | `SSAV` | — | 0 | 1 | `0x2E` (`0b101_110`) | • | • | • | • | • | • | • | • | `SHADOW_STATUS <- STATUS` (saves flags) |
 | | `STO` | `addr, src2` | 0 | 1 | `0x25` (`0b100_101`) | • | • | • | • | • | • | • | • | `DATA_RAM[0x080 \| (addr & 0x3F)] <- src2` |
 | | `STO` | `[src1], src2` | 0 | 1 | `0x25` (`0b100_101`) | • | • | • | • | • | • | • | • | `DATA_RAM[0x080 \| (src1 & 0x3F)] <- src2` |
@@ -161,7 +160,7 @@ ADD dst, src1, src2 — ADD REGISTER TO REGISTER
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  X  |  X  |  X  |  -  |  -  |  X  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -220,7 +219,7 @@ ADC dst, src1, src2 — ADD WITH CARRY REGISTER TO REGISTER
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  X  |  X  |  X  |  -  |  -  |  X  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -278,7 +277,7 @@ SUB dst, src1, src2 — SUBTRACT REGISTER FROM REGISTER
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  X  |  X  |  X  |  -  |  -  |  X  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -337,7 +336,7 @@ SBB dst, src1, src2 — SUBTRACT WITH BORROW REGISTER FROM REGISTER
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  X  |  X  |  X  |  -  |  -  |  X  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -394,7 +393,7 @@ CMP src1, src2 — COMPARE TWO REGISTERS
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  X  |  X  |  X  |  -  |  -  |  X  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -449,7 +448,7 @@ EXP_ADD dst, src1, src2 — EXPONENT 12-BIT ADDITION (REGISTER TO REGISTER/IMMED
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  X  |  -  |  X  |  X  |  -  |  X  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -503,7 +502,7 @@ EXP_SUB dst, src1, src2 — EXPONENT 12-BIT SUBTRACTION (REGISTER TO REGISTER/IM
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  X  |  -  |  X  |  X  |  -  |  X  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -557,7 +556,7 @@ PACK dst, src1 — PACK IEEE-754 FLOATING-POINT NUMBER
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  X  |  -  |  X  |  X  |  -  |  X  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -614,16 +613,16 @@ UNPACK dst, src1 — UNPACK IEEE-754 FLOATING-POINT NUMBER
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
-|  -  |  X  |  X  |  -  |  -  |  -  |  -  |  X  |
+|  -  |  -  |  X  |  -  |  -  |  -  |  X  |  X  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
 ```
 
 * **`Z`**: Set to 1 if input float is zero; reset to 0 otherwise.
 * **`S`**: Set to 1 if float sign bit is 1; reset to 0 otherwise.
+* **`DF`**: Set to `STATUS.S ^ dst.sign` (computes operand sign difference for add/sub alignment).
 * **`C`, `V`, `U`, `ERR`**: Unaffected.
-* **`D`**: Set to `STATUS.S ^ dst.sign` (computes operand sign difference for add/sub alignment).
 
 #### Register Transfer & Datapath Flow
 
@@ -677,7 +676,7 @@ MUL dst, src2 / MUL AX, src2 — SIGNED MULTIPLY (RADIX-4 BOOTH MULTIPLIER)
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  X  |  0  |  X  |  -  |  -  |  X  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -735,17 +734,17 @@ DIV dst, src2 / DIV AX, src2 — SIGNED INTEGER DIVISION
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
-|  -  |  -  |  X  |  -  |  X  |  -  |  X  |  X  |
+|  -  |  X  |  X  |  -  |  X  |  -  |  -  |  X  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
 ```
 
 * **`Z`**: Set to 1 if quotient is zero; reset to 0 otherwise.
 * **`S`**: Set to 1 if MSB of quotient is 1; reset to 0 otherwise.
-* **`C`, `U`, `D`**: Unaffected.
-* **`V`**: Set to 1 on divide-by-zero or signed overflow (`0x80000000 / -1`); reset to 0 otherwise.
-* **`ERR`**: Set to 1 on divide-by-zero ($src2 == 0$); reset to 0 otherwise.
+* **`ERR`**: Set to 1 on division by zero ($src2 = 0$).
+* **`V`**: Set to 1 on division by zero ($src2 = 0$) or signed overflow (`0x80000000 / -1`).
+* **`C`, `U`, `DF`**: Unaffected.
 
 #### Register Transfer & Datapath Flow
 
@@ -801,7 +800,7 @@ MULU dst, src2 / MULU AX, src2 — UNSIGNED MULTIPLY (RADIX-4 BOOTH MULTIPLIER)
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  X  |  0  |  X  |  -  |  -  |  X  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -856,17 +855,17 @@ DIVU dst, src2 / DIVU AX, src2 — UNSIGNED INTEGER DIVISION
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
-|  -  |  -  |  X  |  -  |  X  |  -  |  X  |  X  |
+|  -  |  X  |  X  |  -  |  X  |  -  |  -  |  X  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
 ```
 
 * **`Z`**: Set to 1 if quotient is zero; reset to 0 otherwise.
 * **`S`**: Set to 1 if MSB of quotient is 1; reset to 0 otherwise.
-* **`C`, `U`, `D`**: Unaffected.
-* **`V`**: Set to 1 on divide-by-zero; reset to 0 otherwise.
 * **`ERR`**: Set to 1 on divide-by-zero ($src2 == 0$); reset to 0 otherwise.
+* **`V`**: Set to 1 on divide-by-zero ($src2 == 0$); reset to 0 otherwise.
+* **`C`, `U`, `DF`**: Unaffected.
 
 #### Register Transfer & Datapath Flow
 
@@ -925,7 +924,7 @@ AND dst, src1, src2  — BITWISE LOGICAL AND (dst <- src1 & src2)
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  X  |  0  |  0  |  -  |  -  |  X  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -981,7 +980,7 @@ OR dst, src1, src2  — BITWISE LOGICAL OR (dst <- src1 | src2)
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  X  |  0  |  0  |  -  |  -  |  X  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -1037,7 +1036,7 @@ XOR dst, src1, src2  — BITWISE LOGICAL XOR (dst <- src1 ^ src2)
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  X  |  0  |  0  |  -  |  -  |  X  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -1093,7 +1092,7 @@ FABS dst — FLOATING-POINT ABSOLUTE VALUE
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  0  |  -  |  -  |  -  |  -  |  X  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -1145,7 +1144,7 @@ FCHS dst — FLOATING-POINT CHANGE SIGN (NEGATE)
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  X  |  -  |  -  |  -  |  -  |  -  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -1196,7 +1195,7 @@ NOT dst / NOT AX — BITWISE LOGICAL COMPLEMENT
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  X  |  -  |  -  |  -  |  -  |  X  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -1250,7 +1249,7 @@ LSL dst[, src1] / LSL AX[, src1] — LOGICAL SHIFT LEFT
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  X  |  X  |  -  |  -  |  -  |  X  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -1307,7 +1306,7 @@ LSR dst[, src1] / LSR AX[, src1] — LOGICAL SHIFT RIGHT
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  0  |  X  |  -  |  -  |  -  |  X  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -1363,7 +1362,7 @@ ASL dst[, src1] / ASL AX[, src1] — ARITHMETIC SHIFT LEFT
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  X  |  X  |  X  |  -  |  -  |  X  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -1423,7 +1422,7 @@ ASR dst[, src1] / ASR AX[, src1] — ARITHMETIC SHIFT RIGHT
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  X  |  X  |  -  |  -  |  -  |  X  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -1479,7 +1478,7 @@ LZC dst, src2 / LZC AX, src2 — LEADING ZERO COUNT
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  -  |  -  |  -  |  -  |  -  |  X  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -1533,23 +1532,20 @@ PUSH src2 / PUSH AX — PUSH REGISTER ONTO OPERAND STACK
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
-|  -  |  -  |  -  |  -  |  X  |  -  |  X  |  -  |
+|  -  |  X  |  -  |  -  |  -  |  -  |  -  |  -  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
 ```
 
-* **`V`**: Set to 1 if operand stack overflow occurred ($OSP > 28$ for 32-bit or $> 24$ for 64-bit); reset to 0
-  otherwise.
-* **`ERR`**: Set to 1 on stack overflow; reset to 0 otherwise.
-* **`Z`, `S`, `C`, `U`, `D`**: Unaffected.
+* **`ERR`**: Set to 1 on stack overflow ($OSP + 4 > 32$ for 32-bit or $> 32$ for 64-bit); preserved otherwise.
+* **ALU Flags (`S`, `C`, `V`, `U`, `DF`, `Z`)**: Preserved / Unaffected (memory operations only set system error flag `ERR`; refer to [ProgrammersGuide.md](ProgrammersGuide.md#2-status-register-status70)).
 
 #### Register Transfer & Datapath Flow
 
 ```text
 if W == 0:  # 32-bit push (4 bytes)
     if OSP + 4 > 32:
-        STATUS.V   <- 1
         STATUS.ERR <- 1
     else:
         STACK_RAM [OSP .. OSP+3] <- src2 [31:0]
@@ -1558,7 +1554,6 @@ if W == 0:  # 32-bit push (4 bytes)
     UPC <- UPC + 1
 else:       # 64-bit push (8 bytes)
     if OSP + 8 > 32:
-        STATUS.V   <- 1
         STATUS.ERR <- 1
     else:
         STACK_RAM [OSP .. OSP+7] <- { src2_H [31:0], src2_L [31:0] }
@@ -1575,8 +1570,8 @@ else:       # 64-bit push (8 bytes)
 #### Description
 
 Pushes register `src2` onto the 32-byte operand stack, updates internal `TOS` cache register, and advances `OSP[4:0]`.
-No general-purpose register is written (`RES_SEL = NONE`). If pushing exceeds the 32-byte physical depth, `VF` and `ERR`
-flags are raised.
+No general-purpose register is written (`RES_SEL = NONE`). If pushing exceeds the physical depth, the `ERR` flag
+is asserted without clobbering arithmetic flags `VF` or `UF`.
 
 #### Concrete Numeric Example
 
@@ -1586,7 +1581,7 @@ After execution of PUSH AL:
   STACK_RAM[0..3] <- 0x12345678
   TOS <- 0x12345678
   OSP <- 0x04
-  No overflow: OVERFLOW (V) = 0, ERR = 0
+  No overflow: ERR = 0 (ALU flags unchanged)
 ```
 
 ---
@@ -1600,23 +1595,20 @@ POP dst / POP AX — POP REGISTER FROM OPERAND STACK
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
-|  -  |  -  |  -  |  -  |  -  |  X  |  X  |  -  |
+|  -  |  X  |  -  |  -  |  -  |  -  |  -  |  -  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
 ```
 
-* **`U`**: Set to 1 if operand stack underflow occurred ($OSP < 4$ for 32-bit or $< 8$ for 64-bit); reset to 0
-  otherwise.
-* **`ERR`**: Set to 1 on stack underflow; reset to 0 otherwise.
-* **`Z`, `S`, `C`, `V`, `D`**: Unaffected.
+* **`ERR`**: Set to 1 on stack underflow ($OSP < 4$ for 32-bit or $< 8$ for 64-bit); preserved otherwise.
+* **ALU Flags (`S`, `C`, `V`, `U`, `DF`, `Z`)**: Preserved / Unaffected (memory operations only set system error flag `ERR`; refer to [ProgrammersGuide.md](ProgrammersGuide.md#2-status-register-status70)).
 
 #### Register Transfer & Datapath Flow
 
 ```text
 if W == 0:  # 32-bit pop
     if OSP < 4:
-        STATUS.U   <- 1
         STATUS.ERR <- 1
     else:
         OSP         <- OSP - 4
@@ -1625,7 +1617,6 @@ if W == 0:  # 32-bit pop
     UPC <- UPC + 1
 else:       # 64-bit pop
     if OSP < 8:
-        STATUS.U   <- 1
         STATUS.ERR <- 1
     else:
         OSP                    <- OSP - 8
@@ -1665,7 +1656,7 @@ LDC dst, tbl, addr — LOAD FROM CONSTANT / LUT ROM
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  -  |  -  |  -  |  -  |  -  |  -  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -1755,7 +1746,7 @@ LDI flag, val — LOAD IMMEDIATE BIT INTO STATUS FLAG
 When loading into a register (`dst != NONE`):
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  -  |  -  |  -  |  -  |  -  |  -  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -1766,7 +1757,7 @@ When loading into a register (`dst != NONE`):
 When loading into a status flag (`dst == NONE`):
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  | mod | mod | mod | mod | mod | mod | mod |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -1815,13 +1806,13 @@ LDI EA, 127
 
 Example 2: Setting error flag
 LDI ERR, 1
-  Machine encoding: OPCODE=LDI, DST=NONE, HB_MUX=IMM, FLAG_COND=ERR (1), IMM=1
+  Machine encoding: OPCODE=LDI, DST=NONE, HB_MUX=IMM, FLAG_COND=ERR (6), IMM=1
   STATUS[ERR] <- 1
   All other status flags unaffected.
 
 Example 3: Clearing zero flag
 LDI ZERO, 0
-  Machine encoding: OPCODE=LDI, DST=NONE, HB_MUX=IMM, FLAG_COND=ZERO (6), IMM=0
+  Machine encoding: OPCODE=LDI, DST=NONE, HB_MUX=IMM, FLAG_COND=ZERO (0), IMM=0
   STATUS[ZERO] <- 0
   All other status flags unaffected.
 ```
@@ -1837,7 +1828,7 @@ LD dst, addr / LD dst, [src1] — LOAD FROM SCRATCHPAD MEMORY
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  -  |  -  |  -  |  -  |  -  |  -  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -1905,7 +1896,7 @@ STO addr, src2 / STO [src1], src2 — STORE TO SCRATCHPAD MEMORY
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  -  |  -  |  -  |  -  |  -  |  -  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -1974,7 +1965,7 @@ MOV dst, src2 / MOV AX, src2 — REGISTER-TO-REGISTER MOVE
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  -  |  -  |  -  |  -  |  -  |  -  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -2022,7 +2013,7 @@ SWAP dst, src2 / SWAP AX, src2 — REGISTER EXCHANGE
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  -  |  -  |  -  |  -  |  -  |  -  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -2071,7 +2062,7 @@ LDU dst, addr — LOAD FROM HOST USER BUFFER
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  -  |  -  |  -  |  -  |  -  |  -  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -2119,7 +2110,7 @@ STU addr, src2 — STORE TO HOST USER BUFFER
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  -  |  -  |  -  |  -  |  -  |  -  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -2168,7 +2159,7 @@ SSAV — SAVE STATUS REGISTER TO SHADOW
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  -  |  -  |  -  |  -  |  -  |  -  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -2213,19 +2204,19 @@ SRES — RESTORE STATUS REGISTER FROM SHADOW
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
-|  -  | mod | mod | mod | mod | mod |  -  | mod |
+|  -  |  -  | mod | mod | mod | mod | mod | mod |
 +-----+-----+-----+-----+-----+-----+-----+-----+
 ```
 
-* **`D, S, C, V, U, Z`**: Restored from `STATUS_SHADOW`.
-* **`BSY` (bit 7), `ERR` (bit 1)**: Protected / Unaffected (mask `0x7D` prevents overwriting operational engine flags).
+* **`S, C, V, U, DF, Z`**: Restored from `STATUS_SHADOW`.
+* **`BSY` (bit 7), `ERR` (bit 6)**: System flags protected / unaffected (mask `0x3F` prevents overwriting operational engine and error flags).
 
 #### Register Transfer & Datapath Flow
 
 ```text
-STATUS <- (STATUS & ~0x7D) | (STATUS_SHADOW & 0x7D)
+STATUS <- (STATUS & ~0x3F) | (STATUS_SHADOW & 0x3F)
 UPC    <- UPC + 1
 ```
 
@@ -2235,17 +2226,17 @@ UPC    <- UPC + 1
 
 #### Description
 
-Restores status flags from the internal shadow register using write mask `0x7D` (`0b0111_1101`). Flags `DIFF_SIGN`,
-`SIGN`, `CARRY`, `OVERFLOW`, `UNDERFLOW`, and `ZERO` are restored to their shadowed states. Host interface flags `BUSY`
-(bit 7) and `ERR` (bit 1) are masked out to prevent corrupted engine state. No register is written (`RES_SEL = NONE`).
+Restores ALU status flags from the internal shadow register using write mask `0x3F` (`0b0011_1111`). Flags `SIGN`,
+`CARRY`, `OVERFLOW`, `UNDERFLOW`, `DIFF_SIGN`, and `ZERO` are restored to their shadowed states. System interface flags `BUSY`
+(bit 7) and `ERR` (bit 6) are masked out to preserve execution state. No register is written (`RES_SEL = NONE`).
 
 #### Concrete Numeric Example
 
 ```text
-Suppose STATUS_SHADOW = 0x11 (ZERO=1, CARRY=1), current STATUS = 0x82 (BUSY=1, ERR=1).
+Suppose STATUS_SHADOW = 0x11 (ZERO=1, CARRY=1), current STATUS = 0xC0 (BUSY=1, ERR=1).
 After execution of SRES:
-  Restored with mask 0x7D:
-  STATUS <- (0x82 & ~0x7D) | (0x11 & 0x7D) = 0x82 | 0x11 = 0x93 (BUSY=1, ZERO=1, CARRY=1, ERR=1)
+  Restored with mask 0x3F:
+  STATUS <- (0xC0 & ~0x3F) | (0x11 & 0x3F) = 0xC0 | 0x11 = 0xD1 (BUSY=1, ERR=1, CARRY=1, ZERO=1)
   BUSY and ERR remain unchanged.
 ```
 
@@ -2262,7 +2253,7 @@ JMP addr — UNCONDITIONAL JUMP
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  -  |  -  |  -  |  -  |  -  |  -  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -2304,7 +2295,7 @@ JNZ [flag,] addr — JUMP IF FLAG NOT SET (DEFAULT: ZERO FLAG)
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  -  |  -  |  -  |  -  |  -  |  -  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -2362,7 +2353,7 @@ JZ [flag,] addr — JUMP IF FLAG SET (DEFAULT: ZERO FLAG)
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  -  |  -  |  -  |  -  |  -  |  -  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -2420,7 +2411,7 @@ DJNZ addr — DECREMENT COUNTER C AND JUMP IF NOT ZERO
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  -  |  -  |  -  |  -  |  -  |  X  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -2470,7 +2461,7 @@ CALL addr — SUBROUTINE CALL
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  -  |  -  |  -  |  -  |  -  |  -  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -2517,7 +2508,7 @@ RET — SUBROUTINE RETURN
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  -  |  -  |  -  |  -  |  -  |  -  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -2561,7 +2552,7 @@ NOP — NO OPERATION (PIPELINE BUBBLE)
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  -  |  -  |  -  |  -  |  -  |  -  |  -  |  -  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
@@ -2607,7 +2598,7 @@ HALT — NORMAL EXECUTION TERMINATION
 #### Status Flags Affected
 
 ```text
-  BSY    D     S     C     V     U    ERR    Z
+  BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
 |  0  |  -  |  -  |  -  |  -  |  -  |  -  |  -  |
 +-----+-----+-----+-----+-----+-----+-----+-----+

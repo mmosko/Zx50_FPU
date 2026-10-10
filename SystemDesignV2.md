@@ -14,7 +14,7 @@ all 32bit unless said othewise
 - SP (8 bit) stack pointer
 - OSP (5 bit) operation stack pointer for user BATCH mode (32-byte queue)
 - UPC (10 bit), microcode program counter (addresses 1,024 words x 32-bit in CODE_ROM)
-- STATUS (8 bit), status register [7: BSY, 6: D, 5: S, 4: C, 3: V, 2: U, 1: ERR, 0: Z]
+- STATUS (8 bit), status register [7: BSY, 6: ERR, 5: S, 4: C, 3: V, 2: U, 1: D, 0: Z] (refer to [ProgrammersGuide.md](ProgrammersGuide.md#2-status-register-status70) for complete bitfield definitions, system vs. ALU flag separation, and Z80 polling idioms)
 - CALL_STACK (16 words x 10 bit), return address stack in distributed LUT RAM with 4-bit CSP pointer (supports up to 16
   nested CALL levels)
 - HOST_IN (32-bit), host input staging register (accumulates 4 bytes from Port 0x70 writes)

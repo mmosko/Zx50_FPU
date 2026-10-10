@@ -126,14 +126,14 @@ In 64-bit operations (`W = 1`), pseudo-registers `AX`, `BX`, `CX`, `DX`, `FX` pa
 #### `FLAG_COND` Condition Select (3 bits `[16:14]`)
 
 ```text
-000: ZERO         (ZF == 1 for JZ, ZF == 0 for JNZ)
-001: ERR          (EF == 1)
-010: UNDERFLOW    (UF == 1)
-011: OVERFLOW     (VF == 1)
-100: CARRY        (CF == 1)
-101: SIGN         (SF == 1)
-110: DIFF_SIGN    (DF == 1)
-111: BUSY         (BF == 1)
+000: ZERO         (Bit 0, ZF == 1 for JZ, ZF == 0 for JNZ)
+001: DIFF_SIGN    (Bit 1, DF == 1)
+010: UNDERFLOW    (Bit 2, UF == 1)
+011: OVERFLOW     (Bit 3, VF == 1)
+100: CARRY        (Bit 4, CF == 1)
+101: SIGN         (Bit 5, SF == 1)
+110: ERR          (Bit 6, EF == 1)
+111: BUSY         (Bit 7, BF == 1)
 ```
 
 ---

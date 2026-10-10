@@ -39,43 +39,88 @@ The FPU coprocessor communicates with the Z80 host across standard Z80 I/O space
 The 8-bit `STATUS` register is the primary software interface for execution monitoring, branch testing, and error handling. It is returned on any I/O read of Port `0x71`:
 
 ```text
-+--------+--------+--------+--------+-----------+------------+-------+-------+
-| Bit 7  | Bit 6  | Bit 5  | Bit 4  | Bit 3     | Bit 2      | Bit 1 | Bit 0 |
-+--------+--------+--------+--------+-----------+------------+-------+-------+
-| BUSY   | DIFF   | SIGN   | CARRY  | OVERFLOW  | UNDERFLOW  | ERR   | ZERO  |
-+--------+--------+--------+--------+-----------+------------+-------+-------+
++-----------+-----------+-----------+-----------+-----------+------------+-----------+-----------+
+|   Bit 7   |   Bit 6   |   Bit 5   |   Bit 4   |   Bit 3   |   Bit 2    |   Bit 1   |   Bit 0   |
++-----------+-----------+-----------+-----------+-----------+------------+-----------+-----------+
+|   BUSY    |    ERR    |   SIGN    |   CARRY   | OVERFLOW  | UNDERFLOW  |   DIFF    |   ZERO    |
++-----------+-----------+-----------+-----------+-----------+------------+-----------+-----------+
+| <--- SYSTEM FLAGS --> | <------------------------ ALU FLAGS ---------------------------------> |
+|      (0b1100_0000)    |                               (0b0011_1111)                            |
++-----------------------+------------------------------------------------------------------------+
 ```
+
+### Architectural Division of Flags
+
+The `STATUS` register is strictly partitioned into two independent categories:
+1. **System / Operational Flags (`0b1100_0000` / Bits 7:6):**
+   Reflect hardware execution state and operational faults. Memory/stack boundary errors and instruction/hardware faults report exclusively through these bits.
+2. **ALU / Computational Flags (`0b0011_1111` / Bits 5:0):**
+   Reflect arithmetic, logic, and shifter outcomes. **These flags are driven exclusively by math, logic, shift, and floating-point operations.** Memory operations (`PUSH`, `POP`, `CP [x], TOS`, `CP TOS, [x]`) **never modify or clobber** ALU flags, guaranteeing that the host CPU always inspects the true arithmetic status of the preceding calculation.
+
+---
 
 ### Bit Definitions
 
-* **`BUSY` (Bit 7):**
-  * `1`: Coprocessor is currently executing an operation (or processing a batch queue).
+#### System Flags (`0b1100_0000`)
+* **`BUSY` (Bit 7, `0x80`, `BF`):**
+  * `1`: Coprocessor micro-sequencer is currently executing an operation (or processing a batch queue).
   * `0`: Coprocessor is idle and ready to accept new commands or data.
   * In non-blocking mode, the host polls this bit before issuing commands or reading results.
-* **`DIFF` (Bit 6, `DF` / `D`):**
-  * Set to `1` if operand signs differed during floating-point unpacking/comparison (`sign_A ^ sign_B`), indicating effective subtraction.
-* **`SIGN` (Bit 5, `SF`):**
-  * Set to `1` if the result of the last operation is negative (MSB $= 1$).
-* **`CARRY` (Bit 4, `CF`):**
-  * Set to `1` on integer addition carry out or subtraction borrow.
-* **`OVERFLOW` (Bit 3, `VF`):**
-  * Set to `1` if signed integer arithmetic overflows the representable dynamic range, floating-point math overflows to $\pm\infty$, or a `PUSH` exceeds the 256-byte stack limit.
-* **`UNDERFLOW` (Bit 2, `UF`):**
-  * Set to `1` if floating-point math underflows to denormalized/zero, or a `POP` is attempted on an empty stack ($SP = 0$).
-* **`ERR` (Bit 1, `EF`):**
-  * Master error flag. Set to `1` on illegal opcodes, division by zero, invalid floating-point domain errors (e.g. $\sqrt{-x}$ or $\ln(-x)$), or stack boundary violations.
-* **`ZERO` (Bit 0, `ZF`):**
-  * Set to `1` if the result of the last arithmetic operation is zero ($R = 0$).
+* **`ERR` (Bit 6, `0x40`, `EF`):**
+  * Master operational error flag. Set to `1` on:
+    * **Stack Underflow:** Attempting to `POP` from an empty stack ($SP < \text{needed}$).
+    * **Stack Overflow:** Attempting to `PUSH` when stack is full ($SP + \text{bytes} > 256$).
+    * **Arithmetic Faults:** Integer division by zero (`DIV 0`), floating-point division by zero (`DIV_F32` / `DIV_F64` by 0.0).
+    * **Domain Errors:** Invalid mathematical domain (e.g., $\sqrt{-x}$ on real numbers, $\ln(0)$ or $\ln(-x)$).
+    * **Hardware / Decode Faults:** Unrecognized opcode, invalid register index, or illegal bus access.
 
-### Z80 Assembly Status Polling Pattern
+#### ALU / Computational Flags (`0b0011_1111`)
+* **`SIGN` (Bit 5, `0x20`, `SF`):**
+  * Set to `1` if the computational result is negative (MSB $= 1$ in two's-complement or IEEE sign bit).
+* **`CARRY` (Bit 4, `0x10`, `CF`):**
+  * Set to `1` on unsigned integer addition carry out, subtraction borrow out, or unsigned multiplier overflow ($> 2^{32}-1$ / $> 2^{64}-1$).
+* **`OVERFLOW` (Bit 3, `0x08`, `VF`):**
+  * **Pure arithmetic / range overflow:**
+    * Signed integer addition/subtraction overflow (two's-complement range wrap).
+    * Floating-point to integer conversion overflow (`CONV_F32_I32`, `CONV_F64_I64` exceeding integer limits).
+    * Checked integer conversion domain mismatch (`CONV_U32_I32` with value $\ge 2^{31}$, or `CONV_I32_U32` with value $< 0$).
+    * Integer truncation overflow (`CONV_I64_I32`, `CONV_U64_U32` discarding significant bits).
+    * Tangent asymptote divergence (`TAN` at $\pi/2$).
+  * **Never set by stack or memory operations.**
+* **`UNDERFLOW` (Bit 2, `0x04`, `UF`):**
+  * **Pure floating-point underflow:**
+    * Set to `1` when a floating-point operation produces a non-zero magnitude smaller than the minimum representable normalized float (subnormal) or is flushed to zero.
+  * **Never set by stack or memory operations.**
+* **`DIFF` (Bit 1, `0x02`, `DF` / `DIFF_SIGN`):**
+  * Set to `1` during floating-point unpacking if operand signs differ (`sign_A ^ sign_B`), indicating effective subtraction in addition/subtraction pipelines.
+* **`ZERO` (Bit 0, `0x01`, `ZF`):**
+  * Set to `1` if the arithmetic, logic, or shift result is identically zero ($R = 0$).
+
+---
+
+### Z80 Assembly Status Polling Patterns
+
+#### Pattern A: Single-Mask Polling (Tests Ready & Error in One Instruction)
 ```z80
 Wait_Fpu_Ready:
     IN   A, (0x71)          ; Read STATUS register
-    RLCA                    ; Rotate Bit 7 (BUSY) into Carry
+    AND  0xC0               ; Mask System Flags: Bit 7 (BUSY) and Bit 6 (ERR)
+    JR   Z, Fpu_Success     ; If 0: Not busy AND no error!
+    BIT  6, A               ; Was Bit 6 (ERR) set?
+    JR   NZ, Fpu_Error_Trap ; Branch immediately on error
+    JR   Wait_Fpu_Ready     ; Otherwise still busy: keep polling
+Fpu_Success:
+    ; Coprocessor is ready and error-free!
+```
+
+#### Pattern B: Rotating Carry Polling
+```z80
+Wait_Fpu_Ready:
+    IN   A, (0x71)          ; Read STATUS register
+    RLCA                    ; Rotate Bit 7 (BUSY) into Carry, Bit 6 (ERR) into Bit 7
     JR   C, Wait_Fpu_Ready  ; Loop while BUSY == 1
-    RRA                     ; Restore status byte
-    AND  0x02               ; Test Bit 1 (ERR)
-    JR   NZ, Fpu_Error_Trap ; Jump if ERR == 1
+    RLCA                    ; Rotate Bit 6 (ERR) into Carry
+    JR   C, Fpu_Error_Trap  ; Jump if ERR == 1
     RET
 ```
 
@@ -149,44 +194,44 @@ The table below summarizes all user opcodes. Stack effect follows standard Forth
 * `NOS`: Next on stack (first pushed operand).
 * `TOS`: Top of stack (second pushed operand).
 * **Flags:** `X` = modified by result; `0` = cleared; `1` = set; `-` = unaffected; `*` = exception/error dependent.
-* **Underflow Trapping:** Any operation attempted with fewer than the required bytes on the stack triggers **Stack Underflow** (`U=1, ERR=1`), aborting execution and preserving $SP$.
+* **Stack Underflow Trapping:** Any operation attempted with fewer than the required bytes on the stack triggers **Stack Underflow** (`ERR=1`), aborting execution and preserving $SP$. (`UNDERFLOW` / $U$ is reserved strictly for floating-point computational underflow).
 
-| Opcode | Hex Range | Mnemonic | Forth Stack Effect | $\Delta SP$ | Required Depth | Cycles (@80MHz) | BSY | Z | S | C | V | U | ERR | Primary Error / Side Effects |
-|---|:---:|---|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|---|
-| `0b0000_0fff` | `0x00`–`0x05` | `ADD_fff` | `( a b -- sum )` | $-4$ / $-8$ | 8 / 16 B | 1–2 | X | X | X | X | X | * | * | Stack Underflow ($U=1, ERR=1$), Int/Float Overflow ($V=1$), Unsigned Carry ($C=1$) |
-| `0b0000_1fff` | `0x08`–`0x0D` | `SUB_fff` | `( a b -- diff )` | $-4$ / $-8$ | 8 / 16 B | 1–2 | X | X | X | X | X | * | * | Stack Underflow ($U=1, ERR=1$), Int/Float Overflow ($V=1$), Borrow ($C=1$) |
-| `0b0001_0fff` | `0x10`–`0x15` | `MUL_fff` | `( a b -- prod )` | $-4$ / $-8$ | 8 / 16 B | 16–64 | X | X | X | X | X | * | * | Stack Underflow ($U=1, ERR=1$), Int/Float Overflow ($V=1$), Unsigned Overflow ($C=1$) |
-| `0b0001_1fff` | `0x18`–`0x1D` | `DIV_fff` | `( a b -- quot )` | $-4$ / $-8$ | 8 / 16 B | 18–64 | X | X | X | 0 | X | * | * | Stack Underflow ($U=1, ERR=1$), Div-by-Zero ($ERR=1, V=1$), Float Underflow ($U=1$) |
-| `0b0010_00x1` | `0x21`, `0x23` | `SQRT_F32/F64`| `( x -- root )` | $0$ | 4 / 8 B | 16–32 | X | X | 0 | 0 | 0 | * | * | Float-only. Stack Underflow ($U=1, ERR=1$), Negative Operand ($ERR=1$) |
-| `0b0010_10x1` | `0x29`, `0x2B` | `POW_F32/F64` | `( base exp -- res )` | $-4$ / $-8$ | 8 / 16 B | ~120 | X | X | X | 0 | X | * | * | Float-only. Stack Underflow ($U=1, ERR=1$), Exponent Overflow/Underflow |
-| `0b0011_00x1` | `0x31`, `0x33` | `LOG2_F32/F64`| `( x -- log2_x )`| $0$ | 4 / 8 B | ~60 | X | X | X | 0 | 0 | * | * | Float-only. Stack Underflow ($U=1, ERR=1$), Non-positive Operand $x \le 0$ ($ERR=1$) |
-| `0b0011_10x1` | `0x39`, `0x3B` | `EXP2_F32/F64`| `( x -- 2_x )`   | $0$ | 4 / 8 B | ~60 | X | X | 0 | 0 | X | * | * | Float-only. Stack Underflow ($U=1, ERR=1$), Exponent Overflow ($V=1$), Underflow ($U=1$) |
-| `0b0101_0fff` | `0x50`–`0x53` | `CHS_fff` | `( x -- -x )` | $0$ | 4 / 8 B | 1–2 | X | X | X | X | X | * | * | Stack Underflow ($U=1, ERR=1$), Int Negate Overflow ($V=1$) |
-| `0b0101_1fff` | `0x58`–`0x5B` | `ABS_fff` | `( x -- \|x\| )` | $0$ | 4 / 8 B | 1–2 | X | X | 0 | 0 | X | * | * | Stack Underflow ($U=1, ERR=1$), Int MaxNeg Overflow ($V=1$) |
-| `0b0110_00x1` | `0x61`, `0x63` | `FLOOR_F32/F64`| `( x -- floor )` | $0$ | 4 / 8 B | ~10 | X | X | X | 0 | 0 | * | * | Float-only. Stack Underflow ($U=1, ERR=1$) |
-| `0b0110_10x1` | `0x69`, `0x6B` | `CEIL_F32/F64` | `( x -- ceil )` | $0$ | 4 / 8 B | ~10 | X | X | X | 0 | 0 | * | * | Float-only. Stack Underflow ($U=1, ERR=1$) |
-| `0b0111_00x1` | `0x71`, `0x73` | `SIN_F32/F64` | `( theta -- sin )` | $0$ | 4 / 8 B | ~36 | X | X | X | 0 | 0 | * | * | Float-only. Stack Underflow ($U=1, ERR=1$) |
-| `0b0111_10x1` | `0x79`, `0x7B` | `COS_F32/F64` | `( theta -- cos )` | $0$ | 4 / 8 B | ~36 | X | X | X | 0 | 0 | * | * | Float-only. Stack Underflow ($U=1, ERR=1$) |
-| `0b1000_00x1` | `0x81`, `0x83` | `TAN_F32/F64` | `( theta -- tan )` | $0$ | 4 / 8 B | ~52 | X | X | X | 0 | X | * | * | Float-only. Stack Underflow ($U=1, ERR=1$), Asymptote Overflow ($V=1$) |
-| `0b1010_xxxx` | `0xA0`–`0xAF` | `PUSH_CONST`| `( -- const )` | $+4$ / $+8$ | 0 B | 2–3 | X | 0 | 0 | 0 | * | - | * | Stack Overflow ($V=1, ERR=1$ if $SP + \text{bytes} > 256$) |
-| `0b1100_0000` | `0xC0` | `DUP4` | `( a -- a a )` | $+4$ | 4 B | 2 | X | - | - | - | * | * | * | Stack Underflow ($U=1, ERR=1$), Stack Overflow ($V=1, ERR=1$) |
-| `0b1100_0001` | `0xC1` | `DUP8` | `( a -- a a )` | $+8$ | 8 B | 3 | X | - | - | - | * | * | * | Stack Underflow ($U=1, ERR=1$), Stack Overflow ($V=1, ERR=1$) |
-| `0b1100_0010` | `0xC2` | `CONV_U32_U64`| `( u32 -- u64 )` | $+4$ | 4 B | 2 | X | X | X | 0 | * | * | * | Zero-extends 32-bit uint to 64-bit uint |
-| `0b1100_0011` | `0xC3` | `CONV_U64_U32`| `( u64 -- u32 )` | $-4$ | 8 B | 2 | X | X | X | 0 | X | * | * | Truncates 64-bit uint to 32-bit uint ($V=1$ on overflow) |
-| `0b1100_0100` | `0xC4` | `CONV_U32_F32`| `( u32 -- f32 )` | $0$ | 4 B | ~5 | X | X | X | 0 | 0 | 0 | * | Unsigned 32-bit uint to IEEE single float |
-| `0b1100_0101` | `0xC5` | `CONV_U64_F64`| `( u64 -- f64 )` | $0$ | 8 B | ~6 | X | X | X | 0 | 0 | 0 | * | Unsigned 64-bit uint to IEEE double float |
-| `0b1100_0110` | `0xC6` | `CONV_U32_I32`| `( u32 -- i32 )` | $0$ | 4 B | 2 | X | X | X | 0 | X | * | * | Range check: sets $V=1$ if $u32 \ge 2^{31}$ (bit 31 is 1) |
-| `0b1100_0111` | `0xC7` | `CONV_I32_U32`| `( i32 -- u32 )` | $0$ | 4 B | 2 | X | X | X | 0 | X | * | * | Range check: sets $V=1$ if $i32 < 0$ (bit 31 is 1) |
-| `0b1100_1000` | `0xC8` | `CONV_I32_I64`| `( i32 -- i64 )` | $+4$ | 4 B | 2 | X | X | X | 0 | * | * | * | Stack Underflow ($U=1, ERR=1$), Stack Overflow ($V=1, ERR=1$) |
-| `0b1100_1001` | `0xC9` | `CONV_F32_F64`| `( f32 -- f64 )` | $+4$ | 4 B | 2 | X | X | X | 0 | * | * | * | Stack Underflow ($U=1, ERR=1$), Stack Overflow ($V=1, ERR=1$) |
-| `0b1100_1010` | `0xCA` | `CONV_I64_I32`| `( i64 -- i32 )` | $-4$ | 8 B | 2 | X | X | X | 0 | X | * | * | Stack Underflow ($U=1, ERR=1$), Truncation Overflow ($V=1$) |
-| `0b1100_1011` | `0xCB` | `CONV_F64_F32`| `( f64 -- f32 )` | $-4$ | 8 B | 2 | X | X | X | 0 | X | * | * | Stack Underflow ($U=1, ERR=1$), Exponent Overflow ($V=1$), Underflow ($U=1$) |
-| `0b1100_1100` | `0xCC` | `CONV_I32_F32`| `( i32 -- f32 )` | $0$ | 4 B | ~5 | X | X | X | 0 | 0 | 0 | * | Signed 32-bit int to IEEE-754 single float |
-| `0b1100_1101` | `0xCD` | `CONV_F32_I32`| `( f32 -- i32 )` | $0$ | 4 B | ~5 | X | X | X | 0 | X | 0 | * | IEEE-754 single float to signed 32-bit int (truncate, $V=1$ on overflow) |
-| `0b1100_1110` | `0xCE` | `CONV_I64_F64`| `( i64 -- f64 )` | $0$ | 8 B | ~6 | X | X | X | 0 | 0 | 0 | * | Signed 64-bit int to IEEE-754 double float |
-| `0b1100_1111` | `0xCF` | `CONV_F64_I64`| `( f64 -- i64 )` | $0$ | 8 B | ~6 | X | X | X | 0 | X | 0 | * | IEEE-754 double float to signed 64-bit int (truncate, $V=1$ on overflow) |
-| `0b1101_xxxx` | `0xD0`–`0xDF` | `CP [x], TOS` | `( val -- )` | $-4$ / $-8$ | 4 / 8 B | 2 | X | - | - | - | - | * | * | Stack Underflow ($U=1, ERR=1$) |
-| `0b1110_xxxx` | `0xE0`–`0xEF` | `CP TOS, [x]` | `( -- val )` | $+4$ / $+8$ | 0 B | 2 | X | - | - | - | * | - | * | Stack Overflow ($V=1, ERR=1$ if $SP + \text{bytes} > 256$) |
+| Opcode | Hex Range | Mnemonic | Forth Stack Effect | $\Delta SP$ | Required Depth | Cycles (@80MHz) | BSY | ERR | S | C | V | U | DF | Z | Primary Error / Side Effects |
+|---|:---:|---|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|---|
+| `0b0000_0fff` | `0x00`–`0x05` | `ADD_fff` | `( a b -- sum )` | $-4$ / $-8$ | 8 / 16 B | 1–2 | X | * | X | X | X | * | * | X | Stack Underflow ($ERR=1$), Int/Float Overflow ($V=1$), Unsigned Carry ($C=1$) |
+| `0b0000_1fff` | `0x08`–`0x0D` | `SUB_fff` | `( a b -- diff )` | $-4$ / $-8$ | 8 / 16 B | 1–2 | X | * | X | X | X | * | * | X | Stack Underflow ($ERR=1$), Int/Float Overflow ($V=1$), Borrow ($C=1$) |
+| `0b0001_0fff` | `0x10`–`0x15` | `MUL_fff` | `( a b -- prod )` | $-4$ / $-8$ | 8 / 16 B | 16–64 | X | * | X | X | X | * | - | X | Stack Underflow ($ERR=1$), Int/Float Overflow ($V=1$), Unsigned Overflow ($C=1$) |
+| `0b0001_1fff` | `0x18`–`0x1D` | `DIV_fff` | `( a b -- quot )` | $-4$ / $-8$ | 8 / 16 B | 18–64 | X | * | X | 0 | X | * | - | X | Stack Underflow ($ERR=1$), Div-by-Zero ($ERR=1, V=1$), Float Underflow ($U=1$) |
+| `0b0010_00x1` | `0x21`, `0x23` | `SQRT_F32/F64`| `( x -- root )` | $0$ | 4 / 8 B | 16–32 | X | * | 0 | 0 | 0 | * | - | X | Float-only. Stack Underflow ($ERR=1$), Negative Operand ($ERR=1$) |
+| `0b0010_10x1` | `0x29`, `0x2B` | `POW_F32/F64` | `( base exp -- res )` | $-4$ / $-8$ | 8 / 16 B | ~120 | X | * | X | 0 | X | * | - | X | Float-only. Stack Underflow ($ERR=1$), Exponent Overflow/Underflow |
+| `0b0011_00x1` | `0x31`, `0x33` | `LOG2_F32/F64`| `( x -- log2_x )`| $0$ | 4 / 8 B | ~60 | X | * | X | 0 | 0 | * | - | X | Float-only. Stack Underflow ($ERR=1$), Non-positive Operand $x \le 0$ ($ERR=1$) |
+| `0b0011_10x1` | `0x39`, `0x3B` | `EXP2_F32/F64`| `( x -- 2_x )`   | $0$ | 4 / 8 B | ~60 | X | * | X | 0 | X | * | - | X | Float-only. Stack Underflow ($ERR=1$), Exponent Overflow ($V=1$), Underflow ($U=1$) |
+| `0b0101_0fff` | `0x50`–`0x53` | `CHS_fff` | `( x -- -x )` | $0$ | 4 / 8 B | 1–2 | X | * | X | X | X | * | - | X | Stack Underflow ($ERR=1$), Int Negate Overflow ($V=1$) |
+| `0b0101_1fff` | `0x58`–`0x5B` | `ABS_fff` | `( x -- \|x\| )` | $0$ | 4 / 8 B | 1–2 | X | * | 0 | 0 | X | * | - | X | Stack Underflow ($ERR=1$), Int MaxNeg Overflow ($V=1$) |
+| `0b0110_00x1` | `0x61`, `0x63` | `FLOOR_F32/F64`| `( x -- floor )` | $0$ | 4 / 8 B | ~10 | X | * | X | 0 | 0 | * | - | X | Float-only. Stack Underflow ($ERR=1$) |
+| `0b0110_10x1` | `0x69`, `0x6B` | `CEIL_F32/F64` | `( x -- ceil )` | $0$ | 4 / 8 B | ~10 | X | * | X | 0 | 0 | * | - | X | Float-only. Stack Underflow ($ERR=1$) |
+| `0b0111_00x1` | `0x71`, `0x73` | `SIN_F32/F64` | `( theta -- sin )` | $0$ | 4 / 8 B | ~36 | X | * | X | 0 | 0 | * | - | X | Float-only. Stack Underflow ($ERR=1$) |
+| `0b0111_10x1` | `0x79`, `0x7B` | `COS_F32/F64` | `( theta -- cos )` | $0$ | 4 / 8 B | ~36 | X | * | X | 0 | 0 | * | - | X | Float-only. Stack Underflow ($ERR=1$) |
+| `0b1000_00x1` | `0x81`, `0x83` | `TAN_F32/F64` | `( theta -- tan )` | $0$ | 4 / 8 B | ~52 | X | * | X | 0 | X | * | - | X | Float-only. Stack Underflow ($ERR=1$), Asymptote Overflow ($V=1$) |
+| `0b1010_xxxx` | `0xA0`–`0xAF` | `PUSH_CONST`| `( -- const )` | $+4$ / $+8$ | 0 B | 2–3 | X | * | - | - | - | - | - | - | Stack Overflow ($ERR=1$ if $SP + \text{bytes} > 256$) |
+| `0b1100_0000` | `0xC0` | `DUP4` | `( a -- a a )` | $+4$ | 4 B | 2 | X | * | - | - | - | - | - | - | Stack Underflow ($ERR=1$), Stack Overflow ($ERR=1$) |
+| `0b1100_0001` | `0xC1` | `DUP8` | `( a -- a a )` | $+8$ | 8 B | 3 | X | * | - | - | - | - | - | - | Stack Underflow ($ERR=1$), Stack Overflow ($ERR=1$) |
+| `0b1100_0010` | `0xC2` | `CONV_U32_U64`| `( u32 -- u64 )` | $+4$ | 4 B | 2 | X | * | X | 0 | * | - | - | X | Zero-extends 32-bit uint to 64-bit uint (Stack Overflow sets $ERR=1$) |
+| `0b1100_0011` | `0xC3` | `CONV_U64_U32`| `( u64 -- u32 )` | $-4$ | 8 B | 2 | X | * | X | 0 | X | - | - | X | Truncates 64-bit uint to 32-bit uint ($V=1$ on overflow, Stack Underflow sets $ERR=1$) |
+| `0b1100_0100` | `0xC4` | `CONV_U32_F32`| `( u32 -- f32 )` | $0$ | 4 B | ~5 | X | * | X | 0 | 0 | 0 | - | X | Unsigned 32-bit uint to IEEE single float |
+| `0b1100_0101` | `0xC5` | `CONV_U64_F64`| `( u64 -- f64 )` | $0$ | 8 B | ~6 | X | * | X | 0 | 0 | 0 | - | X | Unsigned 64-bit uint to IEEE double float |
+| `0b1100_0110` | `0xC6` | `CONV_U32_I32`| `( u32 -- i32 )` | $0$ | 4 B | 2 | X | * | X | 0 | X | - | - | X | Range check: sets $V=1$ if $u32 \ge 2^{31}$ (bit 31 is 1) |
+| `0b1100_0111` | `0xC7` | `CONV_I32_U32`| `( i32 -- u32 )` | $0$ | 4 B | 2 | X | * | X | 0 | X | - | - | X | Range check: sets $V=1$ if $i32 < 0$ (bit 31 is 1) |
+| `0b1100_1000` | `0xC8` | `CONV_I32_I64`| `( i32 -- i64 )` | $+4$ | 4 B | 2 | X | * | X | 0 | * | - | - | X | Stack Underflow ($ERR=1$), Stack Overflow ($ERR=1$) |
+| `0b1100_1001` | `0xC9` | `CONV_F32_F64`| `( f32 -- f64 )` | $+4$ | 4 B | 2 | X | * | X | 0 | * | - | - | X | Stack Underflow ($ERR=1$), Stack Overflow ($ERR=1$) |
+| `0b1100_1010` | `0xCA` | `CONV_I64_I32`| `( i64 -- i32 )` | $-4$ | 8 B | 2 | X | * | X | 0 | X | - | - | X | Stack Underflow ($ERR=1$), Truncation Overflow ($V=1$) |
+| `0b1100_1011` | `0xCB` | `CONV_F64_F32`| `( f64 -- f32 )` | $-4$ | 8 B | 2 | X | * | X | 0 | X | * | - | X | Stack Underflow ($ERR=1$), Exponent Overflow ($V=1$), Underflow ($U=1$) |
+| `0b1100_1100` | `0xCC` | `CONV_I32_F32`| `( i32 -- f32 )` | $0$ | 4 B | ~5 | X | * | X | 0 | 0 | 0 | - | X | Signed 32-bit int to IEEE-754 single float |
+| `0b1100_1101` | `0xCD` | `CONV_F32_I32`| `( f32 -- i32 )` | $0$ | 4 B | ~5 | X | * | X | 0 | X | 0 | - | X | IEEE-754 single float to signed 32-bit int (truncate, $V=1$ on overflow) |
+| `0b1100_1110` | `0xCE` | `CONV_I64_F64`| `( i64 -- f64 )` | $0$ | 8 B | ~6 | X | * | X | 0 | 0 | 0 | - | X | Signed 64-bit int to IEEE-754 double float |
+| `0b1100_1111` | `0xCF` | `CONV_F64_I64`| `( f64 -- i64 )` | $0$ | 8 B | ~6 | X | * | X | 0 | X | 0 | - | X | IEEE-754 double float to signed 64-bit int (truncate, $V=1$ on overflow) |
+| `0b1101_xxxx` | `0xD0`–`0xDF` | `CP [x], TOS` | `( val -- )` | $-4$ / $-8$ | 4 / 8 B | 2 | X | * | - | - | - | - | - | - | Stack Underflow ($ERR=1$) |
+| `0b1110_xxxx` | `0xE0`–`0xEF` | `CP TOS, [x]` | `( -- val )` | $+4$ / $+8$ | 0 B | 2 | X | * | - | - | - | - | - | - | Stack Overflow ($ERR=1$ if $SP + \text{bytes} > 256$) |
 | `0b1111_0000` | `0xF0` | `ZERO_MEM` | `( -- )` | $0$ | 0 B | 17 | X | - | - | - | - | - | - | Clears all 16 user memory storage slots to zero |
 | `0b1111_0001` | `0xF1` | `CLEAR_STACK` | `( ... -- )` | $SP \leftarrow 0$ | 0 B | 1 | X | 1 | 0 | 0 | 0 | 0 | 0 | Clears $SP \leftarrow 0$, $OSP \leftarrow 0$, all error flags cleared |
 | `0b1111_1010` | `0xFA` | `EXEC_BATCH` | `( ... -- ... )` | Varies | Varies | Burst | X | * | * | * | * | * | * | Executes queued command stack; holds `BUSY=1` throughout |
@@ -242,12 +287,11 @@ After:  [ ... | (a + b)           ]  <-- SP (shrinks by 1 operand)
   * In `ADD_F32` / `ADD_F64`: Set to 1 if floating-point exponent overflow occurred ($E > +127$ or $E > +1023$), returning signed $\pm \infty$.
 * **`U` (Side Effect / Exception):**
   * In `ADD_F32` / `ADD_F64`: Set to 1 if floating-point exponent underflow occurred.
-  * **Stack Underflow Trapping:** If fewer than 2 operands are present on the stack ($SP < 8$ bytes for 32-bit, or $SP < 16$ bytes for 64-bit), hardware aborts execution and asserts **`U = 1`** and **`ERR = 1`**.
 * **`ERR` (Side Effect / Exception):**
   * Set to 1 if Stack Underflow occurred, or if floating-point overflow produced a trap condition.
 
 #### Stack Side Effects & Exception Triggers
-* **Stack Underflow ($SP < \text{Depth}$):** If the stack does not contain at least 2 complete operands, `STATUS[2]` (`UNDERFLOW`) and `STATUS[1]` (`ERR`) are asserted immediately. $SP$ is unchanged, and no invalid memory write occurs.
+* **Stack Underflow ($SP < \text{Depth}$):** If the stack does not contain at least 2 complete operands, `STATUS[6]` (`ERR`) is asserted immediately. $SP$ is unchanged, and no invalid memory write occurs (`UNDERFLOW` is untouched).
 * **Result Replacement:** The second operand ($TOS$) and first operand ($NOS$) are popped, and their algebraic sum replaces them at the new $TOS$.
 
 #### Concrete Z80 Assembly & Stack Example
@@ -263,12 +307,12 @@ After:  [ ... | (a + b)           ]  <-- SP (shrinks by 1 operand)
 ;   STATUS = 0b0010_1000 (0x28)
 ;              |||| ||||
 ;              |||| |||+--- Bit 0: ZERO = 0 (Result non-zero)
-;              |||| ||+---- Bit 1: ERR = 0 (No stack error)
+;              |||| ||+---- Bit 1: DIFF = 0
 ;              |||| |+----- Bit 2: UNDERFLOW = 0
 ;              |||| +------ Bit 3: OVERFLOW = 1 (Signed int overflow)
 ;              |||+-------- Bit 4: CARRY = 0 (No unsigned carry out)
 ;              ||+--------- Bit 5: SIGN = 1 (Result bit 31 is 1)
-;              |+---------- Bit 6: DIFF = 0
+;              |+---------- Bit 6: ERR = 0 (No error)
 ;              +----------- Bit 7: BUSY = 0 (Finished)
 ```
 
@@ -335,7 +379,7 @@ Evaluates: Product = NOS * TOS
 * **`C`**: In unsigned integer modes (`MUL_U32`, `MUL_U64`), set to 1 if the high word(s) of the product are non-zero (i.e. product $> 2^{32}-1$ or $> 2^{64}-1$). Cleared to 0 in signed and float modes.
 * **`V`**: In signed integer modes (`MUL_I32`, `MUL_I64`), set to 1 if the high word(s) of the product contain significant non-sign bits (truncated integer overflow). In unsigned modes, cleared to 0. In float modes, set on exponent overflow.
 * **`U`**: In float modes, set on exponent underflow.
-* **Stack Underflow:** Asserts `U = 1` and `ERR = 1` if $SP < 8$ (32-bit) or $SP < 16$ (64-bit).
+* **Stack Underflow:** Asserts `ERR = 1` if $SP < 8$ (32-bit) or $SP < 16$ (64-bit).
 
 #### Result Widths & Widening Multiplication
 * **Stack-Neutral Result Widths:** In keeping with Forth and RPN stack invariants, integer multiplication produces a result of the same width as its operands:
@@ -371,10 +415,10 @@ Evaluates: Quotient = NOS / TOS  (First pushed operand divided by second pushed 
 
 #### Status Flags & Side Effects
 ```text
-  BSY    Z     S     C     V     U    ERR
-+-----+-----+-----+-----+-----+-----+-----+
-|  X  |  X  |  X  |  0  |  X  |  *  |  *  |
-+-----+-----+-----+-----+-----+-----+-----+
+  BSY   ERR    S     C     V     U    DF     Z
++-----+-----+-----+-----+-----+-----+-----+-----+
+|  X  |  *  |  X  |  0  |  X  |  *  |  -  |  X  |
++-----+-----+-----+-----+-----+-----+-----+-----+
 ```
 * **Unsigned Division (`DIV_U32`, `DIV_U64`):** Operates on non-negative binary values ($0$ to $2^N-1$). Never treats bit 31 or bit 63 as a negative sign bit.
 * **Division by Zero ($TOS == 0$):**
@@ -383,7 +427,7 @@ Evaluates: Quotient = NOS / TOS  (First pushed operand divided by second pushed 
   * In signed integer mode: pushes `0x7FFFFFFF` or `0x80000000` based on sign.
   * In unsigned integer mode: pushes maximum unsigned value `0xFFFFFFFF` (`DIV_U32`) or `0xFFFFFFFFFFFFFFFF` (`DIV_U64`).
   * In float mode: pushes signed $\pm \infty$ (`0x7F800000` / `0xFF800000`).
-* **Stack Underflow:** Asserts `U = 1` and `ERR = 1` if $SP < \text{Depth}$.
+* **Stack Underflow:** Asserts `ERR = 1` if $SP < \text{Depth}$.
 
 ---
 
@@ -410,7 +454,7 @@ SQRT_F64: ( f64 -- sqrt_f64 )
 #### Status Flags & Side Effects
 * **Domain Error ($TOS < 0$):** Attempting square root of a negative float (except $-0.0$, where $\sqrt{-0.0} = -0.0$) sets **`ERR = 1`**.
 * **Zero Input:** $\sqrt{+0.0} = +0.0$; $\sqrt{-0.0} = -0.0$; does not set `ERR`.
-* **Stack Underflow:** If $SP < 4$ (`SQRT_F32`) or $SP < 8$ (`SQRT_F64`), asserts **`U = 1`** and **`ERR = 1`**.
+* **Stack Underflow:** If $SP < 4$ (`SQRT_F32`) or $SP < 8$ (`SQRT_F64`), asserts **`ERR = 1`**.
 
 ---
 
@@ -434,7 +478,7 @@ CHS_fff & ABS_fff — UNARY SIGN OPERATIONS (i32, f32, i64, f64)
 
 #### Status Flags & Side Effects
 * **Maximum Negative Integer Overflow (`0x80000000`):** In 2's complement, $-(-2147483648)$ cannot be represented in 32 bits; sets **`OVERFLOW = 1`**.
-* **Stack Underflow:** Asserts `U = 1` and `ERR = 1` if $SP < \text{Depth}$.
+* **Stack Underflow:** Asserts `ERR = 1` if $SP < \text{Depth}$.
 
 ---
 
@@ -461,7 +505,7 @@ SIN_fff, COS_fff, TAN_fff — CORDIC TRIGONOMETRICS (f32, f64)
 
 #### Status Flags & Side Effects
 * Evaluated via physical CORDIC rotation loop across `{AX, BX, DX}` at 1 cycle per bit.
-* **Stack Underflow:** If $SP < 4$ (`f32`) or $SP < 8$ (`f64`), asserts **`U = 1`** and **`ERR = 1`**.
+* **Stack Underflow:** If $SP < 4$ (`f32`) or $SP < 8$ (`f64`), asserts **`ERR = 1`**.
 * **Tangent Asymptote Overflow:** Near $\pm \pi/2$, `TAN` sets **`OVERFLOW = 1`**.
 
 ---
@@ -486,13 +530,13 @@ DUP8: ( a_64 -- a_64 a_64 )
 
 #### Status Flags & Side Effects
 ```text
-  BSY    Z     S     C     V     U    ERR
-+-----+-----+-----+-----+-----+-----+-----+
-|  X  |  -  |  -  |  -  |  *  |  *  |  *  |
-+-----+-----+-----+-----+-----+-----+-----+
+  BSY   ERR    S     C     V     U    DF     Z
++-----+-----+-----+-----+-----+-----+-----+-----+
+|  X  |  *  |  -  |  -  |  -  |  -  |  -  |  -  |
++-----+-----+-----+-----+-----+-----+-----+-----+
 ```
-* **Stack Underflow ($SP < \text{Width}$):** If stack is empty, asserting `DUP4` or `DUP8` sets **`UNDERFLOW = 1`** and **`ERR = 1`**. Stack pointer is unchanged.
-* **Stack Overflow ($SP + \text{Width} > 256$):** If the 64-word stack is full, duplicating sets **`OVERFLOW = 1`** and **`ERR = 1`**. Memory write is aborted.
+* **Stack Underflow ($SP < \text{Width}$):** If stack is empty, asserting `DUP4` or `DUP8` sets **`ERR = 1`**. Stack pointer is unchanged.
+* **Stack Overflow ($SP + \text{Width} > 256$):** If the 64-word stack is full, duplicating sets **`ERR = 1`**. Memory write is aborted.
 
 ---
 
@@ -505,14 +549,14 @@ CONV_xxx_yyy — DATA TYPE CONVERSIONS
 #### Opcode Encodings & Execution Timing
 | Mnemonic | Hex | Binary | Conversion Operation | Required Depth | Net $\Delta SP$ | Side Effects / Flags |
 |---|:---:|:---:|---|:---:|:---:|---|
-| **`CONV_U32_U64`** | `0xC2` | `0b1100_0010` | Zero-extends 32-bit uint to 64-bit uint | 4 Bytes | $+4$ Bytes | Checks Stack Overflow ($V=1, ERR=1$) |
+| **`CONV_U32_U64`** | `0xC2` | `0b1100_0010` | Zero-extends 32-bit uint to 64-bit uint | 4 Bytes | $+4$ Bytes | Checks Stack Overflow ($ERR=1$) |
 | **`CONV_U64_U32`** | `0xC3` | `0b1100_0011` | Truncates 64-bit uint to 32-bit uint    | 8 Bytes | $-4$ Bytes | Sets `OVERFLOW = 1` if value $\ge 2^{32}$ |
 | **`CONV_U32_F32`** | `0xC4` | `0b1100_0100` | Converts unsigned 32-bit uint to single | 4 Bytes | $0$ Bytes  | Normalizes via LZC; no sign bit |
 | **`CONV_U64_F64`** | `0xC5` | `0b1100_0101` | Converts unsigned 64-bit uint to double | 8 Bytes | $0$ Bytes  | Normalizes via LZC64; no sign bit |
 | **`CONV_U32_I32`** | `0xC6` | `0b1100_0110` | Converts unsigned 32-bit uint to signed | 4 Bytes | $0$ Bytes  | Sets `OVERFLOW = 1` if value $\ge 2^{31}$ (bit 31 is 1) |
 | **`CONV_I32_U32`** | `0xC7` | `0b1100_0111` | Converts signed 32-bit int to unsigned | 4 Bytes | $0$ Bytes  | Sets `OVERFLOW = 1` if value $< 0$ (bit 31 is 1) |
-| **`CONV_I32_I64`** | `0xC8` | `0b1100_1000` | Sign-extends 32-bit int to 64-bit int | 4 Bytes | $+4$ Bytes | Checks Stack Overflow ($V=1, ERR=1$) |
-| **`CONV_F32_F64`** | `0xC9` | `0b1100_1001` | Expands IEEE single to double float   | 4 Bytes | $+4$ Bytes | Checks Stack Overflow ($V=1, ERR=1$) |
+| **`CONV_I32_I64`** | `0xC8` | `0b1100_1000` | Sign-extends 32-bit int to 64-bit int | 4 Bytes | $+4$ Bytes | Checks Stack Overflow ($ERR=1$) |
+| **`CONV_F32_F64`** | `0xC9` | `0b1100_1001` | Expands IEEE single to double float   | 4 Bytes | $+4$ Bytes | Checks Stack Overflow ($ERR=1$) |
 | **`CONV_I64_I32`** | `0xCA` | `0b1100_1010` | Truncates 64-bit int to 32-bit int    | 8 Bytes | $-4$ Bytes | Sets `OVERFLOW = 1` if value $> 2^{31}-1$ or $< -2^{31}$ |
 | **`CONV_F64_F32`** | `0xCB` | `0b1100_1011` | Converts IEEE double to single float  | 8 Bytes | $-4$ Bytes | Sets `OVERFLOW`/`UNDERFLOW` on exp limits |
 | **`CONV_I32_F32`** | `0xCC` | `0b1100_1100` | Converts signed 32-bit int to single  | 4 Bytes | $0$ Bytes  | Normalizes via LZC; exact for $|val| \le 2^{24}$ |
@@ -526,11 +570,11 @@ CONV_xxx_yyy — DATA TYPE CONVERSIONS
 * **`CONV_U32_U64` (`0xC2`):** Zero-extends an unsigned 32-bit integer $X \in [0, 2^{32}-1]$ to an unsigned 64-bit integer $Y = X$.
   * **Stack Effect:** Pops 4 bytes, pushes 8 bytes ($\Delta SP = +4$). Requires $SP \le 62$ words.
   * **Datapath:** $Y_{\text{lo}} \leftarrow X_{32}$, $Y_{\text{hi}} \leftarrow \mathtt{0x00000000}$.
-  * **Flags:** $\text{ZERO} = 1$ if $X = 0$; $\text{SIGN} = 0$; $\text{OVERFLOW} = 0$ (unless stack overflow occurs).
+  * **Flags:** $\text{ZERO} = 1$ if $X = 0$; $\text{SIGN} = 0$; $\text{OVERFLOW} = 0$. (Stack overflow asserts $\text{ERR} = 1$).
 * **`CONV_I32_I64` (`0xC8`):** Sign-extends a two's-complement signed 32-bit integer $X \in [-2^{31}, 2^{31}-1]$ to 64 bits $Y = X$.
   * **Stack Effect:** Pops 4 bytes, pushes 8 bytes ($\Delta SP = +4$). Requires $SP \le 62$ words.
   * **Datapath:** $Y_{\text{lo}} \leftarrow X_{32}$, $Y_{\text{hi}} \leftarrow \mathtt{0xFFFFFFFF}$ if $X[31]=1$ else $\mathtt{0x00000000}$.
-  * **Flags:** $\text{ZERO} = 1$ if $X = 0$; $\text{SIGN} = X[31]$; $\text{OVERFLOW} = 0$ (unless stack overflow occurs).
+  * **Flags:** $\text{ZERO} = 1$ if $X = 0$; $\text{SIGN} = X[31]$; $\text{OVERFLOW} = 0$. (Stack overflow asserts $\text{ERR} = 1$).
 
 ##### 2. Pure Integer Narrowing Conversions (Truncation Overflow)
 * **`CONV_U64_U32` (`0xC3`):** Downcasts an unsigned 64-bit integer $X \in [0, 2^{64}-1]$ to an unsigned 32-bit integer $Y = X \pmod{2^{32}}$.
@@ -581,9 +625,9 @@ CONV_xxx_yyy — DATA TYPE CONVERSIONS
   * **Exponent Underflow ($U=1$):** If unmasked double exponent $< -126 + 1023$, sets **`UNDERFLOW = 1`** and flushes to zero (or subnormal).
 
 #### Status Flags & Error Behavior Summary
-* **Stack Underflow:** Asserts `UNDERFLOW = 1` and `ERR = 1` if source operand is missing.
-* **Stack Overflow:** Widening conversions (`CONV_xxx_xxx` with $\Delta SP = +4$) assert `OVERFLOW = 1` and `ERR = 1` if stack depth exceeds 256 bytes ($SP + 4 > 256$).
-* **Truncation/Domain Overflow (`OVERFLOW = 1`, Bit 2):**
+* **Stack Underflow:** Asserts `ERR = 1` (Bit 6) if source operand is missing.
+* **Stack Overflow:** Widening conversions (`CONV_xxx_xxx` with $\Delta SP = +4$) assert `ERR = 1` (Bit 6) if stack depth exceeds 256 bytes ($SP + 4 > 256$).
+* **Truncation/Domain Overflow (`OVERFLOW = 1`, Bit 3):**
   * `CONV_U64_U32`: Value $\ge 2^{32}$ (upper 32 bits non-zero).
   * `CONV_I64_I32`: Value $\notin [-2^{31}, 2^{31}-1]$ ($X_{\text{hi}} \neq \text{ASR}(X_{\text{lo}}, 31)$).
   * `CONV_U32_I32`: Value $\ge 2^{31}$ (bit 31 is 1).
@@ -613,8 +657,8 @@ CP TOS, [xxxx]: ( -- val )       Reads user slot xxxx and pushes to TOS
 ```
 
 #### Status Flags & Side Effects
-* **`CP [xxxx], TOS` Stack Underflow:** If $SP < 4$, sets **`UNDERFLOW = 1`** and **`ERR = 1`**; memory slot is not modified.
-* **`CP TOS, [xxxx]` Stack Overflow:** If stack is full ($SP \ge 256$), sets **`OVERFLOW = 1`** and **`ERR = 1`**; stack write is aborted.
+* **`CP [xxxx], TOS` Stack Underflow:** If $SP < 4$, sets **`ERR = 1`**; memory slot is not modified.
+* **`CP TOS, [xxxx]` Stack Overflow:** If stack is full ($SP \ge 256$), sets **`ERR = 1`**; stack write is aborted.
 
 ---
 
@@ -646,7 +690,7 @@ PUSH_CONST — MATHEMATICAL CONSTANTS
 
 #### Status Flags & Side Effects
 * Loads constant using scratch register `FL` / `FX` and pushes onto stack. Leaves math register `DX` uncorrupted.
-* **Stack Overflow:** If $SP + \text{bytes} > 256$, sets **`OVERFLOW = 1`** and **`ERR = 1`**.
+* **Stack Overflow:** If $SP + \text{bytes} > 256$, sets **`ERR = 1`**.
 
 ---
 
@@ -996,7 +1040,7 @@ Eval_Quadratic_f32:
 ## 7. Type Conversion Idioms & Use Cases
 
 All conversion operations in the Zx50 FPU operate as **in-place transformations on the Top of Stack (TOS)**. Depending on whether the conversion widens or narrows the data representation, the internal stack pointer $SP$ automatically adjusts:
-* **Widening conversions** (`CONV_I32_I64`, `CONV_U32_U64`, `CONV_F32_F64`): Replace a 4-byte value with an 8-byte value (net $+4$ bytes on stack). Hardware verifies stack headroom ($V=1, ERR=1$ on stack overflow).
+* **Widening conversions** (`CONV_I32_I64`, `CONV_U32_U64`, `CONV_F32_F64`): Replace a 4-byte value with an 8-byte value (net $+4$ bytes on stack). Hardware verifies stack headroom ($ERR=1$ on stack overflow).
 * **Narrowing conversions** (`CONV_I64_I32`, `CONV_U64_U32`, `CONV_F64_F32`): Replace an 8-byte value with a 4-byte value (net $-4$ bytes on stack). Hardware detects truncation and exponent overflow ($V=1$).
 * **Same-size conversions** (`CONV_I32_F32`, `CONV_U32_F32`, `CONV_F32_I32`, `CONV_I64_F64`, `CONV_U64_F64`, `CONV_F64_I64`): Transform format in-place with zero net stack depth change.
 
