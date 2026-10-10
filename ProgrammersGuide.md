@@ -175,6 +175,8 @@ The table below summarizes all user opcodes. Stack effect follows standard Forth
 | `0b1100_0011` | `0xC3` | `CONV_U64_U32`| `( u64 -- u32 )` | $-4$ | 8 B | 2 | X | X | X | 0 | X | * | * | Truncates 64-bit uint to 32-bit uint ($V=1$ on overflow) |
 | `0b1100_0100` | `0xC4` | `CONV_U32_F32`| `( u32 -- f32 )` | $0$ | 4 B | ~5 | X | X | X | 0 | 0 | 0 | * | Unsigned 32-bit uint to IEEE single float |
 | `0b1100_0101` | `0xC5` | `CONV_U64_F64`| `( u64 -- f64 )` | $0$ | 8 B | ~6 | X | X | X | 0 | 0 | 0 | * | Unsigned 64-bit uint to IEEE double float |
+| `0b1100_0110` | `0xC6` | `CONV_U32_I32`| `( u32 -- i32 )` | $0$ | 4 B | 2 | X | X | X | 0 | X | * | * | Range check: sets $V=1$ if $u32 \ge 2^{31}$ (bit 31 is 1) |
+| `0b1100_0111` | `0xC7` | `CONV_I32_U32`| `( i32 -- u32 )` | $0$ | 4 B | 2 | X | X | X | 0 | X | * | * | Range check: sets $V=1$ if $i32 < 0$ (bit 31 is 1) |
 | `0b1100_1000` | `0xC8` | `CONV_I32_I64`| `( i32 -- i64 )` | $+4$ | 4 B | 2 | X | X | X | 0 | * | * | * | Stack Underflow ($U=1, ERR=1$), Stack Overflow ($V=1, ERR=1$) |
 | `0b1100_1001` | `0xC9` | `CONV_F32_F64`| `( f32 -- f64 )` | $+4$ | 4 B | 2 | X | X | X | 0 | * | * | * | Stack Underflow ($U=1, ERR=1$), Stack Overflow ($V=1, ERR=1$) |
 | `0b1100_1010` | `0xCA` | `CONV_I64_I32`| `( i64 -- i32 )` | $-4$ | 8 B | 2 | X | X | X | 0 | X | * | * | Stack Underflow ($U=1, ERR=1$), Truncation Overflow ($V=1$) |
@@ -504,23 +506,90 @@ CONV_xxx_yyy — DATA TYPE CONVERSIONS
 | Mnemonic | Hex | Binary | Conversion Operation | Required Depth | Net $\Delta SP$ | Side Effects / Flags |
 |---|:---:|:---:|---|:---:|:---:|---|
 | **`CONV_U32_U64`** | `0xC2` | `0b1100_0010` | Zero-extends 32-bit uint to 64-bit uint | 4 Bytes | $+4$ Bytes | Checks Stack Overflow ($V=1, ERR=1$) |
-| **`CONV_U64_U32`** | `0xC3` | `0b1100_0011` | Truncates 64-bit uint to 32-bit uint    | 8 Bytes | $-4$ Bytes | Sets `OVERFLOW = 1` if value $> 2^{32}-1$ |
+| **`CONV_U64_U32`** | `0xC3` | `0b1100_0011` | Truncates 64-bit uint to 32-bit uint    | 8 Bytes | $-4$ Bytes | Sets `OVERFLOW = 1` if value $\ge 2^{32}$ |
 | **`CONV_U32_F32`** | `0xC4` | `0b1100_0100` | Converts unsigned 32-bit uint to single | 4 Bytes | $0$ Bytes  | Normalizes via LZC; no sign bit |
 | **`CONV_U64_F64`** | `0xC5` | `0b1100_0101` | Converts unsigned 64-bit uint to double | 8 Bytes | $0$ Bytes  | Normalizes via LZC64; no sign bit |
+| **`CONV_U32_I32`** | `0xC6` | `0b1100_0110` | Converts unsigned 32-bit uint to signed | 4 Bytes | $0$ Bytes  | Sets `OVERFLOW = 1` if value $\ge 2^{31}$ (bit 31 is 1) |
+| **`CONV_I32_U32`** | `0xC7` | `0b1100_0111` | Converts signed 32-bit int to unsigned | 4 Bytes | $0$ Bytes  | Sets `OVERFLOW = 1` if value $< 0$ (bit 31 is 1) |
 | **`CONV_I32_I64`** | `0xC8` | `0b1100_1000` | Sign-extends 32-bit int to 64-bit int | 4 Bytes | $+4$ Bytes | Checks Stack Overflow ($V=1, ERR=1$) |
 | **`CONV_F32_F64`** | `0xC9` | `0b1100_1001` | Expands IEEE single to double float   | 4 Bytes | $+4$ Bytes | Checks Stack Overflow ($V=1, ERR=1$) |
 | **`CONV_I64_I32`** | `0xCA` | `0b1100_1010` | Truncates 64-bit int to 32-bit int    | 8 Bytes | $-4$ Bytes | Sets `OVERFLOW = 1` if value $> 2^{31}-1$ or $< -2^{31}$ |
 | **`CONV_F64_F32`** | `0xCB` | `0b1100_1011` | Converts IEEE double to single float  | 8 Bytes | $-4$ Bytes | Sets `OVERFLOW`/`UNDERFLOW` on exp limits |
-| **`CONV_I32_F32`** | `0xCC` | `0b1100_1100` | Converts signed 32-bit int to single  | 4 Bytes | $0$ Bytes  | Normalizes via LZC; no precision loss |
-| **`CONV_F32_I32`** | `0xCD` | `0b1100_1101` | Truncates single to signed 32-bit int | 4 Bytes | $0$ Bytes  | Sets `OVERFLOW = 1` if $|val| \ge 2^{31}$ |
-| **`CONV_I64_F64`** | `0xCE` | `0b1100_1110` | Converts signed 64-bit int to double  | 8 Bytes | $0$ Bytes  | Normalizes via LZC64; no precision loss |
-| **`CONV_F64_I64`** | `0xCF` | `0b1100_1111` | Truncates double to signed 64-bit int | 8 Bytes | $0$ Bytes  | Sets `OVERFLOW = 1` if $|val| \ge 2^{63}$ |
+| **`CONV_I32_F32`** | `0xCC` | `0b1100_1100` | Converts signed 32-bit int to single  | 4 Bytes | $0$ Bytes  | Normalizes via LZC; exact for $|val| \le 2^{24}$ |
+| **`CONV_F32_I32`** | `0xCD` | `0b1100_1101` | Truncates single to signed 32-bit int | 4 Bytes | $0$ Bytes  | Truncates toward 0; sets `OVERFLOW = 1` if $|val| \ge 2^{31}$ |
+| **`CONV_I64_F64`** | `0xCE` | `0b1100_1110` | Converts signed 64-bit int to double  | 8 Bytes | $0$ Bytes  | Normalizes via LZC64; exact for $|val| \le 2^{53}$ |
+| **`CONV_F64_I64`** | `0xCF` | `0b1100_1111` | Truncates double to signed 64-bit int | 8 Bytes | $0$ Bytes  | Truncates toward 0; sets `OVERFLOW = 1` if $|val| \ge 2^{63}$ |
 
-#### Status Flags & Side Effects
-* **Stack Underflow:** Asserts `U = 1` and `ERR = 1` if source operand is missing.
-* **Truncation Overflow in `CONV_I64_I32`:** If upper 32 bits of 64-bit int are not a valid sign extension of lower 32 bits, sets **`OVERFLOW = 1`**.
-* **Truncation Overflow in `CONV_U64_U32`:** If upper 32 bits of 64-bit uint are non-zero, sets **`OVERFLOW = 1`**.
-* **Float-to-Int Range Overflow (`CONV_F32_I32`, `CONV_F64_I64`):** If the float magnitude exceeds the representable signed integer range, sets **`OVERFLOW = 1`** and clamps to maximum/minimum integer value.
+#### Detailed Functional Specifications
+
+##### 1. Pure Integer Widening Conversions
+* **`CONV_U32_U64` (`0xC2`):** Zero-extends an unsigned 32-bit integer $X \in [0, 2^{32}-1]$ to an unsigned 64-bit integer $Y = X$.
+  * **Stack Effect:** Pops 4 bytes, pushes 8 bytes ($\Delta SP = +4$). Requires $SP \le 62$ words.
+  * **Datapath:** $Y_{\text{lo}} \leftarrow X_{32}$, $Y_{\text{hi}} \leftarrow \mathtt{0x00000000}$.
+  * **Flags:** $\text{ZERO} = 1$ if $X = 0$; $\text{SIGN} = 0$; $\text{OVERFLOW} = 0$ (unless stack overflow occurs).
+* **`CONV_I32_I64` (`0xC8`):** Sign-extends a two's-complement signed 32-bit integer $X \in [-2^{31}, 2^{31}-1]$ to 64 bits $Y = X$.
+  * **Stack Effect:** Pops 4 bytes, pushes 8 bytes ($\Delta SP = +4$). Requires $SP \le 62$ words.
+  * **Datapath:** $Y_{\text{lo}} \leftarrow X_{32}$, $Y_{\text{hi}} \leftarrow \mathtt{0xFFFFFFFF}$ if $X[31]=1$ else $\mathtt{0x00000000}$.
+  * **Flags:** $\text{ZERO} = 1$ if $X = 0$; $\text{SIGN} = X[31]$; $\text{OVERFLOW} = 0$ (unless stack overflow occurs).
+
+##### 2. Pure Integer Narrowing Conversions (Truncation Overflow)
+* **`CONV_U64_U32` (`0xC3`):** Downcasts an unsigned 64-bit integer $X \in [0, 2^{64}-1]$ to an unsigned 32-bit integer $Y = X \pmod{2^{32}}$.
+  * **Stack Effect:** Pops 8 bytes, pushes 4 bytes ($\Delta SP = -4$).
+  * **Truncation Overflow ($V=1$):** If $X \ge 2^{32}$ ($X_{\text{hi}} \neq 0$), the high-order bits cannot be preserved and **`OVERFLOW = 1`** is asserted.
+  * **Result Pushed:** Pushes lower 32-bit word $X_{\text{lo}}$ regardless of overflow, allowing modular/wrapping consumption.
+  * **Flags:** $\text{ZERO} = 1$ if $X_{\text{lo}} = 0$; $\text{SIGN} = X_{\text{lo}}[31]$; $\text{OVERFLOW} = 1$ if $X_{\text{hi}} \neq 0$.
+* **`CONV_I64_I32` (`0xCA`):** Downcasts a signed 64-bit integer $X \in [-2^{63}, 2^{63}-1]$ to a signed 32-bit integer $Y = \text{trunc}_{32}(X)$.
+  * **Stack Effect:** Pops 8 bytes, pushes 4 bytes ($\Delta SP = -4$).
+  * **Truncation Overflow ($V=1$):** If $X > 2^{31}-1$ or $X < -2^{31}$, $X$ cannot be represented as a 32-bit signed integer without sign inversion or magnitude truncation. Mathematically, overflow occurs if $X_{\text{hi}} \neq \text{ASR}(X_{\text{lo}}, 31)$. Sets **`OVERFLOW = 1`**.
+  * **Result Pushed:** Pushes lower 32-bit word $X_{\text{lo}}$.
+  * **Flags:** $\text{ZERO} = 1$ if $X_{\text{lo}} = 0$; $\text{SIGN} = X_{\text{lo}}[31]$; $\text{OVERFLOW} = 1$ if $X \notin [-2^{31}, 2^{31}-1]$.
+
+##### 3. Same-Width Checked Signed $\leftrightarrow$ Unsigned Conversions
+* **`CONV_U32_I32` (`0xC6`):** Validates and converts an unsigned 32-bit integer $X \in [0, 2^{32}-1]$ to a signed 32-bit integer.
+  * **Stack Effect:** In-place 32-bit conversion ($\Delta SP = 0$).
+  * **Domain Overflow ($V=1$):** If $X \ge 2^{31}$ (bit 31 is 1), $X$ exceeds the maximum representable signed positive value ($+2,147,483,647$) and would corrupt into a negative number. Asserts **`OVERFLOW = 1`**.
+  * **Flags:** $\text{ZERO} = 1$ if $X = 0$; $\text{SIGN} = X[31]$; $\text{OVERFLOW} = 1$ if $X[31] = 1$.
+* **`CONV_I32_U32` (`0xC7`):** Validates and converts a signed 32-bit integer $X \in [-2^{31}, 2^{31}-1]$ to an unsigned 32-bit integer.
+  * **Stack Effect:** In-place 32-bit conversion ($\Delta SP = 0$).
+  * **Domain Overflow ($V=1$):** If $X < 0$ (bit 31 is 1), the negative quantity does not exist in the unsigned domain $[0, 2^{32}-1]$. Asserts **`OVERFLOW = 1`**.
+  * **Flags:** $\text{ZERO} = 1$ if $X = 0$; $\text{SIGN} = X[31]$; $\text{OVERFLOW} = 1$ if $X[31] = 1$.
+
+##### 4. Integer to Floating-Point Conversions
+* **`CONV_I32_F32` (`0xCC`) / `CONV_U32_F32` (`0xC4`):** Converts signed/unsigned 32-bit integer to IEEE-754 single-precision float.
+  * **Stack Effect:** In-place 32-bit conversion ($\Delta SP = 0$).
+  * **Normalization:** Uses hardware Leading Zero Counter (LZC) to determine exponent bias and aligns the mantissa via the 64-bit barrel shifter.
+  * **Precision:** Exact for integers $|X| \le 2^{24}$ ($16,777,216$). Values with $> 24$ significant bits round to nearest even. Never overflows.
+* **`CONV_I64_F64` (`0xCE`) / `CONV_U64_F64` (`0xC5`):** Converts signed/unsigned 64-bit integer to IEEE-754 double-precision float.
+  * **Stack Effect:** In-place 64-bit conversion ($\Delta SP = 0$).
+  * **Precision:** Exact for integers $|X| \le 2^{53}$ ($9,007,199,254,740,992$). Never overflows.
+
+##### 5. Floating-Point to Integer Conversions (Truncation Toward Zero)
+* **`CONV_F32_I32` (`0xCD`):** Truncates single-precision float to signed 32-bit integer.
+  * **Stack Effect:** In-place 32-bit conversion ($\Delta SP = 0$).
+  * **Range Overflow ($V=1$):** If $|X| \ge 2^{31}$ ($2,147,483,648.0$), or $X$ is $\pm\infty$ or NaN, sets **`OVERFLOW = 1`** and **`ERR = 1`**. Clamps to `0x7FFFFFFF` (positive overflow) or `0x80000000` (negative overflow).
+* **`CONV_F64_I64` (`0xCF`):** Truncates double-precision float to signed 64-bit integer.
+  * **Stack Effect:** In-place 64-bit conversion ($\Delta SP = 0$).
+  * **Range Overflow ($V=1$):** If $|X| \ge 2^{63}$, sets **`OVERFLOW = 1`** and **`ERR = 1`**. Clamps to `0x7FFFFFFFFFFFFFFF` or `0x8000000000000000`.
+
+##### 6. Floating-Point Precision Conversions
+* **`CONV_F32_F64` (`0xC9`):** Expands single float to double float.
+  * **Stack Effect:** Pops 4 bytes, pushes 8 bytes ($\Delta SP = +4$).
+  * **Datapath:** Rebiases 8-bit exponent ($E_{64} = E_{32} - 127 + 1023$), shifts 23-bit mantissa to 52 bits, pads lower 29 bits with 0. Always exact, never overflows.
+* **`CONV_F64_F32` (`0xCB`):** Narrows double float to single float.
+  * **Stack Effect:** Pops 8 bytes, pushes 4 bytes ($\Delta SP = -4$).
+  * **Exponent Overflow ($V=1$):** If unmasked double exponent $> 127 + 1023$, sets **`OVERFLOW = 1`** and returns signed $\infty$.
+  * **Exponent Underflow ($U=1$):** If unmasked double exponent $< -126 + 1023$, sets **`UNDERFLOW = 1`** and flushes to zero (or subnormal).
+
+#### Status Flags & Error Behavior Summary
+* **Stack Underflow:** Asserts `UNDERFLOW = 1` and `ERR = 1` if source operand is missing.
+* **Stack Overflow:** Widening conversions (`CONV_xxx_xxx` with $\Delta SP = +4$) assert `OVERFLOW = 1` and `ERR = 1` if stack depth exceeds 256 bytes ($SP + 4 > 256$).
+* **Truncation/Domain Overflow (`OVERFLOW = 1`, Bit 2):**
+  * `CONV_U64_U32`: Value $\ge 2^{32}$ (upper 32 bits non-zero).
+  * `CONV_I64_I32`: Value $\notin [-2^{31}, 2^{31}-1]$ ($X_{\text{hi}} \neq \text{ASR}(X_{\text{lo}}, 31)$).
+  * `CONV_U32_I32`: Value $\ge 2^{31}$ (bit 31 is 1).
+  * `CONV_I32_U32`: Value $< 0$ (bit 31 is 1).
+  * `CONV_F32_I32` / `CONV_F64_I64`: Float magnitude exceeds integer capacity ($|X| \ge 2^{31}$ or $2^{63}$).
+  * `CONV_F64_F32`: Exponent exceeds single-precision range ($E > 127$).
 
 ---
 
@@ -1096,4 +1165,30 @@ Accum_Loop:
 OUT  0x71, CONV_F64_F32   ; Downcast 64-bit double to single float (0xCB)
 INIR 0x70, result_f32     ; Read 4 bytes over bus
 ```
+
+---
+
+### 7.5 Checked Integer Range Conversion with Overflow Trapping (`u32 <-> i32`)
+
+**Problem:** A 32-bit unsigned integer (e.g., `0x81111111` = $2,165,379,345$) must be safely converted to a signed 32-bit integer. Because `0x81111111` exceeds $+2,147,483,647$ (`0x7FFFFFFF`), it cannot fit into `i32` without corrupting into a negative number ($-2,129,587,951$). The conversion operation validates the domain and asserts **`OVERFLOW = 1`** (Bit 3, `VF`).
+
+**Stack Flow:**
+```text
+( empty )
+OTIR 0x70, val_u32       --> [ 0x81111111: u32 ]
+OUT  0x71, CONV_U32_I32  --> [ 0x81111111: i32 ]  ; Sets OVERFLOW (VF=1) because bit 31 == 1
+IN   A, (0x71)           ; Bit 3 (VF) is set to 1!
+```
+
+**Z80 Pseudocode:**
+```text
+; Push 32-bit unsigned value to FPU
+OTIR 0x70, val_u32
+OUT  0x71, CONV_U32_I32   ; Convert u32 -> i32 (0xC6) with domain validation
+IN   A, (0x71)            ; Read FPU STATUS register
+BIT  3, A                 ; Test Bit 3 (OVERFLOW / VF)
+JR   NZ, Range_Error      ; Jump if value exceeded +2,147,483,647!
+INIR 0x70, result_i32     ; Safely read valid signed 32-bit int
+```
+
 

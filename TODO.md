@@ -11,6 +11,7 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 - **Test Suite Status:** 100% pass rate (**1,057 / 1,057 tests passing**).
 - **Microcode Capacity:** **873 / 1,024 words used** (151 instruction words of headroom remaining).
 - **Hardware Call Stack:** 16-deep $\times$ 10-bit return-address stack in distributed LUT RAM (`RAM16X1S`) with 4-bit `CSP` pointer fully implemented and verified.
+- **Datapath Bus Symmetry:** `HA_MUX` and `HB_MUX` widened to full 4-bit symmetry (14:1 32-bit muxing across all 10 registers `AL`..`FH`, `EA`, `EB`, `C`, and `IMM`), allowing any register as `src1` without register shuffling.
 - **Completed 32-Bit Math Operations:**
   - Standard integer arithmetic: `ADD_I32`, `SUB_I32`, `MUL_I32`, `DIV_I32` (100% complete).
   - Unsigned integer arithmetic: `ADD_U32`, `SUB_U32`, `MUL_U32`, `DIV_U32` (100% complete).
@@ -38,10 +39,9 @@ To reclaim microcode capacity for remaining 64-bit routines (`MUL_F64`, `DIV_F64
   - Eliminates multi-instruction synthesis loops (`LDI`, `LSL`, `LDI`, `ADD`), saving **8 instructions**.
 
 ### 2. Widen `HA_MUX` to Full 4-Bit Symmetry (~20–30 Words Saved)
-- [ ] **Expand `HA_MUX` from 3 Bits to 4 Bits**:
-  - Currently `HA_MUX` is restricted to `{AL, AH, BL, BH, EA, EB, C, IMM}`. Registers `DL, DH, FL, FH` cannot be used as `src1` (the left operand of `ADD`, `SUB`, `CMP`, `AND`, `OR`, `XOR`).
-  - Expanding `HA_MUX` to 16 inputs makes `HA_BUS` fully symmetric with `HB_BUS` and eliminates redundant register shuffling (`MOV AL, FL; ADD AL, BL; MOV FL, AL`).
-  - Estimated FPGA cost: ~32 LUT4s.
+- [x] **Expand `HA_MUX` from 3 Bits to 4 Bits (Completed)**:
+  - `HA_MUX` and `HB_MUX` both support full 4-bit addressing across `{AL, AH, BL, BH, CL, CH, DL, DH, FL, FH, EA, EB, C, IMM}`.
+  - Eliminates redundant register shuffling (`MOV AL, FL; ADD AL, BL; MOV FL, AL`), allowing any register as `src1`.
 
 ---
 
@@ -52,6 +52,8 @@ To reclaim microcode capacity for remaining 64-bit routines (`MUL_F64`, `DIV_F64
 - [ ] Implement `CONV_I64_I32` (`0xCA`): Narrow signed 64-bit int to 32-bit int with truncation overflow check ($V=1$) (net $-4$ bytes on stack).
 - [ ] Implement `CONV_U32_U64` (`0xC2`): Zero-extend unsigned 32-bit uint to 64-bit uint (net $+4$ bytes on stack).
 - [ ] Implement `CONV_U64_U32` (`0xC3`): Narrow unsigned 64-bit uint to 32-bit uint with truncation overflow check ($V=1$) (net $-4$ bytes on stack).
+- [ ] Implement `CONV_U32_I32` (`0xC6`): Convert unsigned 32-bit uint to signed 32-bit int with range overflow check ($V=1$ if $u32 \ge 2^{31}$) (net $0$ bytes).
+- [ ] Implement `CONV_I32_U32` (`0xC7`): Convert signed 32-bit int to unsigned 32-bit uint with range overflow check ($V=1$ if $i32 < 0$) (net $0$ bytes).
 
 ### 2. Hybrid Integer $\leftrightarrow$ Floating-Point Conversions
 - [ ] Implement `CONV_I32_F32` (`0xCC`): Signed 32-bit int to IEEE-754 single float (net $0$ bytes on stack).

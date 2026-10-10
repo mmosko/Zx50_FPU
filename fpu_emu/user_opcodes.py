@@ -93,6 +93,8 @@ class UserOpcode(Enum):
     CONV_U64_U32 = 0xC3
     CONV_U32_F32 = 0xC4
     CONV_U64_F64 = 0xC5
+    CONV_U32_I32 = 0xC6
+    CONV_I32_U32 = 0xC7
     CONV_I32_I64 = 0xC8
     CONV_F32_F64 = 0xC9
     CONV_I64_I32 = 0xCA
