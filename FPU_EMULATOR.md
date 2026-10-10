@@ -37,10 +37,10 @@ To guarantee that the Python emulator faithfully reflects real digital logic and
 
 ## 3. Python Package Architecture & Module Structure
 
-The emulator will live in `fpu/fpu_rev2/model/` with a modular hierarchy that directly mirrors future Verilog hardware modules:
+The emulator will live in `fpu/zx50_fpu/fpu_emu/` with a modular hierarchy that directly mirrors future Verilog hardware modules:
 
 ```text
-fpu/fpu_rev2/model/
+fpu/zx50_fpu/fpu_emu/
 ├── __init__.py
 ├── alu/
 │   ├── __init__.py

@@ -6,4 +6,7 @@ syn/*
 .coveragerc
 .ruff_cache
 .pytest_cache
+.venv/
+.idea/
+.DS_Store
 !*.txt

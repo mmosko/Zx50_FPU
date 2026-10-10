@@ -2,9 +2,9 @@
 
 This document is the definitive software reference for programming the FPGA-based Floating-Point and Stack Coprocessor on the **Zx50 CPU Card (Rev C4)** from the Z80 host CPU.
 
-- **High-Level Hardware Architecture & Interface:** [FPU_REV2.md](file:///Users/marc/Documents/z80/Zx50/fpu/fpu_rev2/FPU_REV2.md)
-- **Low-Level Internal Micro-Architecture:** [SystemDesign.md](file:///Users/marc/Documents/z80/Zx50/fpu/fpu_rev2/SystemDesign.md)
-- **Development Roadmap:** [TODO.md](file:///Users/marc/Documents/z80/Zx50/fpu/fpu_rev2/TODO.md)
+- **High-Level Hardware Architecture & Interface:** [FPU_REV2.md](FPU_REV2.md)
+- **Low-Level Internal Micro-Architecture:** [SystemDesignV2.md](SystemDesignV2.md)
+- **Development Roadmap:** [TODO.md](TODO.md)
 
 ---
 

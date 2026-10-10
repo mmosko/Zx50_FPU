@@ -4,12 +4,12 @@ This document specifies the high-level hardware architecture, operating theory, 
 for the FPGA-based Floating-Point and Stack Coprocessor on the **Zx50 CPU Card (Rev C4)**.
 
 - **High-Level Architecture & Hardware
-  Interface:** [FPU_REV2.md](file:///Users/marc/Documents/z80/Zx50/fpu/fpu_rev2/FPU_REV2.md) (this document)
+  Interface:** [FPU_REV2.md](FPU_REV2.md) (this document)
 - **Low-Level Micro-Architecture &
-  Implementation:** [SystemDesign.md](file:///Users/marc/Documents/z80/Zx50/fpu/fpu_rev2/SystemDesign.md)
+  Implementation:** [SystemDesignV2.md](SystemDesignV2.md)
 - **Z80 Assembly Programmer's
-  Guide:** [ProgrammersGuide.md](file:///Users/marc/Documents/z80/Zx50/fpu/fpu_rev2/ProgrammersGuide.md)
-- **Development Roadmap:** [TODO.md](file:///Users/marc/Documents/z80/Zx50/fpu/fpu_rev2/TODO.md)
+  Guide:** [ProgrammersGuide.md](ProgrammersGuide.md)
+- **Development Roadmap:** [TODO.md](TODO.md)
 
 ---
 
@@ -303,9 +303,9 @@ zero wait states.
 
 > [!IMPORTANT]
 > The authoritative bit definitions, flag behaviors, and Z80 polling conventions are defined
-in [ProgrammersGuide.md](file:///Users/marc/Documents/z80/Zx50/fpu/fpu_rev2/ProgrammersGuide.md#2-status-register-status70).
+in [ProgrammersGuide.md](ProgrammersGuide.md#2-status-register-status70).
 The internal FPGA signal generation and trigger circuits are defined
-in [SystemDesign.md](file:///Users/marc/Documents/z80/Zx50/fpu/fpu_rev2/SystemDesign.md#24-status-register-status70).
+in [SystemDesignV2.md](SystemDesignV2.md#24-status-register-status70).
 
 ### Wait State & Handshake Circuitry
 
@@ -363,7 +363,7 @@ opcode:
 
 > [!NOTE]
 > For binary layouts, dynamic ranges, and endianness diagrams,
-see [ProgrammersGuide.md](file:///Users/marc/Documents/z80/Zx50/fpu/fpu_rev2/ProgrammersGuide.md#3-supported-data-formats--byte-ordering).
+see [ProgrammersGuide.md](ProgrammersGuide.md#3-supported-data-formats--byte-ordering).
 
 ---
 
@@ -389,7 +389,7 @@ The user instruction set consists of 8-bit macro-opcodes written to Port `0x71`.
 > **Definitive Instruction Reference & Programming Guide:**
 > The complete numerical opcode map, encoding tables, cycle timings, and end-to-end Z80 assembly programming examples
 are documented
-in [ProgrammersGuide.md](file:///Users/marc/Documents/z80/Zx50/fpu/fpu_rev2/ProgrammersGuide.md#4-user-opcode-reference-port-0x71-language).
+in [ProgrammersGuide.md](ProgrammersGuide.md#4-user-opcode-reference-port-0x71-language).
 
 ---
 
@@ -419,7 +419,7 @@ Arithmetic operations are executed using single-cycle dedicated datapath blocks:
 > **Internal Implementation Reference:**
 > For the internal register models, microcode ISA ($\mu$-ops), dispatcher state machine, microcode programs for each
 user opcode, and FPGA gate budget calculations, refer
-to [SystemDesign.md](file:///Users/marc/Documents/z80/Zx50/fpu/fpu_rev2/SystemDesign.md).
+to [SystemDesignV2.md](SystemDesignV2.md).
 
 ### ALU Block Isolation
 
