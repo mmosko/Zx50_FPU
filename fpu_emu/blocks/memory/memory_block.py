@@ -539,6 +539,12 @@ class MemoryBlock(FunctionalBlock):
             self._writeback()
 
     def _swap(self, instr: MicroInstruction) -> None:
+        if instr.is_w32():
+            self._swap_32(instr)
+        else:
+            self._swap_64(instr)
+
+    def _swap_32(self, instr: MicroInstruction) -> None:
         """Exchanges the contents of two 32-bit registers using FL as an intermediary.
 
         Execution sequence (3 clock cycles):
@@ -582,6 +588,9 @@ class MemoryBlock(FunctionalBlock):
         self._outputs.block_res_sel.set(instr.dst.value)
         self._outputs.exec_done.set(1)
         self._writeback()
+
+    def _swap_64(self, instr: MicroInstruction) -> None:
+        raise NotImplementedError()
 
     def _ssav(self, instr: MicroInstruction) -> None:
         assert (instr.op == MicroOp.SSAV)

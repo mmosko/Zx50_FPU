@@ -111,7 +111,96 @@ def test_adder_block_cmp_32(fpga: FpgaModel):
     assert fpga.reg_file.status.is_bit_set(StatusFlag.SIGN)
 
 
-def test_adder_block_add_64(fpga: FpgaModel):
+def test_adder_block_cmp_64_equal(fpga: FpgaModel):
+    """CMP AX, BX where AX == BX -> ZF=1, CF=0, SF=0, VF=0, registers unchanged."""
+    fpga.reg_file.al.write(0xDEADBEEF)
+    fpga.reg_file.ah.write(0x12345678)
+    fpga.reg_file.bl.write(0xDEADBEEF)
+    fpga.reg_file.bh.write(0x12345678)
+
+    instr = MicroInstruction(op=MicroOp.CMP, w=IW.W64, dst=Reg.AL, src=Reg.BL)
+    instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
+
+    clk_start = fpga.clock.cycles
+    fpga.adder.execute()
+
+    # 2 clock cycles elapsed
+    assert fpga.clock.cycles - clk_start == 2
+
+    # Registers must be completely unmodified
+    assert fpga.reg_file.al.read_int() == 0xDEADBEEF
+    assert fpga.reg_file.ah.read_int() == 0x12345678
+    assert fpga.reg_file.bl.read_int() == 0xDEADBEEF
+    assert fpga.reg_file.bh.read_int() == 0x12345678
+
+    # Flags for equality
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.ZERO)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.CARRY)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.SIGN)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
+
+
+def test_adder_block_cmp_64_less_unsigned(fpga: FpgaModel):
+    """CMP AX, BX where AX < BX -> CF=1 (borrow), ZF=0."""
+    # Case 1: Same high word, AL < BL
+    fpga.reg_file.al.write(0x00000005)
+    fpga.reg_file.ah.write(0x00000010)
+    fpga.reg_file.bl.write(0x0000000A)
+    fpga.reg_file.bh.write(0x00000010)
+
+    instr = MicroInstruction(op=MicroOp.CMP, w=IW.W64, dst=Reg.AL, src=Reg.BL)
+    instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
+    fpga.adder.execute()
+
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.ZERO)
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.CARRY)
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.SIGN)
+
+    # Case 2: AH < BH, even if AL > BL
+    fpga.reg_file.al.write(0xFFFFFFFF)
+    fpga.reg_file.ah.write(0x00000001)
+    fpga.reg_file.bl.write(0x00000000)
+    fpga.reg_file.bh.write(0x00000002)
+
+    instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
+    fpga.adder.execute()
+
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.ZERO)
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.CARRY)
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.SIGN)
+
+
+def test_adder_block_cmp_64_greater_unsigned(fpga: FpgaModel):
+    """CMP AX, BX where AX > BX -> CF=0, ZF=0."""
+    # AH > BH, but low word AL < BL so low word borrows from high word
+    fpga.reg_file.al.write(0x00000000)
+    fpga.reg_file.ah.write(0x00000002)
+    fpga.reg_file.bl.write(0x00000001)
+    fpga.reg_file.bh.write(0x00000001)
+
+    instr = MicroInstruction(op=MicroOp.CMP, w=IW.W64, dst=Reg.AL, src=Reg.BL)
+    instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
+    fpga.adder.execute()
+
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.ZERO)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.CARRY)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.SIGN)
+
+
+def test_adder_block_cmp_64_signed_overflow(fpga: FpgaModel):
+    """CMP AX, BX with signed overflow -> VF=1."""
+    # Max positive (0x7FFFFFFF_FFFFFFFF) - Min negative (0x80000000_00000000)
+    fpga.reg_file.al.write(0xFFFFFFFF)
+    fpga.reg_file.ah.write(0x7FFFFFFF)
+    fpga.reg_file.bl.write(0x00000000)
+    fpga.reg_file.bh.write(0x80000000)
+
+    instr = MicroInstruction(op=MicroOp.CMP, w=IW.W64, dst=Reg.AL, src=Reg.BL)
+    instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
+    fpga.adder.execute()
+
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.ZERO)
     # AX = 0x00000001_FFFFFFFF, BX = 0x00000002_00000001
     # Result should be: AX = 0x00000004_00000000
     fpga.reg_file.al.write(0xFFFFFFFF)

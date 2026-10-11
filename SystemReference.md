@@ -16,33 +16,40 @@ The physical registers are 32-bits each (unless stated otherwise):
 - FL and FH (Staging / Working registers, 64-bit pair FX)
 - EA (12-bit exponent register)
 - EB (12-bit exponent register)
-- C (8-bit loop / shift counter, opcode parameter register: automatically latched with user opcode lower nibble `opcode & 0x0F` upon dispatch)
+- C (8-bit loop / shift counter, opcode parameter register: automatically latched with user opcode lower nibble
+  `opcode & 0x0F` upon dispatch)
 - SP (8-bit hardware math stack pointer)
 - OSP (5-bit batch operation stack pointer)
 - UPC (10-bit microcode program counter, addressing 1,024 words in CODE_ROM)
-- STATUS (8-bit status flags register: [7: BSY, 6: ERR, 5: S, 4: C, 3: V, 2: U, 1: D, 0: Z]; refer to [ProgrammersGuide.md](ProgrammersGuide.md#2-status-register-status70) for complete bitfield definitions, system vs. ALU flag separation, and Z80 polling idioms)
+- STATUS (8-bit status flags register: [7: BSY, 6: ERR, 5: S, 4: C, 3: V, 2: U, 1: D, 0: Z]; refer
+  to [ProgrammersGuide.md](ProgrammersGuide.md#2-status-register-status70) for complete bitfield definitions, system vs.
+  ALU flag separation, and Z80 polling idioms)
 
 In the assembly, pseudo-registers AX, BX, CX, DX, and FX denote 64-bit operations, e.g `ADD AX, BX`.
 
-The operation arguments may be any of these.  We use `IMM` to mean the immediate value in an
+The operation arguments may be any of these. We use `IMM` to mean the immediate value in an
 instruction, which we treat like its own register (it actually -- the machine word is broken into
 the instruction register and the immediate register).
 
-- the destination (`dst`) can be any of: 
-  - AL, AH, BL, BH, CL, CH, DL, DH, FL, FH, EA, EB, or C. 
+- the destination (`dst`) can be any of:
+    - AL, AH, BL, BH, CL, CH, DL, DH, FL, FH, EA, EB, or C.
 - The `src1` corresponds to the `HA_MUX`, which is a 16-input mux:
-  - AL, AH, BL, BH, CL, CH, DL, DH, FL, FH, EA, EB, C, IMM
-  - When used with `LDC`, `src1` uses the mnemonic for a source constant table.  See `LDC` below.
+    - AL, AH, BL, BH, CL, CH, DL, DH, FL, FH, EA, EB, C, IMM
+    - When used with `LDC`, `src1` uses the mnemonic for a source constant table. See `LDC` below.
 - The `src2` argument corresponds to the `HB_MUX`, which is a 16-input mux:
-  - AL, AH, BL, BH, CL, CH, DL, DH, FL, FH, EA, EB, C, or IMM.
+    - AL, AH, BL, BH, CL, CH, DL, DH, FL, FH, EA, EB, C, or IMM.
 
 ## 1. Summary of the Microcode Instruction Set
 
-The following table summarizes the complete microcode instruction set, organized by functional block and sorted alphabetically by mnemonic within each block. Blocks sharing physical execution resources and AND-wall logic are co-located:
+The following table summarizes the complete microcode instruction set, organized by functional block and sorted
+alphabetically by mnemonic within each block. Blocks sharing physical execution resources and AND-wall logic are
+co-located:
+
 - **Arithmetic (`0b000` & `0b001`)**: Shared adder, Booth multiplier, and restoring divider resources.
 - **Memory (`0b100` & `0b101`)**: Shared math stack, scratchpad RAM, and shadow status registers.
 
 ### Status Flag Notation
+
 - **`X`**: Flag is modified according to the result of the operation.
 - **`0`**: Flag is explicitly reset / cleared to 0.
 - **`1`**: Flag is explicitly set to 1.
@@ -51,98 +58,98 @@ The following table summarizes the complete microcode instruction set, organized
 
 ### Instruction Set Summary Table
 
-| Block | Mnemonic | Operands | W | Clock Cycles | Opcode (Hex / Bin) | BSY | ERR | S | C | V | U | DF | Z | Operation Performed |
-| :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
-| **Math**<br>`0b000`<br>`0b001` | `ADC` | `dst, src2` | 0 | 1 | `0x01` (`0b000_001`) | • | • | X | X | X | • | • | X | `dst <- dst + src2 + C` |
-| | `ADC` | `dst, src1, src2` | 0 | 1 | `0x01` (`0b000_001`) | • | • | X | X | X | • | • | X | `dst <- src1 + src2 + C` |
-| | `ADC` | `AX, BX` | 1 | 2 | `0x01` (`0b000_001`) | • | • | X | X | X | • | • | X | `AX <- AX + BX + C` (64-bit) |
-| | `ADD` | `dst, src2` | 0 | 1 | `0x00` (`0b000_000`) | • | • | X | X | X | • | • | X | `dst <- dst + src2` |
-| | `ADD` | `dst, src1, src2` | 0 | 1 | `0x00` (`0b000_000`) | • | • | X | X | X | • | • | X | `dst <- src1 + src2` |
-| | `ADD` | `AX, BX` | 1 | 2 | `0x00` (`0b000_000`) | • | • | X | X | X | • | • | X | `AX <- AX + BX` (64-bit) |
-| | `CMP` | `src1, src2` | 0 | 1 | `0x04` (`0b000_100`) | • | • | X | X | X | • | • | X | `src1 - src2` (discards result) |
-| | `CMP` | `AX, BX` | 1 | 2 | `0x04` (`0b000_100`) | • | • | X | X | X | • | • | X | `AX - BX` (64-bit compare) |
-| | `DIV` | `dst, src2` | 0 | 32 | `0x0B` (`0b001_011`) | • | X | X | 0 | X | • | • | X | `dst <- dst / src2, DL <- rem` (ERR & V on div 0) |
-| | `DIV` | `AX, BX` | 1 | 64 | `0x0B` (`0b001_011`) | • | X | X | 0 | X | • | • | X | `AX <- AX / BX, DX <- rem` (64-bit) |
-| | `DIVU` | `dst, src2` | 0 | 32 | `0x0F` (`0b001_111`) | • | X | X | 0 | X | • | • | X | `dst <- dst / src2, DL <- rem` (unsigned, ERR & V on div 0) |
-| | `DIVU` | `AX, BX` | 1 | 64 | `0x0F` (`0b001_111`) | • | X | X | 0 | X | • | • | X | `AX <- AX / BX, DX <- rem` (64-bit) |
-| | `EXP_ADD` | `dst, src2` | 0 | 1 | `0x05` (`0b000_101`) | • | • | X | 0 | X | X | • | X | `dst <- dst + src2` (12-bit exp; V if > 1023, U if < -1022) |
-| | `EXP_ADD` | `dst, src1, src2` | 0 | 1 | `0x05` (`0b000_101`) | • | • | X | 0 | X | X | • | X | `dst <- src1 + src2` (12-bit exp) |
-| | `EXP_SUB` | `dst, src2` | 0 | 1 | `0x06` (`0b000_110`) | • | • | X | 0 | X | X | • | X | `dst <- dst - src2` (12-bit exp; V if > 1023, U if < -1022) |
-| | `EXP_SUB` | `dst, src1, src2` | 0 | 1 | `0x06` (`0b000_110`) | • | • | X | 0 | X | X | • | X | `dst <- src1 - src2` (12-bit exp) |
-| | `MUL` | `dst, src2` | 0 | 16 | `0x0A` (`0b001_010`) | • | • | X | 0 | X | • | • | X | `dst <- dst * src2` (signed Booth mul) |
-| | `MUL` | `dst, src1, src2` | 0 | 16 | `0x0A` (`0b001_010`) | • | • | X | 0 | X | • | • | X | `dst <- src1 * src2` |
-| | `MUL` | `AX, BX` | 1 | 64 | `0x0A` (`0b001_010`) | • | • | X | 0 | X | • | • | X | `AX <- AX * BX` (64-bit) |
-| | `MULU` | `dst, src2` | 0 | 16 | `0x0E` (`0b001_110`) | • | • | X | 0 | X | • | • | X | `{AH, AL} <- dst * src2` (unsigned Booth mul, V if AH != 0) |
-| | `MULU` | `dst, src1, src2` | 0 | 16 | `0x0E` (`0b001_110`) | • | • | X | 0 | X | • | • | X | `{AH, AL} <- src1 * src2` |
-| | `MULU` | `AX, BX` | 1 | 64 | `0x0E` (`0b001_110`) | • | • | X | 0 | X | • | • | X | `{DX, AX} <- AX * BX` (64-bit unsigned, V if DX != 0) |
-| | `PACK` | `dst, src1` | 0 | 1 | `0x08` (`0b001_000`) | • | • | X | • | X | X | • | X | `dst <- pack(sign, src1=exp, dst=mantissa)` (IEEE float) |
-| | `PACK` | `AX, src1` | 1 | 2 | `0x08` (`0b001_000`) | • | • | X | • | X | X | • | X | `AX <- pack(sign, src1=exp, AX=mantissa)` (IEEE double) |
-| | `SBB` | `dst, src2` | 0 | 1 | `0x03` (`0b000_011`) | • | • | X | X | X | • | • | X | `dst <- dst - src2 - C` |
-| | `SBB` | `dst, src1, src2` | 0 | 1 | `0x03` (`0b000_011`) | • | • | X | X | X | • | • | X | `dst <- src1 - src2 - C` |
-| | `SBB` | `AX, BX` | 1 | 2 | `0x03` (`0b000_011`) | • | • | X | X | X | • | • | X | `AX <- AX - BX - C` (64-bit) |
-| | `SUB` | `dst, src2` | 0 | 1 | `0x02` (`0b000_010`) | • | • | X | X | X | • | • | X | `dst <- dst - src2` |
-| | `SUB` | `dst, src1, src2` | 0 | 1 | `0x02` (`0b000_010`) | • | • | X | X | X | • | • | X | `dst <- src1 - src2` |
-| | `SUB` | `AX, BX` | 1 | 2 | `0x02` (`0b000_010`) | • | • | X | X | X | • | • | X | `AX <- AX - BX` (64-bit) |
-| | `UNPACK` | `dst, src1` | 0 | 1 | `0x09` (`0b001_001`) | • | • | X | • | • | • | X | X | `src1 <- dst.exp, dst <- dst.mantissa`; DF=`sA ^ sB` |
-| | `UNPACK` | `AX, src1` | 1 | 2 | `0x09` (`0b001_001`) | • | • | X | • | • | • | X | X | `src1 <- AX.exp, AX <- AX.mantissa` (64-bit double) |
-| **Logic**<br>`0b010` | `AND` | `dst, src2` | 0 | 1 | `0x10` (`0b010_000`) | • | • | X | **0** | **0** | • | • | X | `dst <- dst & src2` (**clears C and V**) |
-| | `AND` | `dst, src1, src2` | 0 | 1 | `0x10` (`0b010_000`) | • | • | X | **0** | **0** | • | • | X | `dst <- src1 & src2` (**clears C and V**) |
-| | `AND` | `AX, BX` | 1 | 2 | `0x10` (`0b010_000`) | • | • | X | **0** | **0** | • | • | X | `AX <- AX & BX` (**clears C and V**) |
-| | `FABS` | `dst` | 0 | 1 | `0x13` (`0b010_011`) | • | • | 0 | • | • | • | • | X | `dst[31] <- 0` (clears S) |
-| | `FABS` | `AX` | 1 | 2 | `0x13` (`0b010_011`) | • | • | 0 | • | • | • | • | X | `AH[31] <- 0` (clears S) |
-| | `FCHS` | `dst` | 0 | 1 | `0x14` (`0b010_100`) | • | • | X | • | • | • | • | X | `dst[31] <- ~dst[31]` (inverts S) |
-| | `FCHS` | `AX` | 1 | 2 | `0x14` (`0b010_100`) | • | • | X | • | • | • | • | X | `AH[31] <- ~AH[31]` (inverts S) |
-| | `NOT` | `dst` | 0 | 1 | `0x15` (`0b010_101`) | • | • | X | **0** | **0** | • | • | X | `dst <- ~dst` (**clears C and V**) |
-| | `NOT` | `AX` | 1 | 2 | `0x15` (`0b010_101`) | • | • | X | **0** | **0** | • | • | X | `AX <- ~AX` (**clears C and V**) |
-| | `OR` | `dst, src2` | 0 | 1 | `0x11` (`0b010_001`) | • | • | X | **0** | **0** | • | • | X | `dst <- dst \| src2` (**clears C and V**) |
-| | `OR` | `dst, src1, src2` | 0 | 1 | `0x11` (`0b010_001`) | • | • | X | **0** | **0** | • | • | X | `dst <- src1 \| src2` (**clears C and V**) |
-| | `OR` | `AX, BX` | 1 | 2 | `0x11` (`0b010_001`) | • | • | X | **0** | **0** | • | • | X | `AX <- AX \| BX` (**clears C and V**) |
-| | `XOR` | `dst, src2` | 0 | 1 | `0x12` (`0b010_010`) | • | • | X | **0** | **0** | • | • | X | `dst <- dst ^ src2` (**clears C and V**) |
-| | `XOR` | `dst, src1, src2` | 0 | 1 | `0x12` (`0b010_010`) | • | • | X | **0** | **0** | • | • | X | `dst <- src1 ^ src2` (**clears C and V**) |
-| | `XOR` | `AX, BX` | 1 | 2 | `0x12` (`0b010_010`) | • | • | X | **0** | **0** | • | • | X | `AX <- AX ^ BX` (**clears C and V**) |
-| **Control**<br>`0b011` | `CALL` | `addr` | 0 | 2 | `0x1C` (`0b011_100`) | • | • | • | • | • | • | • | • | `CALL_STACK[CSP++] <- UPC + 1; UPC <- addr` |
-| | `DJNZ` | `addr` | 0 | 2 / 1 | `0x1B` (`0b011_011`) | • | • | • | • | • | • | • | X | `C <- C - 1; if (C != 0) UPC <- addr` (sets ZF) |
-| | `HALT` | — | 0 | 1 | `0x1F` (`0b011_111`) | **0** | • | • | • | • | • | • | • | `STATUS.BSY <- 0; pulse EXEC_DONE` |
-| | `JMP` | `addr` | 0 | 2 | `0x18` (`0b011_000`) | • | • | • | • | • | • | • | • | `UPC <- addr` (unconditional jump) |
-| | `JNZ` | `[flag,] addr` | 0 | 2 / 1 | `0x19` (`0b011_001`) | • | • | • | • | • | • | • | • | `if (!cond) UPC <- addr` (default: `!ZF`) |
-| | `JZ` | `[flag,] addr` | 0 | 2 / 1 | `0x1A` (`0b011_010`) | • | • | • | • | • | • | • | • | `if (cond) UPC <- addr` (default: `ZF`) |
-| | `NOP` | — | 0 | 1 | `0x1E` (`0b011_110`) | • | • | • | • | • | • | • | • | No operation (pipeline bubble) |
-| | `RET` | — | 0 | 2 | `0x1D` (`0b011_101`) | • | • | • | • | • | • | • | • | `UPC <- CALL_STACK[--CSP]` |
-| **Memory**<br>`0b100`<br>`0b101` | `LD` | `dst, addr` | 0 | 1 | `0x24` (`0b100_100`) | • | • | • | • | • | • | • | • | `dst <- DATA_RAM[0x080 \| (addr & 0x3F)]` |
-| | `LD` | `dst, [src1]` | 0 | 1 | `0x24` (`0b100_100`) | • | • | • | • | • | • | • | • | `dst <- DATA_RAM[0x080 \| (src1 & 0x3F)]` |
-| | `LD` | `AX, addr` | 1 | 2 | `0x24` (`0b100_100`) | • | • | • | • | • | • | • | • | 64-bit load from scratchpad |
-| | `LDC` | `dst, tbl, addr` | 0 | 1 | `0x22` (`0b100_010`) | • | • | • | • | • | • | • | • | `dst <- DATA_RAM[TBL_BASE \| addr]` (constant/LUT) |
-| | `LDC` | `AX, tbl, addr` | 1 | 2 | `0x22` (`0b100_010`) | • | • | • | • | • | • | • | • | 64-bit load from constant/LUT table |
-| | `LDI` | `dst, imm` | 0 | 1 | `0x23` (`0b100_011`) | • | • | • | • | • | • | • | • | `dst <- imm` (zero-extended 10-bit imm) |
-| | `LDI` | `AX, imm` | 1 | 2 | `0x23` (`0b100_011`) | • | • | • | • | • | • | • | • | `AL <- imm; AH <- 0` |
-| | `LDI` | `flag, val` | 0 | 1 | `0x23` (`0b100_011`) | X | X | X | X | X | X | X | X | `STATUS[flag] <- val & 1` (updates selected flag) |
-| | `LDU` | `dst, addr` | 0 | 1 | `0x28` (`0b101_000`) | • | • | • | • | • | • | • | • | `dst <- DATA_RAM[0x0C0 \| (addr & 0x3F)]` (user RAM) |
-| | `LDU` | `AX, addr` | 1 | 2 | `0x28` (`0b101_000`) | • | • | • | • | • | • | • | • | 64-bit load from user scratchpad |
-| | `MOV` | `dst, src2` | 0 | 1 | `0x26` (`0b100_110`) | • | • | • | • | • | • | • | • | `dst <- src2` |
-| | `MOV` | `AX, BX` | 1 | 2 | `0x26` (`0b100_110`) | • | • | • | • | • | • | • | • | `AX <- BX` (64-bit copy) |
-| | `POP` | `dst` | 0 | 1 | `0x21` (`0b100_001`) | • | **X\*** | • | • | • | • | • | • | `dst <- TOS, SP <- SP - 1` (\*sets ERR on underflow) |
-| | `POP` | `AX` | 1 | 2 | `0x21` (`0b100_001`) | • | **X\*** | • | • | • | • | • | • | `AX <- TOS, SP <- SP - 2` (\*sets ERR on underflow) |
-| | `PUSH` | `src2` | 0 | 1 | `0x20` (`0b100_000`) | • | **X\*** | • | • | • | • | • | • | `TOS <- src2, SP <- SP + 1` (\*sets ERR on overflow) |
-| | `PUSH` | `AX` | 1 | 2 | `0x20` (`0b100_000`) | • | **X\*** | • | • | • | • | • | • | `TOS <- AX, SP <- SP + 2` (\*sets ERR on overflow) |
-| | `SRES` | — | 0 | 1 | `0x2F` (`0b101_111`) | • | • | X | X | X | X | X | X | `STATUS <- SHADOW_STATUS` (restores ALU flags with mask `0x3F`) |
-| | `SSAV` | — | 0 | 1 | `0x2E` (`0b101_110`) | • | • | • | • | • | • | • | • | `SHADOW_STATUS <- STATUS` (saves flags) |
-| | `STO` | `addr, src2` | 0 | 1 | `0x25` (`0b100_101`) | • | • | • | • | • | • | • | • | `DATA_RAM[0x080 \| (addr & 0x3F)] <- src2` |
-| | `STO` | `[src1], src2` | 0 | 1 | `0x25` (`0b100_101`) | • | • | • | • | • | • | • | • | `DATA_RAM[0x080 \| (src1 & 0x3F)] <- src2` |
-| | `STO` | `addr, AX` | 1 | 2 | `0x25` (`0b100_101`) | • | • | • | • | • | • | • | • | 64-bit store to scratchpad |
-| | `STU` | `addr, src2` | 0 | 1 | `0x29` (`0b101_001`) | • | • | • | • | • | • | • | • | `DATA_RAM[0x0C0 \| (addr & 0x3F)] <- src2` (user RAM) |
-| | `STU` | `addr, AX` | 1 | 2 | `0x29` (`0b101_001`) | • | • | • | • | • | • | • | • | 64-bit store to user scratchpad |
-| | `SWAP` | `dst, src2` | 0 | 2 | `0x27` (`0b100_111`) | • | • | • | • | • | • | • | • | `dst <-> src2` (via staging register `F_`) |
-| | `SWAP` | `AX, BX` | 1 | 4 | `0x27` (`0b100_111`) | • | • | • | • | • | • | • | • | 64-bit exchange `AX <-> BX` |
-| **Shifter**<br>`0b110` | `ASL` | `dst[, src1]` | 0 | 1 | `0x32` (`0b110_010`) | • | • | X | X | X | • | • | X | `dst <- dst << (src1 \| C)` (V set if sign changed) |
-| | `ASL` | `AX[, src1]` | 1 | 2 | `0x32` (`0b110_010`) | • | • | X | X | X | • | • | X | 64-bit arithmetic shift left |
-| | `ASR` | `dst[, src1]` | 0 | 1 | `0x33` (`0b110_011`) | • | • | X | X | • | • | • | X | `dst <- dst >> (src1 \| C)` (sign-extended) |
-| | `ASR` | `AX[, src1]` | 1 | 2 | `0x33` (`0b110_011`) | • | • | X | X | • | • | • | X | 64-bit arithmetic shift right |
-| | `LSL` | `dst[, src1]` | 0 | 1 | `0x30` (`0b110_000`) | • | • | X | X | • | • | • | X | `dst <- dst << (src1 \| C)` (C = last bit out) |
-| | `LSL` | `AX[, src1]` | 1 | 2 | `0x30` (`0b110_000`) | • | • | X | X | • | • | • | X | 64-bit logical shift left |
-| | `LSR` | `dst[, src1]` | 0 | 1 | `0x31` (`0b110_001`) | • | • | **0** | X | • | • | • | X | `dst <- dst >> (src1 \| C)` (clears S) |
-| | `LSR` | `AX[, src1]` | 1 | 2 | `0x31` (`0b110_001`) | • | • | **0** | X | • | • | • | X | 64-bit logical shift right |
-| | `LZC` | `dst, src2` | 0 | 1 | `0x36` (`0b110_110`) | • | • | • | • | • | • | • | X | `dst <- count_leading_zeros(src2)` (ZF if 0) |
-| | `LZC` | `AX, BX` | 1 | 2 | `0x36` (`0b110_110`) | • | • | • | • | • | • | • | X | 64-bit leading zero count |
+| Block                            | Mnemonic  | Operands          | W | Clock Cycles |  Opcode (Hex / Bin)  |  BSY  |   ERR   |   S   |   C   |   V   | U | DF | Z | Operation Performed                                             |
+|:---------------------------------|:----------|:------------------|:-:|:------------:|:--------------------:|:-----:|:-------:|:-----:|:-----:|:-----:|:-:|:--:|:-:|:----------------------------------------------------------------|
+| **Math**<br>`0b000`<br>`0b001`   | `ADC`     | `dst, src2`       | 0 |      1       | `0x01` (`0b000_001`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- dst + src2 + C`                                         |
+|                                  | `ADC`     | `dst, src1, src2` | 0 |      1       | `0x01` (`0b000_001`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- src1 + src2 + C`                                        |
+|                                  | `ADC`     | `AX, BX`          | 1 |      2       | `0x01` (`0b000_001`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `AX <- AX + BX + C` (64-bit)                                    |
+|                                  | `ADD`     | `dst, src2`       | 0 |      1       | `0x00` (`0b000_000`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- dst + src2`                                             |
+|                                  | `ADD`     | `dst, src1, src2` | 0 |      1       | `0x00` (`0b000_000`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- src1 + src2`                                            |
+|                                  | `ADD`     | `AX, BX`          | 1 |      2       | `0x00` (`0b000_000`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `AX <- AX + BX` (64-bit)                                        |
+|                                  | `CMP`     | `src1, src2`      | 0 |      1       | `0x04` (`0b000_100`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `src1 - src2` (discards result)                                 |
+|                                  | `CMP`     | `src1, src2`      | 1 |      2       | `0x04` (`0b000_100`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `src1 - src2` (64-bit compare)                                      |
+|                                  | `DIV`     | `dst, src2`       | 0 |      32      | `0x0B` (`0b001_011`) |   •   |    X    |   X   |   0   |   X   | • | •  | X | `dst <- dst / src2, DL <- rem` (ERR & V on div 0)               |
+|                                  | `DIV`     | `dst, src2`       | 1 |      64      | `0x0B` (`0b001_011`) |   •   |    X    |   X   |   0   |   X   | • | •  | X | `dst <- dst / src2, DX <- rem` (64-bit)                             |
+|                                  | `DIVU`    | `dst, src2`       | 0 |      32      | `0x0F` (`0b001_111`) |   •   |    X    |   X   |   0   |   X   | • | •  | X | `dst <- dst / src2, DL <- rem` (unsigned, ERR & V on div 0)     |
+|                                  | `DIVU`    | `AX, BX`          | 1 |      64      | `0x0F` (`0b001_111`) |   •   |    X    |   X   |   0   |   X   | • | •  | X | `AX <- AX / BX, DX <- rem` (64-bit)                             |
+|                                  | `EXP_ADD` | `dst, src2`       | 0 |      1       | `0x05` (`0b000_101`) |   •   |    •    |   X   |   0   |   X   | X | •  | X | `dst <- dst + src2` (12-bit exp; V if > 1023, U if < -1022)     |
+|                                  | `EXP_ADD` | `dst, src1, src2` | 0 |      1       | `0x05` (`0b000_101`) |   •   |    •    |   X   |   0   |   X   | X | •  | X | `dst <- src1 + src2` (12-bit exp)                               |
+|                                  | `EXP_SUB` | `dst, src2`       | 0 |      1       | `0x06` (`0b000_110`) |   •   |    •    |   X   |   0   |   X   | X | •  | X | `dst <- dst - src2` (12-bit exp; V if > 1023, U if < -1022)     |
+|                                  | `EXP_SUB` | `dst, src1, src2` | 0 |      1       | `0x06` (`0b000_110`) |   •   |    •    |   X   |   0   |   X   | X | •  | X | `dst <- src1 - src2` (12-bit exp)                               |
+|                                  | `MUL`     | `dst, src2`       | 0 |      16      | `0x0A` (`0b001_010`) |   •   |    •    |   X   |   0   |   X   | • | •  | X | `dst <- dst * src2` (signed Booth mul)                          |
+|                                  | `MUL`     | `dst, src1, src2` | 0 |      16      | `0x0A` (`0b001_010`) |   •   |    •    |   X   |   0   |   X   | • | •  | X | `dst <- src1 * src2`                                            |
+|                                  | `MUL`     | `AX, BX`          | 1 |      64      | `0x0A` (`0b001_010`) |   •   |    •    |   X   |   0   |   X   | • | •  | X | `AX <- AX * BX` (64-bit)                                        |
+|                                  | `MULU`    | `dst, src2`       | 0 |      16      | `0x0E` (`0b001_110`) |   •   |    •    |   X   |   0   |   X   | • | •  | X | `{AH, AL} <- dst * src2` (unsigned Booth mul, V if AH != 0)     |
+|                                  | `MULU`    | `dst, src1, src2` | 0 |      16      | `0x0E` (`0b001_110`) |   •   |    •    |   X   |   0   |   X   | • | •  | X | `{AH, AL} <- src1 * src2`                                       |
+|                                  | `MULU`    | `AX, BX`          | 1 |      64      | `0x0E` (`0b001_110`) |   •   |    •    |   X   |   0   |   X   | • | •  | X | `{DX, AX} <- AX * BX` (64-bit unsigned, V if DX != 0)           |
+|                                  | `PACK`    | `dst, src1`       | 0 |      1       | `0x08` (`0b001_000`) |   •   |    •    |   X   |   •   |   X   | X | •  | X | `dst <- pack(sign, src1=exp, dst=mantissa)` (IEEE float)        |
+|                                  | `PACK`    | `AX, src1`        | 1 |      2       | `0x08` (`0b001_000`) |   •   |    •    |   X   |   •   |   X   | X | •  | X | `AX <- pack(sign, src1=exp, AX=mantissa)` (IEEE double)         |
+|                                  | `SBB`     | `dst, src2`       | 0 |      1       | `0x03` (`0b000_011`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- dst - src2 - C`                                         |
+|                                  | `SBB`     | `dst, src1, src2` | 0 |      1       | `0x03` (`0b000_011`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- src1 - src2 - C`                                        |
+|                                  | `SBB`     | `AX, BX`          | 1 |      2       | `0x03` (`0b000_011`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `AX <- AX - BX - C` (64-bit)                                    |
+|                                  | `SUB`     | `dst, src2`       | 0 |      1       | `0x02` (`0b000_010`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- dst - src2`                                             |
+|                                  | `SUB`     | `dst, src1, src2` | 0 |      1       | `0x02` (`0b000_010`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- src1 - src2`                                            |
+|                                  | `SUB`     | `AX, BX`          | 1 |      2       | `0x02` (`0b000_010`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `AX <- AX - BX` (64-bit)                                        |
+|                                  | `UNPACK`  | `dst, src1`       | 0 |      1       | `0x09` (`0b001_001`) |   •   |    •    |   X   |   •   |   •   | • | X  | X | `src1 <- dst.exp, dst <- dst.mantissa`; DF=`sA ^ sB`            |
+|                                  | `UNPACK`  | `AX, src1`        | 1 |      2       | `0x09` (`0b001_001`) |   •   |    •    |   X   |   •   |   •   | • | X  | X | `src1 <- AX.exp, AX <- AX.mantissa` (64-bit double)             |
+| **Logic**<br>`0b010`             | `AND`     | `dst, src2`       | 0 |      1       | `0x10` (`0b010_000`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst <- dst & src2` (**clears C and V**)                        |
+|                                  | `AND`     | `dst, src1, src2` | 0 |      1       | `0x10` (`0b010_000`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst <- src1 & src2` (**clears C and V**)                       |
+|                                  | `AND`     | `AX, BX`          | 1 |      2       | `0x10` (`0b010_000`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `AX <- AX & BX` (**clears C and V**)                            |
+|                                  | `FABS`    | `dst`             | 0 |      1       | `0x13` (`0b010_011`) |   •   |    •    |   0   |   •   |   •   | • | •  | X | `dst[31] <- 0` (clears S)                                       |
+|                                  | `FABS`    | `AX`              | 1 |      2       | `0x13` (`0b010_011`) |   •   |    •    |   0   |   •   |   •   | • | •  | X | `AH[31] <- 0` (clears S)                                        |
+|                                  | `FCHS`    | `dst`             | 0 |      1       | `0x14` (`0b010_100`) |   •   |    •    |   X   |   •   |   •   | • | •  | X | `dst[31] <- ~dst[31]` (inverts S)                               |
+|                                  | `FCHS`    | `AX`              | 1 |      2       | `0x14` (`0b010_100`) |   •   |    •    |   X   |   •   |   •   | • | •  | X | `AH[31] <- ~AH[31]` (inverts S)                                 |
+|                                  | `NOT`     | `dst`             | 0 |      1       | `0x15` (`0b010_101`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst <- ~dst` (**clears C and V**)                              |
+|                                  | `NOT`     | `AX`              | 1 |      2       | `0x15` (`0b010_101`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `AX <- ~AX` (**clears C and V**)                                |
+|                                  | `OR`      | `dst, src2`       | 0 |      1       | `0x11` (`0b010_001`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst <- dst \| src2` (**clears C and V**)                       |
+|                                  | `OR`      | `dst, src1, src2` | 0 |      1       | `0x11` (`0b010_001`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst <- src1 \| src2` (**clears C and V**)                      |
+|                                  | `OR`      | `AX, BX`          | 1 |      2       | `0x11` (`0b010_001`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `AX <- AX \| BX` (**clears C and V**)                           |
+|                                  | `XOR`     | `dst, src2`       | 0 |      1       | `0x12` (`0b010_010`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst <- dst ^ src2` (**clears C and V**)                        |
+|                                  | `XOR`     | `dst, src1, src2` | 0 |      1       | `0x12` (`0b010_010`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst <- src1 ^ src2` (**clears C and V**)                       |
+|                                  | `XOR`     | `AX, BX`          | 1 |      2       | `0x12` (`0b010_010`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `AX <- AX ^ BX` (**clears C and V**)                            |
+| **Control**<br>`0b011`           | `CALL`    | `addr`            | 0 |      2       | `0x1C` (`0b011_100`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `CALL_STACK[CSP++] <- UPC + 1; UPC <- addr`                     |
+|                                  | `DJNZ`    | `addr`            | 0 |    2 / 1     | `0x1B` (`0b011_011`) |   •   |    •    |   •   |   •   |   •   | • | •  | X | `C <- C - 1; if (C != 0) UPC <- addr` (sets ZF)                 |
+|                                  | `HALT`    | —                 | 0 |      1       | `0x1F` (`0b011_111`) | **0** |    •    |   •   |   •   |   •   | • | •  | • | `STATUS.BSY <- 0; pulse EXEC_DONE`                              |
+|                                  | `JMP`     | `addr`            | 0 |      2       | `0x18` (`0b011_000`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `UPC <- addr` (unconditional jump)                              |
+|                                  | `JNZ`     | `[flag,] addr`    | 0 |    2 / 1     | `0x19` (`0b011_001`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `if (!cond) UPC <- addr` (default: `!ZF`)                       |
+|                                  | `JZ`      | `[flag,] addr`    | 0 |    2 / 1     | `0x1A` (`0b011_010`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `if (cond) UPC <- addr` (default: `ZF`)                         |
+|                                  | `NOP`     | —                 | 0 |      1       | `0x1E` (`0b011_110`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | No operation (pipeline bubble)                                  |
+|                                  | `RET`     | —                 | 0 |      2       | `0x1D` (`0b011_101`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `UPC <- CALL_STACK[--CSP]`                                      |
+| **Memory**<br>`0b100`<br>`0b101` | `LD`      | `dst, addr`       | 0 |      1       | `0x24` (`0b100_100`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `dst <- DATA_RAM[0x080 \| (addr & 0x3F)]`                       |
+|                                  | `LD`      | `dst, [src1]`     | 0 |      1       | `0x24` (`0b100_100`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `dst <- DATA_RAM[0x080 \| (src1 & 0x3F)]`                       |
+|                                  | `LD`      | `AX, addr`        | 1 |      2       | `0x24` (`0b100_100`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | 64-bit load from scratchpad                                     |
+|                                  | `LDC`     | `dst, tbl, addr`  | 0 |      1       | `0x22` (`0b100_010`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `dst <- DATA_RAM[TBL_BASE \| addr]` (constant/LUT)              |
+|                                  | `LDC`     | `AX, tbl, addr`   | 1 |      2       | `0x22` (`0b100_010`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | 64-bit load from constant/LUT table                             |
+|                                  | `LDI`     | `dst, imm`        | 0 |      1       | `0x23` (`0b100_011`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `dst <- imm` (zero-extended 10-bit imm)                         |
+|                                  | `LDI`     | `AX, imm`         | 1 |      2       | `0x23` (`0b100_011`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `AL <- imm; AH <- 0`                                            |
+|                                  | `LDI`     | `flag, val`       | 0 |      1       | `0x23` (`0b100_011`) |   X   |    X    |   X   |   X   |   X   | X | X  | X | `STATUS[flag] <- val & 1` (updates selected flag)               |
+|                                  | `LDU`     | `dst, addr`       | 0 |      1       | `0x28` (`0b101_000`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `dst <- DATA_RAM[0x0C0 \| (addr & 0x3F)]` (user RAM)            |
+|                                  | `LDU`     | `AX, addr`        | 1 |      2       | `0x28` (`0b101_000`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | 64-bit load from user scratchpad                                |
+|                                  | `MOV`     | `dst, src2`       | 0 |      1       | `0x26` (`0b100_110`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `dst <- src2`                                                   |
+|                                  | `MOV`     | `AX, BX`          | 1 |      2       | `0x26` (`0b100_110`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `AX <- BX` (64-bit copy)                                        |
+|                                  | `POP`     | `dst`             | 0 |      1       | `0x21` (`0b100_001`) |   •   | **X\*** |   •   |   •   |   •   | • | •  | • | `dst <- TOS, SP <- SP - 1` (\*sets ERR on underflow)            |
+|                                  | `POP`     | `AX`              | 1 |      2       | `0x21` (`0b100_001`) |   •   | **X\*** |   •   |   •   |   •   | • | •  | • | `AX <- TOS, SP <- SP - 2` (\*sets ERR on underflow)             |
+|                                  | `PUSH`    | `src2`            | 0 |      1       | `0x20` (`0b100_000`) |   •   | **X\*** |   •   |   •   |   •   | • | •  | • | `TOS <- src2, SP <- SP + 1` (\*sets ERR on overflow)            |
+|                                  | `PUSH`    | `AX`              | 1 |      2       | `0x20` (`0b100_000`) |   •   | **X\*** |   •   |   •   |   •   | • | •  | • | `TOS <- AX, SP <- SP + 2` (\*sets ERR on overflow)              |
+|                                  | `SRES`    | —                 | 0 |      1       | `0x2F` (`0b101_111`) |   •   |    •    |   X   |   X   |   X   | X | X  | X | `STATUS <- SHADOW_STATUS` (restores ALU flags with mask `0x3F`) |
+|                                  | `SSAV`    | —                 | 0 |      1       | `0x2E` (`0b101_110`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `SHADOW_STATUS <- STATUS` (saves flags)                         |
+|                                  | `STO`     | `addr, src2`      | 0 |      1       | `0x25` (`0b100_101`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `DATA_RAM[0x080 \| (addr & 0x3F)] <- src2`                      |
+|                                  | `STO`     | `[src1], src2`    | 0 |      1       | `0x25` (`0b100_101`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `DATA_RAM[0x080 \| (src1 & 0x3F)] <- src2`                      |
+|                                  | `STO`     | `addr, AX`        | 1 |      2       | `0x25` (`0b100_101`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | 64-bit store to scratchpad                                      |
+|                                  | `STU`     | `addr, src2`      | 0 |      1       | `0x29` (`0b101_001`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `DATA_RAM[0x0C0 \| (addr & 0x3F)] <- src2` (user RAM)           |
+|                                  | `STU`     | `addr, AX`        | 1 |      2       | `0x29` (`0b101_001`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | 64-bit store to user scratchpad                                 |
+|                                  | `SWAP`    | `dst, src2`       | 0 |      2       | `0x27` (`0b100_111`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `dst <-> src2` (via staging register `F_`)                      |
+|                                  | `SWAP`    | `AX, BX`          | 1 |      4       | `0x27` (`0b100_111`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | 64-bit exchange `AX <-> BX`                                     |
+| **Shifter**<br>`0b110`           | `ASL`     | `dst[, src1]`     | 0 |      1       | `0x32` (`0b110_010`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- dst << (src1 \| C)` (V set if sign changed)             |
+|                                  | `ASL`     | `AX[, src1]`      | 1 |      2       | `0x32` (`0b110_010`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | 64-bit arithmetic shift left                                    |
+|                                  | `ASR`     | `dst[, src1]`     | 0 |      1       | `0x33` (`0b110_011`) |   •   |    •    |   X   |   X   |   •   | • | •  | X | `dst <- dst >> (src1 \| C)` (sign-extended)                     |
+|                                  | `ASR`     | `AX[, src1]`      | 1 |      2       | `0x33` (`0b110_011`) |   •   |    •    |   X   |   X   |   •   | • | •  | X | 64-bit arithmetic shift right                                   |
+|                                  | `LSL`     | `dst[, src1]`     | 0 |      1       | `0x30` (`0b110_000`) |   •   |    •    |   X   |   X   |   •   | • | •  | X | `dst <- dst << (src1 \| C)` (C = last bit out)                  |
+|                                  | `LSL`     | `AX[, src1]`      | 1 |      2       | `0x30` (`0b110_000`) |   •   |    •    |   X   |   X   |   •   | • | •  | X | 64-bit logical shift left                                       |
+|                                  | `LSR`     | `dst[, src1]`     | 0 |      1       | `0x31` (`0b110_001`) |   •   |    •    | **0** |   X   |   •   | • | •  | X | `dst <- dst >> (src1 \| C)` (clears S)                          |
+|                                  | `LSR`     | `AX[, src1]`      | 1 |      2       | `0x31` (`0b110_001`) |   •   |    •    | **0** |   X   |   •   | • | •  | X | 64-bit logical shift right                                      |
+|                                  | `LZC`     | `dst, src2`       | 0 |      1       | `0x36` (`0b110_110`) |   •   |    •    |   •   |   •   |   •   | • | •  | X | `dst <- count_leading_zeros(src2)` (ZF if 0)                    |
+|                                  | `LZC`     | `AX, BX`          | 1 |      2       | `0x36` (`0b110_110`) |   •   |    •    |   •   |   •   |   •   | • | •  | X | 64-bit leading zero count                                       |
 
 ---
 
@@ -1539,7 +1546,8 @@ PUSH src2 / PUSH AX — PUSH REGISTER ONTO OPERAND STACK
 ```
 
 * **`ERR`**: Set to 1 on stack overflow ($OSP + 4 > 32$ for 32-bit or $> 32$ for 64-bit); preserved otherwise.
-* **ALU Flags (`S`, `C`, `V`, `U`, `DF`, `Z`)**: Preserved / Unaffected (memory operations only set system error flag `ERR`; refer to [ProgrammersGuide.md](ProgrammersGuide.md#2-status-register-status70)).
+* **ALU Flags (`S`, `C`, `V`, `U`, `DF`, `Z`)**: Preserved / Unaffected (memory operations only set system error flag
+  `ERR`; refer to [ProgrammersGuide.md](ProgrammersGuide.md#2-status-register-status70)).
 
 #### Register Transfer & Datapath Flow
 
@@ -1602,7 +1610,8 @@ POP dst / POP AX — POP REGISTER FROM OPERAND STACK
 ```
 
 * **`ERR`**: Set to 1 on stack underflow ($OSP < 4$ for 32-bit or $< 8$ for 64-bit); preserved otherwise.
-* **ALU Flags (`S`, `C`, `V`, `U`, `DF`, `Z`)**: Preserved / Unaffected (memory operations only set system error flag `ERR`; refer to [ProgrammersGuide.md](ProgrammersGuide.md#2-status-register-status70)).
+* **ALU Flags (`S`, `C`, `V`, `U`, `DF`, `Z`)**: Preserved / Unaffected (memory operations only set system error flag
+  `ERR`; refer to [ProgrammersGuide.md](ProgrammersGuide.md#2-status-register-status70)).
 
 #### Register Transfer & Datapath Flow
 
@@ -1704,12 +1713,14 @@ UPC <- UPC + 1
 
 #### Description
 
-Loads a constant or lookup table entry from the unified `DATA_RAM` ROM space (EBR 0–3, `0x100`–`0x3FF`) into destination register `dst`.
+Loads a constant or lookup table entry from the unified `DATA_RAM` ROM space (EBR 0–3, `0x100`–`0x3FF`) into destination
+register `dst`.
 
-- **Zero-Cost Bitwise OR Addressing**: Table bases are power-of-two aligned (`0x100`, `0x200`, `0x280`, `0x300`), eliminating adders and carry chains on the memory address path.
+- **Zero-Cost Bitwise OR Addressing**: Table bases are power-of-two aligned (`0x100`, `0x200`, `0x280`, `0x300`),
+  eliminating adders and carry chains on the memory address path.
 - **Interleaved Seed Tables (`0x300`–`0x3FF`)**: Reciprocal and Square Root seeds share 256 words at base `0x300`:
-  - `RECIP` (`tbl=3`): Slices low 16 bits `[15:0]` and zero-extends into `dst[31:0]`.
-  - `SQRT` (`tbl=4`): Slices high 16 bits `[31:16]` and zero-extends into `dst[31:0]`.
+    - `RECIP` (`tbl=3`): Slices low 16 bits `[15:0]` and zero-extends into `dst[31:0]`.
+    - `SQRT` (`tbl=4`): Slices high 16 bits `[31:16]` and zero-extends into `dst[31:0]`.
 - **Dynamic Register Addressing**: In addition to static immediate table offsets, `addr` can be routed from any `HA_MUX`
   register (such as counter `C`), enabling single-cycle dynamic seed table indexing during `SQRT` and `DIV` execution.
 
@@ -1854,22 +1865,29 @@ else:
 #### Instruction Word Format
 
 `OPCODE = 100100`. `W = 0` (32-bit, 1 cycle) or `W = 1` (64-bit, 2 cycles). `RES_SEL = dst`. `HB_MUX = NONE`.
+
 - **Immediate Direct (`LD dst, addr`)**: `HA_MUX = IMM (0b1101)`, `imm[9:0] = addr` (`0..63`).
 - **Indirect Register (`LD dst, [src1]`)**: `HA_MUX = src1` (`AL..FH`, `EA`, `EB`, or `C`), `imm[9:0] = 0`.
 
 #### Description
 
-Loads 32 or 64 bits from the internal scratchpad memory (mapped to `DATA_RAM` base `0x080`, words 128..191, `SCR[0..63]`) into `dst`.
+Loads 32 or 64 bits from the internal scratchpad memory (mapped to `DATA_RAM` base `0x080`, words 128..191,
+`SCR[0..63]`) into `dst`.
 
 Addressing can be specified in two forms:
-1. **Direct Immediate Addressing (`LD dst, addr`)**: The address is specified directly as an immediate literal `addr` in `0..63`.
-2. **Indirect Register Addressing (`LD dst, [src1]`)**: The address is sourced from register `src1` (`AL..FH`, `EA`, `EB`, or `C`) via `HA_MUX`, with bits `[5:0]` selecting the scratchpad slot.
 
-For 64-bit operations (`W = 1`), the effective address must be an even base address (`addr_val % 2 == 0`, bit 0 is 0); `dst_L` is loaded from `addr_val` and `dst_H` from `addr_val | 1`.
+1. **Direct Immediate Addressing (`LD dst, addr`)**: The address is specified directly as an immediate literal `addr` in
+   `0..63`.
+2. **Indirect Register Addressing (`LD dst, [src1]`)**: The address is sourced from register `src1` (`AL..FH`, `EA`,
+   `EB`, or `C`) via `HA_MUX`, with bits `[5:0]` selecting the scratchpad slot.
+
+For 64-bit operations (`W = 1`), the effective address must be an even base address (`addr_val % 2 == 0`, bit 0 is 0);
+`dst_L` is loaded from `addr_val` and `dst_H` from `addr_val | 1`.
 
 #### Concrete Numeric Example
 
 **Direct Immediate Addressing:**
+
 ```text
 Suppose SCRATCHPAD[0x04] = 0xCAFEBABE.
 After execution of LD AL, 0x04:
@@ -1878,6 +1896,7 @@ After execution of LD AL, 0x04:
 ```
 
 **Indirect Register Addressing:**
+
 ```text
 Suppose C = 0x04 and SCRATCHPAD[0x04] = 0xCAFEBABE.
 After execution of LD AL, [C]:
@@ -1922,22 +1941,29 @@ else:
 #### Instruction Word Format
 
 `OPCODE = 100101`. `W = 0` (32-bit, 1 cycle) or `W = 1` (64-bit, 2 cycles). `RES_SEL = NONE (0b1111)`. `HB_MUX = src2`.
+
 - **Immediate Direct (`STO addr, src2`)**: `HA_MUX = IMM (0b1101)`, `imm[9:0] = addr` (`0..63`).
 - **Indirect Register (`STO [src1], src2`)**: `HA_MUX = src1` (`AL..FH`, `EA`, `EB`, or `C`), `imm[9:0] = 0`.
 
 #### Description
 
-Stores 32 or 64 bits from register `src2` into internal scratchpad memory (mapped to `DATA_RAM` base `0x080`, words 128..191, `SCR[0..63]`). Does not write to any general-purpose register (`RES_SEL = NONE`).
+Stores 32 or 64 bits from register `src2` into internal scratchpad memory (mapped to `DATA_RAM` base `0x080`, words
+128..191, `SCR[0..63]`). Does not write to any general-purpose register (`RES_SEL = NONE`).
 
 Addressing can be specified in two forms:
-1. **Direct Immediate Addressing (`STO addr, src2`)**: The scratchpad target address is specified directly as an immediate literal `addr` in `0..63`.
-2. **Indirect Register Addressing (`STO [src1], src2`)**: The scratchpad target address is sourced from register `src1` (`AL..FH`, `EA`, `EB`, or `C`) via `HA_MUX`, with bits `[5:0]` selecting the scratchpad slot.
 
-For 64-bit operations (`W = 1`), the effective address must be an even base address (`addr_val % 2 == 0`, bit 0 is 0); `src2_L` is stored into `addr_val` and `src2_H` into `addr_val | 1`.
+1. **Direct Immediate Addressing (`STO addr, src2`)**: The scratchpad target address is specified directly as an
+   immediate literal `addr` in `0..63`.
+2. **Indirect Register Addressing (`STO [src1], src2`)**: The scratchpad target address is sourced from register `src1`
+   (`AL..FH`, `EA`, `EB`, or `C`) via `HA_MUX`, with bits `[5:0]` selecting the scratchpad slot.
+
+For 64-bit operations (`W = 1`), the effective address must be an even base address (`addr_val % 2 == 0`, bit 0 is 0);
+`src2_L` is stored into `addr_val` and `src2_H` into `addr_val | 1`.
 
 #### Concrete Numeric Example
 
 **Direct Immediate Addressing:**
+
 ```text
 Suppose AL = 0xDEADBEEF.
 After execution of STO 0x08, AL:
@@ -1946,20 +1972,24 @@ After execution of STO 0x08, AL:
 ```
 
 **Indirect Register Addressing:**
+
 ```text
 Suppose C = 0x08 and AL = 0xDEADBEEF.
 After execution of STO [C], AL:
   SCRATCHPAD[0x08] <- 0xDEADBEEF
   Flags are unaffected.
 ```
+
 ```
 
 ---
 
 ```
+
 ================================================================================
 MOV dst, src2 / MOV AX, src2 — REGISTER-TO-REGISTER MOVE
 ================================================================================
+
 ```
 
 #### Status Flags Affected
@@ -2088,7 +2118,8 @@ else:
 
 #### Description
 
-Loads a word from the host-accessible user buffer (mapped to `DATA_RAM` base `0x0C0`, words 192..207, `USR[0..15]`) into `dst`.
+Loads a word from the host-accessible user buffer (mapped to `DATA_RAM` base `0x0C0`, words 192..207, `USR[0..15]`) into
+`dst`.
 
 #### Concrete Numeric Example
 
@@ -2136,8 +2167,8 @@ else:
 
 #### Description
 
-Stores `src2` into the host-accessible user buffer (mapped to `DATA_RAM` base `0x0C0`, words 192..207, `USR[0..15]`) at `addr`. Does not write to any general-purpose register
-(`RES_SEL = NONE`).
+Stores `src2` into the host-accessible user buffer (mapped to `DATA_RAM` base `0x0C0`, words 192..207, `USR[0..15]`) at
+`addr`. Does not write to any general-purpose register (`RES_SEL = NONE`).
 
 #### Concrete Numeric Example
 
@@ -2211,7 +2242,8 @@ SRES — RESTORE STATUS REGISTER FROM SHADOW
 ```
 
 * **`S, C, V, U, DF, Z`**: Restored from `STATUS_SHADOW`.
-* **`BSY` (bit 7), `ERR` (bit 6)**: System flags protected / unaffected (mask `0x3F` prevents overwriting operational engine and error flags).
+* **`BSY` (bit 7), `ERR` (bit 6)**: System flags protected / unaffected (mask `0x3F` prevents overwriting operational
+  engine and error flags).
 
 #### Register Transfer & Datapath Flow
 
@@ -2227,7 +2259,8 @@ UPC    <- UPC + 1
 #### Description
 
 Restores ALU status flags from the internal shadow register using write mask `0x3F` (`0b0011_1111`). Flags `SIGN`,
-`CARRY`, `OVERFLOW`, `UNDERFLOW`, `DIFF_SIGN`, and `ZERO` are restored to their shadowed states. System interface flags `BUSY`
+`CARRY`, `OVERFLOW`, `UNDERFLOW`, `DIFF_SIGN`, and `ZERO` are restored to their shadowed states. System interface flags
+`BUSY`
 (bit 7) and `ERR` (bit 6) are masked out to preserve execution state. No register is written (`RES_SEL = NONE`).
 
 #### Concrete Numeric Example
@@ -2319,7 +2352,8 @@ else:
 
 #### Instruction Word Format
 
-`OPCODE = 011001` (`0x19`). `W = 0` (1 cycle). `RES_SEL = UPC`, `HA_MUX = IMM`, `HB_MUX = NONE`, `FLAG_COND = flag`[cite: 7].
+`OPCODE = 011001` (`0x19`). `W = 0` (1 cycle). `RES_SEL = UPC`, `HA_MUX = IMM`, `HB_MUX = NONE`,
+`FLAG_COND = flag`[cite: 7].
 
 #### Description
 
@@ -2327,7 +2361,8 @@ Evaluates a conditional branch to `addr` based on the default `ZERO` flag or an 
 
 > **Condition Evaluation Rules:**
 > - **Arithmetic Result (`ZERO` / default):** `JNZ` branches when the result was **Non-Zero** (`ZF == 0`)[cite: 7].
-> - **Explicit Status Flags (`SIGN`, `CARRY`, `ERR`, etc.):** `JNZ` branches when the target flag bit **equals 1 (SET)**[cite: 7].
+> - **Explicit Status Flags (`SIGN`, `CARRY`, `ERR`, etc.):** `JNZ` branches when the target flag bit **equals 1 (
+    SET)**[cite: 7].
 >   - `JNZ SIGN, addr` $\rightarrow$ Branches if `SIGN == 1` (Negative)[cite: 7].
 >   - `JNZ CARRY, addr` $\rightarrow$ Branches if `CARRY == 1` (Carry/Borrow occurred)[cite: 7].
 >   - `JNZ ERR, addr` $\rightarrow$ Branches if `ERR == 1` (Error trapped)[cite: 7].
@@ -2375,7 +2410,8 @@ else:
 
 #### Instruction Word Format
 
-`OPCODE = 011010` (`0x1A`). `W = 0` (1 cycle). `RES_SEL = UPC`, `HA_MUX = IMM`, `HB_MUX = NONE`, `FLAG_COND = flag`[cite: 7].
+`OPCODE = 011010` (`0x1A`). `W = 0` (1 cycle). `RES_SEL = UPC`, `HA_MUX = IMM`, `HB_MUX = NONE`,
+`FLAG_COND = flag`[cite: 7].
 
 #### Description
 
@@ -2383,7 +2419,8 @@ Evaluates a conditional branch to `addr` based on the default `ZERO` flag or an 
 
 > **Condition Evaluation Rules:**
 > - **Arithmetic Result (`ZERO` / default):** `JZ` branches when the result was **Zero** (`ZF == 1`)[cite: 7].
-> - **Explicit Status Flags (`SIGN`, `CARRY`, `ERR`, etc.):** `JZ` branches when the target flag bit **equals 0 (CLEAR)**[cite: 7].
+> - **Explicit Status Flags (`SIGN`, `CARRY`, `ERR`, etc.):** `JZ` branches when the target flag bit **equals 0 (
+    CLEAR)**[cite: 7].
 >   - `JZ SIGN, addr` $\rightarrow$ Branches if `SIGN == 0` (Positive or zero)[cite: 7].
 >   - `JZ CARRY, addr` $\rightarrow$ Branches if `CARRY == 0` (No carry/borrow)[cite: 7].
 >   - `JZ ERR, addr` $\rightarrow$ Branches if `ERR == 0` (No error)[cite: 7].

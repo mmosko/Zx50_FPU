@@ -40,7 +40,7 @@ class AdderBlock(FunctionalBlock):
             case MicroOp.SBB:
                 self._sbb(instr)
             case MicroOp.CMP:
-                self._cmp32(instr)
+                self._cmp(instr)
             case MicroOp.EXP_ADD:
                 self._exp_add(instr)
             case MicroOp.EXP_SUB:
@@ -169,17 +169,64 @@ class AdderBlock(FunctionalBlock):
         # must be the low word of a 64-bit pair
         assert src.is_lo_half()
 
-    def _cmp32(self, instr: MicroInstruction):
+    def _cmp(self, instr: MicroInstruction):
+        if instr.is_w32():
+            self._cmp_32(instr)
+        else:
+            self._cmp_64(instr)
+
+    def _cmp_32(self, instr: MicroInstruction):
         """CMP dst, src: 32-bit compare dst - src without modifying dst (1 cycle)."""
-        assert (instr.src is not None)
-        assert (instr.dst is not None)
-        src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
-        self._ha_mux.select(src1.value)
+        assert (instr.src is not Reg.NONE)
+        assert (instr.dst is not Reg.NONE)
+        assert (instr.src1 is Reg.NONE)
+        self._ha_mux.select(instr.dst.value)
         self._inputs.hb_mux.select(instr.src.value)
         adder_result = self._combinatorial_add(cin=0, sub=True)
 
         self._outputs.block_res_sel.set(Reg.NONE.value)  # No register writeback
         self._wb_flags(adder_result)
+        self._outputs.exec_done.set(1)
+        self._writeback()
+
+    def _cmp_64(self, instr: MicroInstruction):
+        """CMP dst, src: 64-bit compare dst - src without modifying dst (2 cycles)."""
+        assert instr.src is not Reg.NONE
+        self._validate_src64(instr.src)
+
+        dst = instr.dst if instr.dst is not Reg.NONE else Reg.AL
+        src1 = instr.src1 if instr.src1 is not Reg.NONE else dst
+        self._validate_src64(src1)
+        self._validate_src64(dst)
+
+        # Low word (Cycle 1)
+        self._ha_mux.select(src1.value)
+        self._inputs.hb_mux.select(instr.src.value)
+        low_result = self._combinatorial_add(cin=0, sub=True)
+
+        # Status write disabled for intermediate low word, no register writeback
+        self._outputs.status_wr_sel.set(0)
+        self._outputs.block_res_sel.set(Reg.NONE.value)
+        self._outputs.exec_done.set(0)
+        self._writeback()
+
+        # Upper word with borrow from lower word (Cycle 2)
+        cin_high = 1 if low_result.cf else 0
+        self._ha_mux.select(src1.value | 0b0001)
+        src_h = instr.src.value | 0b0001
+        self._inputs.hb_mux.select(src_h)
+        high_result = self._combinatorial_add(cin=cin_high, sub=True)
+
+        # Final status flags (ZF is 1 only if both halves are zero)
+        final_result = AdderResult(
+            res=high_result.res,
+            cf=high_result.cf,
+            zf=low_result.zf and high_result.zf,
+            sf=high_result.sf,
+            vf=high_result.vf,
+        )
+        self._wb_flags(final_result)
+        self._outputs.block_res_sel.set(Reg.NONE.value)
         self._outputs.exec_done.set(1)
         self._writeback()
 

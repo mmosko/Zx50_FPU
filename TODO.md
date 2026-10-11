@@ -8,7 +8,7 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 
 ## Current Status & Capacity
 
-- **Test Suite Status:** 100% pass rate (**1,303 / 1,303 tests passing**).
+- **Test Suite Status:** 100% pass rate (**1,306 / 1,306 tests passing**).
 - **Microcode Capacity:** **962 / 1,024 words used** (**62 instruction words of headroom remaining**).
 - **Hardware Call Stack:** 16-deep $\times$ 10-bit return-address stack in distributed LUT RAM (`RAM16X1S`) with 4-bit `CSP` pointer fully implemented and verified.
 - **Datapath Bus Symmetry:** `HA_MUX` and `HB_MUX` widened to full 4-bit symmetry (14:1 32-bit muxing across all 10 registers `AL`..`FH`, `EA`, `EB`, `C`, and `IMM`), allowing any register as `src1` without register shuffling.
@@ -44,7 +44,7 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
   - Low priority: saves very little microcode space (~8 words) and is deferred in favor of functional features.
 
 ### 3. Implement 64-Bit Hardware Support for `CMP` and `SWAP` (`_cmp64` & `_swap64`)
-- [ ] **Hardware 64-Bit Comparison (`_cmp64` in `AdderBlock`)**:
+- [x] **Hardware 64-Bit Comparison (`_cmp64` in `AdderBlock`)**:
   - Implement full 64-bit compare `CMP AX, BX` (`W=1`, 2 cycles) evaluating 64-bit `{src1_h, src1_l} - {src2_h, src2_l}` without register writeback, setting `CF`, `ZF`, `SF`, and `VF` according to the full 64-bit comparison.
   - Shrinks `ALIGN_F64` mantissa comparison from 5 microcode instructions to 1 (`CMP AX, BX`).
 - [ ] **Hardware 64-Bit Register Exchange (`_swap64` in `MemoryBlock`)**:
