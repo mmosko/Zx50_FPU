@@ -135,6 +135,8 @@ co-located:
 |                                  | `OR`      | `dst, src1, src2`          | 0 |      1       | `0x11` (`0b010_001`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst <- src1 \| src2` (**clears C and V**)                          |
 |                                  | `OR`      | `dst_64, src2_64`          | 1 |      2       | `0x11` (`0b010_001`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst_64 <- dst_64 \| src2_64` (**clears C and V**)                  |
 |                                  | `OR`      | `dst_64, src1_64, src2_64` | 1 |      2       | `0x11` (`0b010_001`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst_64 <- src1_64 \| src2_64` (**clears C and V**)                 |
+|                                  | `TEST`    | `src1, src2`               | 0 |      1       | `0x16` (`0b010_110`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `src1 & src2` (flags only, **clears C and V**)                      |
+|                                  | `TEST`    | `src1_64, src2_64`         | 1 |      2       | `0x16` (`0b010_110`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | 64-bit bitwise test (`src1_64 & src2_64`, flags only)              |
 |                                  | `XOR`     | `dst, src2`                | 0 |      1       | `0x12` (`0b010_010`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst <- dst ^ src2` (**clears C and V**)                            |
 |                                  | `XOR`     | `dst, src1, src2`          | 0 |      1       | `0x12` (`0b010_010`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst <- src1 ^ src2` (**clears C and V**)                           |
 |                                  | `XOR`     | `dst_64, src2_64`          | 1 |      2       | `0x12` (`0b010_010`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst_64 <- dst_64 ^ src2_64` (**clears C and V**)                   |
@@ -172,14 +174,30 @@ co-located:
 |                                  | `STU`     | `addr, src2_64`            | 1 |      2       | `0x29` (`0b101_001`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | 64-bit store to user scratchpad                                     |
 |                                  | `SWAP`    | `dst, src2`                | 0 |      2       | `0x27` (`0b100_111`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `dst <-> src2` (via staging register `F_`)                          |
 |                                  | `SWAP`    | `dst_64, src2_64`          | 1 |      4       | `0x27` (`0b100_111`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | 64-bit exchange `dst_64 <-> src2_64`                                |
-| **Shifter**<br>`0b110`           | `ASL`     | `dst[, src1]`              | 0 |      1       | `0x32` (`0b110_010`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- dst << (src1 \| C)` (V set if sign changed)                 |
-|                                  | `ASL`     | `dst_64[, src1]`           | 1 |      2       | `0x32` (`0b110_010`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | 64-bit arithmetic shift left                                        |
-|                                  | `ASR`     | `dst[, src1]`              | 0 |      1       | `0x33` (`0b110_011`) |   •   |    •    |   X   |   X   |   •   | • | •  | X | `dst <- dst >> (src1 \| C)` (sign-extended)                         |
-|                                  | `ASR`     | `dst_64[, src1]`           | 1 |      2       | `0x33` (`0b110_011`) |   •   |    •    |   X   |   X   |   •   | • | •  | X | 64-bit arithmetic shift right                                       |
-|                                  | `LSL`     | `dst[, src1]`              | 0 |      1       | `0x30` (`0b110_000`) |   •   |    •    |   X   |   X   |   •   | • | •  | X | `dst <- dst << (src1 \| C)` (C = last bit out)                      |
-|                                  | `LSL`     | `dst_64[, src1]`           | 1 |      2       | `0x30` (`0b110_000`) |   •   |    •    |   X   |   X   |   •   | • | •  | X | 64-bit logical shift left                                           |
-|                                  | `LSR`     | `dst[, src1]`              | 0 |      1       | `0x31` (`0b110_001`) |   •   |    •    | **0** |   X   |   •   | • | •  | X | `dst <- dst >> (src1 \| C)` (clears S)                              |
-|                                  | `LSR`     | `dst_64[, src1]`           | 1 |      2       | `0x31` (`0b110_001`) |   •   |    •    | **0** |   X   |   •   | • | •  | X | 64-bit logical shift right                                          |
+| **Shifter**<br>`0b110`           | `ASL`     | `dst`                      | 0 |      1       | `0x32` (`0b110_010`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- dst << C` (V set if sign changed)                          |
+|                                  | `ASL`     | `dst, src1`                | 0 |      1       | `0x32` (`0b110_010`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- dst << src1` (V set if sign changed)                       |
+|                                  | `ASL`     | `dst, src1, src2`          | 0 |      1       | `0x32` (`0b110_010`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- src2 << src1` (V set if sign changed, src2 unmodified)      |
+|                                  | `ASL`     | `dst_64`                   | 1 |      2       | `0x32` (`0b110_010`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst_64 <- dst_64 << C` (64-bit arithmetic shift left)              |
+|                                  | `ASL`     | `dst_64, src1`             | 1 |      2       | `0x32` (`0b110_010`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst_64 <- dst_64 << src1` (64-bit arithmetic shift left)           |
+|                                  | `ASL`     | `dst_64, src1, src2_64`    | 1 |      2       | `0x32` (`0b110_010`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst_64 <- src2_64 << src1` (64-bit, src2_64 unmodified)            |
+|                                  | `ASR`     | `dst`                      | 0 |      1       | `0x33` (`0b110_011`) |   •   |    •    |   X   |   X   |   •   | • | •  | X | `dst <- dst >> C` (sign-extended)                                   |
+|                                  | `ASR`     | `dst, src1`                | 0 |      1       | `0x33` (`0b110_011`) |   •   |    •    |   X   |   X   |   •   | • | •  | X | `dst <- dst >> src1` (sign-extended)                                |
+|                                  | `ASR`     | `dst, src1, src2`          | 0 |      1       | `0x33` (`0b110_011`) |   •   |    •    |   X   |   X   |   •   | • | •  | X | `dst <- src2 >> src1` (sign-extended, src2 unmodified)              |
+|                                  | `ASR`     | `dst_64`                   | 1 |      2       | `0x33` (`0b110_011`) |   •   |    •    |   X   |   X   |   •   | • | •  | X | `dst_64 <- dst_64 >> C` (64-bit arithmetic shift right)             |
+|                                  | `ASR`     | `dst_64, src1`             | 1 |      2       | `0x33` (`0b110_011`) |   •   |    •    |   X   |   X   |   •   | • | •  | X | `dst_64 <- dst_64 >> src1` (64-bit arithmetic shift right)          |
+|                                  | `ASR`     | `dst_64, src1, src2_64`    | 1 |      2       | `0x33` (`0b110_011`) |   •   |    •    |   X   |   X   |   •   | • | •  | X | `dst_64 <- src2_64 >> src1` (64-bit, src2_64 unmodified)           |
+|                                  | `LSL`     | `dst`                      | 0 |      1       | `0x30` (`0b110_000`) |   •   |    •    |   X   |   X   |   •   | • | •  | X | `dst <- dst << C` (C = last bit out)                                |
+|                                  | `LSL`     | `dst, src1`                | 0 |      1       | `0x30` (`0b110_000`) |   •   |    •    |   X   |   X   |   •   | • | •  | X | `dst <- dst << src1` (C = last bit out)                             |
+|                                  | `LSL`     | `dst, src1, src2`          | 0 |      1       | `0x30` (`0b110_000`) |   •   |    •    |   X   |   X   |   •   | • | •  | X | `dst <- src2 << src1` (C = last bit out, src2 unmodified)           |
+|                                  | `LSL`     | `dst_64`                   | 1 |      2       | `0x30` (`0b110_000`) |   •   |    •    |   X   |   X   |   •   | • | •  | X | `dst_64 <- dst_64 << C` (64-bit logical shift left)                 |
+|                                  | `LSL`     | `dst_64, src1`             | 1 |      2       | `0x30` (`0b110_000`) |   •   |    •    |   X   |   X   |   •   | • | •  | X | `dst_64 <- dst_64 << src1` (64-bit logical shift left)              |
+|                                  | `LSL`     | `dst_64, src1, src2_64`    | 1 |      2       | `0x30` (`0b110_000`) |   •   |    •    |   X   |   X   |   •   | • | •  | X | `dst_64 <- src2_64 << src1` (64-bit, src2_64 unmodified)            |
+|                                  | `LSR`     | `dst`                      | 0 |      1       | `0x31` (`0b110_001`) |   •   |    •    | **0** |   X   |   •   | • | •  | X | `dst <- dst >> C` (clears S)                                        |
+|                                  | `LSR`     | `dst, src1`                | 0 |      1       | `0x31` (`0b110_001`) |   •   |    •    | **0** |   X   |   •   | • | •  | X | `dst <- dst >> src1` (clears S)                                     |
+|                                  | `LSR`     | `dst, src1, src2`          | 0 |      1       | `0x31` (`0b110_001`) |   •   |    •    | **0** |   X   |   •   | • | •  | X | `dst <- src2 >> src1` (clears S, src2 unmodified)                   |
+|                                  | `LSR`     | `dst_64`                   | 1 |      2       | `0x31` (`0b110_001`) |   •   |    •    | **0** |   X   |   •   | • | •  | X | `dst_64 <- dst_64 >> C` (64-bit logical shift right)                |
+|                                  | `LSR`     | `dst_64, src1`             | 1 |      2       | `0x31` (`0b110_001`) |   •   |    •    | **0** |   X   |   •   | • | •  | X | `dst_64 <- dst_64 >> src1` (64-bit logical shift right)             |
+|                                  | `LSR`     | `dst_64, src1, src2_64`    | 1 |      2       | `0x31` (`0b110_001`) |   •   |    •    | **0** |   X   |   •   | • | •  | X | `dst_64 <- src2_64 >> src1` (64-bit, src2_64 unmodified)            |
 |                                  | `LZC`     | `dst, src2`                | 0 |      1       | `0x36` (`0b110_110`) |   •   |    •    |   •   |   •   |   •   | • | •  | X | `dst <- count_leading_zeros(src2)` (ZF if 0)                        |
 |                                  | `LZC`     | `dst_64, src2_64`          | 1 |      2       | `0x36` (`0b110_110`) |   •   |    •    |   •   |   •   |   •   | • | •  | X | 64-bit leading zero count                                           |
 
@@ -1371,11 +1389,78 @@ After execution of NOT AL, BL (binary form):
 
 ---
 
+```
+================================================================================
+TEST src1, src2 / TEST src1_64, src2_64 — BITWISE LOGICAL TEST (FLAGS ONLY)
+================================================================================
+```
+
+#### Status Flags Affected
+
+```text
+  BSY   ERR    S     C     V     U    DF     Z
++-----+-----+-----+-----+-----+-----+-----+-----+
+|  -  |  -  |  X  |  0  |  0  |  -  |  -  |  X  |
++-----+-----+-----+-----+-----+-----+-----+-----+
+```
+
+* **`Z`**: Set to 1 if `(src1 & src2) == 0` (or `(src1_64 & src2_64) == 0`); reset to 0 otherwise.
+* **`S`**: Set to 1 if MSB of `(src1 & src2)` (or `(src1_64 & src2_64)`) is 1; reset to 0 otherwise.
+* **`C`**: Cleared to 0.
+* **`V`**: Cleared to 0.
+* **`U`, `ERR`, `D`**: Unaffected.
+
+#### Register Transfer & Datapath Flow
+
+```text
+if W == 0:
+    Discard (src1 [31:0] & src2 [31:0]) -> RES_SEL = NONE (no register write)
+    STATUS.Z <- ((src1 [31:0] & src2 [31:0]) == 0)
+    STATUS.S <- (src1 [31] & src2 [31])
+    STATUS.C <- 0
+    STATUS.V <- 0
+    UPC      <- UPC + 1
+else:
+    Cycle 1: Discard (src1_64_L & src2_64_L), evaluate partial flags
+    Cycle 2: Discard (src1_64_H & src2_64_H), evaluate full 64-bit flags
+    STATUS.Z <- ((src1_64 [63:0] & src2_64 [63:0]) == 0)
+    STATUS.S <- (src1_64 [63] & src2_64 [63])
+    STATUS.C <- 0
+    STATUS.V <- 0
+    UPC      <- UPC + 1
+```
+
+#### Instruction Word Format
+
+`OPCODE = 010110` (`0x16`). `W = 0` (32-bit, 1 cycle) or `W = 1` (64-bit, 2 cycles). `RES_SEL = 0b1111` (`NONE`),
+`HA_MUX = src1`, `HB_MUX = src2`.
+
+#### Description
+
+Performs bitwise logical AND between `src1` and `src2` (or `src1_64` and `src2_64` in 64-bit mode) and updates status flags
+`Z` and `S`, resetting `C` and `V` to 0. No register is written (`RES_SEL = NONE`). Neither `src1` nor `src2` is modified.
+
+#### Concrete Numeric Example
+
+```text
+Suppose AL = 0x80000000, BL = 0x80000001.
+After execution of TEST AL, BL:
+  AL & BL = 0x80000000
+  Bit 31 = 1: sets SIGN (S) to 1
+  Non-zero result: sets ZERO (Z) to 0
+  Clears CARRY (C) to 0, OVERFLOW (V) to 0
+  AL and BL remain unchanged.
+```
+
+---
+
 ### Block 6 (0b110): Shifter / LZC Block
 
 ```
 ================================================================================
-LSL dst[, src1] / LSL dst_64[, src1] — LOGICAL SHIFT LEFT
+LSL dst / LSL dst_64 — LOGICAL SHIFT LEFT BY COUNTER C (UNARY)
+LSL dst, src1 / LSL dst_64, src1 — LOGICAL SHIFT LEFT BY REGISTER (BINARY)
+LSL dst, src1, src2 / LSL dst_64, src1, src2_64 — LOGICAL SHIFT LEFT REGISTER TO REGISTER (TERNARY)
 ================================================================================
 ```
 
@@ -1397,32 +1482,45 @@ LSL dst[, src1] / LSL dst_64[, src1] — LOGICAL SHIFT LEFT
 
 ```text
 count = src1[5:0] if src1 provided else C[5:0]
+src   = src2 if src2 provided else dst
 if W == 0:
-    STATUS.C   <- (count > 0) ? dst [32 - count] : STATUS.C
-    dst [31:0] <- dst [31:0] << count
+    STATUS.C   <- (count > 0) ? src [32 - count] : STATUS.C
+    dst [31:0] <- src [31:0] << count
     UPC        <- UPC + 1
 else:
-    STATUS.C      <- (count > 0) ? dst_64_H [64 - count - 32] : STATUS.C
-    dst_64 [63:0] <- dst_64 [63:0] << count
+    STATUS.C      <- (count > 0) ? src_64_H [64 - count - 32] : STATUS.C
+    dst_64 [63:0] <- src_64 [63:0] << count
     UPC           <- UPC + 1
 ```
 
 #### Instruction Word Format
 
 `OPCODE = 110000`. `W = 0` (32-bit, 1 cycle) or `W = 1` (64-bit, 1 cycle barrel shifter). `RES_SEL = dst`,
-`HA_MUX = src1` (or `C`), `HB_MUX = dst`.
+`HA_MUX = src1` (or `C`), `HB_MUX = src2` (in ternary form) or `dst` (in unary/binary form).
 
 #### Description
 
 Performs logical shift left by the specified count using a single-cycle barrel shifter. Zeros are shifted into the least
 significant bit positions. The carry flag captures the last bit shifted out.
 
+Supports unary (`LSL dst` / `LSL dst_64`), binary (`LSL dst, src1` / `LSL dst_64, src1`), and ternary non-destructive
+(`LSL dst, src1, src2` / `LSL dst_64, src1, src2_64`) forms where `src2` (or `src2_64`) is shifted by count in `src1` and
+written to `dst` (or `dst_64`), leaving `src2` (or `src2_64`) unmodified.
+
 #### Concrete Numeric Example
 
 ```text
 Suppose AL = 0x80000001, C = 1 (count = 1).
-After execution of LSL AL:
+After execution of LSL AL (unary form):
   AL <- 0x00000002
+  Bit 31 shifted out: sets CARRY (C) to 1
+  Bit 31 of result = 0: sets SIGN (S) to 0
+  Non-zero result: sets ZERO (Z) to 0
+
+Suppose BL = 0x80000001, CL = 1.
+After execution of LSL AL, CL, BL (ternary form):
+  AL <- 0x00000002
+  BL remains 0x80000001 (unmodified)
   Bit 31 shifted out: sets CARRY (C) to 1
   Bit 31 of result = 0: sets SIGN (S) to 0
   Non-zero result: sets ZERO (Z) to 0
@@ -1432,7 +1530,9 @@ After execution of LSL AL:
 
 ```
 ================================================================================
-LSR dst[, src1] / LSR dst_64[, src1] — LOGICAL SHIFT RIGHT
+LSR dst / LSR dst_64 — LOGICAL SHIFT RIGHT BY COUNTER C (UNARY)
+LSR dst, src1 / LSR dst_64, src1 — LOGICAL SHIFT RIGHT BY REGISTER (BINARY)
+LSR dst, src1, src2 / LSR dst_64, src1, src2_64 — LOGICAL SHIFT RIGHT REGISTER TO REGISTER (TERNARY)
 ================================================================================
 ```
 
@@ -1454,31 +1554,44 @@ LSR dst[, src1] / LSR dst_64[, src1] — LOGICAL SHIFT RIGHT
 
 ```text
 count = src1[5:0] if src1 provided else C[5:0]
+src   = src2 if src2 provided else dst
 if W == 0:
-    STATUS.C   <- (count > 0) ? dst [count - 1] : STATUS.C
-    dst [31:0] <- dst [31:0] >> count  (zero-fill MSB)
+    STATUS.C   <- (count > 0) ? src [count - 1] : STATUS.C
+    dst [31:0] <- src [31:0] >> count  (zero-fill MSB)
     UPC        <- UPC + 1
 else:
-    STATUS.C      <- (count > 0) ? dst_64 [count - 1] : STATUS.C
-    dst_64 [63:0] <- dst_64 [63:0] >> count
+    STATUS.C      <- (count > 0) ? src_64 [count - 1] : STATUS.C
+    dst_64 [63:0] <- src_64 [63:0] >> count
     UPC           <- UPC + 1
 ```
 
 #### Instruction Word Format
 
-`OPCODE = 110001`. `W = 0` (32-bit) or `W = 1` (64-bit). `RES_SEL = dst`, `HA_MUX = src1` (or `C`), `HB_MUX = dst`.
+`OPCODE = 110001`. `W = 0` (32-bit) or `W = 1` (64-bit). `RES_SEL = dst`, `HA_MUX = src1` (or `C`), `HB_MUX = src2` (in ternary form) or `dst` (in unary/binary form).
 
 #### Description
 
 Performs logical shift right by the specified count using the barrel shifter, inserting zeros into the most significant
 bits. The carry flag captures the last bit shifted out.
 
+Supports unary (`LSR dst` / `LSR dst_64`), binary (`LSR dst, src1` / `LSR dst_64, src1`), and ternary non-destructive
+(`LSR dst, src1, src2` / `LSR dst_64, src1, src2_64`) forms where `src2` (or `src2_64`) is shifted by count in `src1` and
+written to `dst` (or `dst_64`), leaving `src2` (or `src2_64`) unmodified.
+
 #### Concrete Numeric Example
 
 ```text
 Suppose AL = 0x00000005, C = 1 (count = 1).
-After execution of LSR AL:
+After execution of LSR AL (unary form):
   AL <- 0x00000002
+  Bit 0 shifted out (1): sets CARRY (C) to 1
+  MSB is 0: sets SIGN (S) to 0
+  Non-zero result: sets ZERO (Z) to 0
+
+Suppose BL = 0x00000005, CL = 1.
+After execution of LSR AL, CL, BL (ternary form):
+  AL <- 0x00000002
+  BL remains 0x00000005 (unmodified)
   Bit 0 shifted out (1): sets CARRY (C) to 1
   MSB is 0: sets SIGN (S) to 0
   Non-zero result: sets ZERO (Z) to 0
@@ -1488,7 +1601,9 @@ After execution of LSR AL:
 
 ```
 ================================================================================
-ASL dst[, src1] / ASL dst_64[, src1] — ARITHMETIC SHIFT LEFT
+ASL dst / ASL dst_64 — ARITHMETIC SHIFT LEFT BY COUNTER C (UNARY)
+ASL dst, src1 / ASL dst_64, src1 — ARITHMETIC SHIFT LEFT BY REGISTER (BINARY)
+ASL dst, src1, src2 / ASL dst_64, src1, src2_64 — ARITHMETIC SHIFT LEFT REGISTER TO REGISTER (TERNARY)
 ================================================================================
 ```
 
@@ -1511,21 +1626,22 @@ ASL dst[, src1] / ASL dst_64[, src1] — ARITHMETIC SHIFT LEFT
 
 ```text
 count = src1[5:0] if src1 provided else C[5:0]
+src   = src2 if src2 provided else dst
 if W == 0:
-    STATUS.C   <- (count > 0) ? dst [32 - count] : STATUS.C
+    STATUS.C   <- (count > 0) ? src [32 - count] : STATUS.C
     STATUS.V   <- sign bit changed during shift
-    dst [31:0] <- dst [31:0] << count
+    dst [31:0] <- src [31:0] << count
     UPC        <- UPC + 1
 else:
-    STATUS.C      <- (count > 0) ? dst_64_H [64 - count - 32] : STATUS.C
+    STATUS.C      <- (count > 0) ? src_64_H [64 - count - 32] : STATUS.C
     STATUS.V      <- sign bit changed during shift
-    dst_64 [63:0] <- dst_64 [63:0] << count
+    dst_64 [63:0] <- src_64 [63:0] << count
     UPC           <- UPC + 1
 ```
 
 #### Instruction Word Format
 
-`OPCODE = 110010`. `W = 0` (32-bit) or `W = 1` (64-bit). `RES_SEL = dst`, `HA_MUX = src1` (or `C`), `HB_MUX = dst`.
+`OPCODE = 110010`. `W = 0` (32-bit) or `W = 1` (64-bit). `RES_SEL = dst`, `HA_MUX = src1` (or `C`), `HB_MUX = src2` (in ternary form) or `dst` (in unary/binary form).
 
 #### Description
 
@@ -1533,12 +1649,24 @@ Performs arithmetic shift left by the specified count using the barrel shifter. 
 significant bit positions. The carry flag captures the last bit shifted out. Overflow (`V`) is set if the sign bit of
 the operand changed at any point during the shift, indicating arithmetic overflow for signed numbers.
 
+Supports unary (`ASL dst` / `ASL dst_64`), binary (`ASL dst, src1` / `ASL dst_64, src1`), and ternary non-destructive
+(`ASL dst, src1, src2` / `ASL dst_64, src1, src2_64`) forms where `src2` (or `src2_64`) is shifted by count in `src1` and
+written to `dst` (or `dst_64`), leaving `src2` (or `src2_64`) unmodified.
+
 #### Concrete Numeric Example
 
 ```text
 Suppose AL = 0x40000000 (+1,073,741,824), C = 1 (count = 1).
-After execution of ASL AL:
+After execution of ASL AL (unary form):
   AL <- 0x80000000 (-2,147,483,648)
+  Sign bit changed from 0 to 1: sets OVERFLOW (V) to 1
+  Bit 31 of result = 1: sets SIGN (S) to 1
+  Non-zero result: sets ZERO (Z) to 0
+
+Suppose BL = 0x40000000 (+1,073,741,824), CL = 1.
+After execution of ASL AL, CL, BL (ternary form):
+  AL <- 0x80000000 (-2,147,483,648)
+  BL remains 0x40000000 (unmodified)
   Sign bit changed from 0 to 1: sets OVERFLOW (V) to 1
   Bit 31 of result = 1: sets SIGN (S) to 1
   Non-zero result: sets ZERO (Z) to 0
@@ -1548,7 +1676,9 @@ After execution of ASL AL:
 
 ```
 ================================================================================
-ASR dst[, src1] / ASR dst_64[, src1] — ARITHMETIC SHIFT RIGHT
+ASR dst / ASR dst_64 — ARITHMETIC SHIFT RIGHT BY COUNTER C (UNARY)
+ASR dst, src1 / ASR dst_64, src1 — ARITHMETIC SHIFT RIGHT BY REGISTER (BINARY)
+ASR dst, src1, src2 / ASR dst_64, src1, src2_64 — ARITHMETIC SHIFT RIGHT REGISTER TO REGISTER (TERNARY)
 ================================================================================
 ```
 
@@ -1570,31 +1700,44 @@ ASR dst[, src1] / ASR dst_64[, src1] — ARITHMETIC SHIFT RIGHT
 
 ```text
 count = src1[5:0] if src1 provided else C[5:0]
+src   = src2 if src2 provided else dst
 if W == 0:
-    STATUS.C   <- (count > 0) ? dst [count - 1] : STATUS.C
-    dst [31:0] <- dst [31:0] >>> count  (sign-extended into MSB)
+    STATUS.C   <- (count > 0) ? src [count - 1] : STATUS.C
+    dst [31:0] <- src [31:0] >>> count  (sign-extended into MSB)
     UPC        <- UPC + 1
 else:
-    STATUS.C      <- (count > 0) ? dst_64 [count - 1] : STATUS.C
-    dst_64 [63:0] <- dst_64 [63:0] >>> count
+    STATUS.C      <- (count > 0) ? src_64 [count - 1] : STATUS.C
+    dst_64 [63:0] <- src_64 [63:0] >>> count
     UPC           <- UPC + 1
 ```
 
 #### Instruction Word Format
 
-`OPCODE = 110011`. `W = 0` (32-bit) or `W = 1` (64-bit). `RES_SEL = dst`, `HA_MUX = src1` (or `C`), `HB_MUX = dst`.
+`OPCODE = 110011`. `W = 0` (32-bit) or `W = 1` (64-bit). `RES_SEL = dst`, `HA_MUX = src1` (or `C`), `HB_MUX = src2` (in ternary form) or `dst` (in unary/binary form).
 
 #### Description
 
 Performs arithmetic shift right by the specified count using the barrel shifter, duplicating the sign bit into the most
 significant bit positions. The carry flag captures the last bit shifted out.
 
+Supports unary (`ASR dst` / `ASR dst_64`), binary (`ASR dst, src1` / `ASR dst_64, src1`), and ternary non-destructive
+(`ASR dst, src1, src2` / `ASR dst_64, src1, src2_64`) forms where `src2` (or `src2_64`) is shifted by count in `src1` and
+written to `dst` (or `dst_64`), leaving `src2` (or `src2_64`) unmodified.
+
 #### Concrete Numeric Example
 
 ```text
 Suppose AL = 0xFFFFFFF8 (-8), C = 1 (count = 1).
-After execution of ASR AL:
+After execution of ASR AL (unary form):
   AL <- 0xFFFFFFFC (-4)
+  Bit 0 shifted out (0): clears CARRY (C) to 0
+  MSB is 1: sets SIGN (S) to 1
+  Non-zero result: sets ZERO (Z) to 0
+
+Suppose BL = 0xFFFFFFF8 (-8), CL = 1.
+After execution of ASR AL, CL, BL (ternary form):
+  AL <- 0xFFFFFFFC (-4)
+  BL remains 0xFFFFFFF8 (unmodified)
   Bit 0 shifted out (0): clears CARRY (C) to 0
   MSB is 1: sets SIGN (S) to 1
   Non-zero result: sets ZERO (Z) to 0

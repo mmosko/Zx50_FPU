@@ -30,6 +30,8 @@ class MicroOp(Enum):
     FABS = 0b010_011
     FCHS = 0b010_100
     NOT = 0b010_101
+    TEST = 0b010_110
+
     # ====================
     # SHIFTER (prefix 0b110)
     LSL = 0b110_000

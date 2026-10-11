@@ -55,6 +55,8 @@ class LogicBlock(FunctionalBlock):
                 self._fabs(instr)
             case MicroOp.FCHS:
                 self._fchs(instr)
+            case MicroOp.TEST:
+                self._test(instr)
             case _:
                 raise HardwareBusError(f"Unsupported opcode: {instr.op}")
 
@@ -78,6 +80,14 @@ class LogicBlock(FunctionalBlock):
             self._logic_32(instr, operator.xor)
         else:
             self._logic_64(instr, operator.xor)
+
+    def _test(self, instr: MicroInstruction) -> None:
+        assert instr.op == MicroOp.AND
+        # We cannot simply call _logic_32 or _logic_64 without refactoring them,
+        # as they have _writeback() baked in.
+        # Do not writeback
+        raise NotImplementedError()
+
 
     def _not(self, instr: MicroInstruction) -> None:
         assert instr.op == MicroOp.NOT
@@ -127,12 +137,14 @@ class LogicBlock(FunctionalBlock):
     def _fabs(self, instr: MicroInstruction) -> None:
         assert instr.op == MicroOp.FABS
         assert instr.dst is not Reg.NONE
+        assert instr.src is Reg.NONE
+        src1 = instr.src1 if instr.src1 is not None else instr.dst
 
         wr_mask = (1 << StatusFlag.ZERO.value) | (1 << StatusFlag.SIGN.value)
 
         if instr.is_w32():
             # 32-bit: 1 cycle, clear bit 31
-            self._ha_mux.select(instr.dst.value)
+            self._ha_mux.select(src1.value)
             a_val = self._inputs.ha_mux.read_int()
             res = a_val & 0x7FFFFFFF
             result = LogicResult(
@@ -147,9 +159,9 @@ class LogicBlock(FunctionalBlock):
             self._writeback()
         else:
             # 64-bit: 1 cycle, clear bit 31 of high half (bit 63 of float64)
-            assert instr.dst.is_lo_half()
-            self._ha_mux.select(instr.dst.value | 1)
-            self._hb_mux.select(instr.dst.value)
+            assert src1.is_lo_half()
+            self._ha_mux.select(src1.value | 1)
+            self._hb_mux.select(src1.value)
             a_hi = self._inputs.ha_mux.read_int()
             a_lo = self._inputs.hb_mux.read_int()
             res_hi = a_hi & 0x7FFFFFFF
@@ -224,8 +236,8 @@ class LogicBlock(FunctionalBlock):
         result = self._logic_core(op)
         self._outputs.block_res.set(result.res)
         self._outputs.block_res_sel.set(instr.dst.value)
-        self._outputs.exec_done.set(1)
         self._wb_flags(result)
+        self._outputs.exec_done.set(1)
         self._writeback()
 
     def _logic_64(self, instr: MicroInstruction, op: Callable) -> None:
