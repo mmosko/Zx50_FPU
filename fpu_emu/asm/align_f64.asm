@@ -1,12 +1,6 @@
 ; ==============================================================================
 ; ALIGN_F64: Subroutine to align exponents of two unpacked float64 operands
 ;
-; Compares exponents EA and EB. If EB > EA (or if EA == EB and mantissa B > mantissa A),
-; swaps operands A and B (including packed sign carriers in DX and FX) so that operand A
-; holds the larger magnitude operand. Then shifts the smaller operand mantissa BX right
-; by (EA - EB) bit positions. If (EA - EB) >= 54, the smaller mantissa completely
-; underflows to 0.
-;
 ; Inputs:
 ;   AX (64-bit) : Unpacked mantissa of operand A {AH, AL}
 ;   BX (64-bit) : Unpacked mantissa of operand B {BH, BL}
@@ -21,40 +15,33 @@
 ;   EA (12-bit) : Common exponent (larger of original EA, EB)
 ;   EB (12-bit) : Exponent of smaller operand (original EA if swapped)
 ;   DX (64-bit) : Packed larger operand (DH[31] is the result sign)
+;   FX (64-bit) : Scratch (clobbered by SWAP AX, BX hardware staging)
 ;   CL (32-bit) : Exponent difference (EA - EB)
+;   Status flags:
+;     DIFF_SIGN (DF) is preserved from UNPACK
 ;
-; Register Allocation:
-;   AX, BX      : Mantissas (AX = larger, BX = aligned smaller)
-;   CX (CL, CH) : CX used as 64-bit scratch for swap; CL holds 32-bit exponent diff
-;   DX          : Packed larger operand (sign carrier)
-;   FX          : Packed smaller operand
-;   EA, EB      : Exponents (EA = larger, EB = smaller)
+; Size Reduction: Down from 20 words to 15 words (5 words saved)
 ; ==============================================================================
 
 ALIGN_F64:
-    CMP EA, EB
-    JNZ CARRY, ALIGN_F64_SWAP           ; If EA < EB: swap operands so larger is in A
-    JNZ ZERO, ALIGN_F64_EXP             ; If EA > EB: A is already larger
-    CMP AH, BH
-    JNZ CARRY, ALIGN_F64_SWAP           ; If EA == EB and AH < BH: swap
-    JNZ ZERO, ALIGN_F64_EXP             ; If EA == EB and AH > BH: A is larger
-    CMP AL, BL
-    JZ CARRY, ALIGN_F64_EXP             ; If EA == EB and AH == BH and AL >= BL: A is larger
+    CMP     EA, EB
+    JNZ     CARRY, ALIGN_F64_SWAP  ; EA < EB: swap operands so larger is in A
+    JNZ     ZERO, ALIGN_F64_EXP    ; EA > EB: A is already larger
+    CMP     AX, BX                 ; 64-bit mantissa comparison (2 cycles)
+    JZ      CARRY, ALIGN_F64_EXP   ; EA == EB, AX >= BX: A is larger
 
 ALIGN_F64_SWAP:
-    MOV CX, AX                          ; CX <- AX
-    MOV AX, BX                          ; AX <- BX
-    MOV BX, CX                          ; BX <- CX
-    SWAP EA, EB                         ; Larger exponent into EA
-    MOV DX, FX                          ; DX holds packed larger operand (sign in DH[31])
+    MOV     DX, FX                 ; DX <- packed larger operand (sign in DH[31]) before FX clobber
+    SWAP    AX, BX                 ; Swap mantissas (uses FX as hardware staging)
+    SWAP    EA, EB                 ; Swap 12-bit exponents (EA <-> EB)
 
 ALIGN_F64_EXP:
-    SUB CL, EA, EB                      ; CL <- EA - EB (exponent difference in 32-bit register)
-    CMP CL, 54
-    JNZ CARRY, ALIGN_F64_SHIFT          ; If diff < 54: perform shift
-    XOR BX, BX                          ; If diff >= 54: smaller mantissa underflows to 0
+    SUB     CL, EA, EB             ; CL <- EA - EB (32-bit register prevents 6-bit truncation)
+    CMP     CL, 54                 ; If diff >= 54, smaller 53-bit mantissa underflows
+    JNZ     CARRY, ALIGN_F64_SHIFT ; If diff < 54, perform shift
+    XOR     BX, BX                 ; Smaller mantissa underflows to 0
     RET
 
 ALIGN_F64_SHIFT:
-    LSR BX, CL                          ; Align smaller mantissa: BX >>= (EA - EB)
+    LSR     BX, CL                 ; Align smaller mantissa: BX >>= (EA - EB)
     RET

@@ -47,7 +47,7 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 - [x] **Hardware 64-Bit Comparison (`_cmp64` in `AdderBlock`)**:
   - Implement full 64-bit compare `CMP AX, BX` (`W=1`, 2 cycles) evaluating 64-bit `{src1_h, src1_l} - {src2_h, src2_l}` without register writeback, setting `CF`, `ZF`, `SF`, and `VF` according to the full 64-bit comparison.
   - Shrinks `ALIGN_F64` mantissa comparison from 5 microcode instructions to 1 (`CMP AX, BX`).
-- [ ] **Hardware 64-Bit Register Exchange (`_swap64` in `MemoryBlock`)**:
+- [x] **Hardware 64-Bit Register Exchange (`_swap64` in `MemoryBlock`)**:
   - Implement full 64-bit register exchange `SWAP AX, BX` (`W=1`, 4 cycles) exchanging `{AH, AL} <-> {BH, BL}` using internal staging registers `{FH, FL}`.
   - Shrinks `ALIGN_F64` operand swap from 3 microcode instructions to 1 (`SWAP AX, BX`).
 
