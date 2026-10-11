@@ -9,7 +9,7 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 ## Current Status & Capacity
 
 - **Test Suite Status:** 100% pass rate (**1,245 / 1,245 tests passing**).
-- **Microcode Capacity:** **907 / 1,024 words used** (**117 instruction words of headroom remaining**).
+- **Microcode Capacity:** **899 / 1,024 words used** (**125 instruction words of headroom remaining**).
 - **Hardware Call Stack:** 16-deep $\times$ 10-bit return-address stack in distributed LUT RAM (`RAM16X1S`) with 4-bit `CSP` pointer fully implemented and verified.
 - **Datapath Bus Symmetry:** `HA_MUX` and `HB_MUX` widened to full 4-bit symmetry (14:1 32-bit muxing across all 10 registers `AL`..`FH`, `EA`, `EB`, `C`, and `IMM`), allowing any register as `src1` without register shuffling.
 - **Completed 32-Bit Math Operations:**

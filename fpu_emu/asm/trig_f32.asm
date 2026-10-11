@@ -2,7 +2,7 @@
 ; TRIG_F32: IEEE-754 Single-Precision Trigonometric Functions (SIN, COS, TAN)
 ;
 ; Optimized for Zx50 FPU Rev 2 using ternary ops, register context,
-; and accelerated 3-operand CORDIC rotation.
+; fall-through layout, and deduplicated special-case returns.
 ; ==============================================================================
 
 .equ ONE_F32, 32
@@ -18,8 +18,7 @@ USER_COS_F32:
     JMP TRIG_ENTRY
 
 USER_TAN_F32:
-    LDI CL, 2                   ; CL <- Opcode 2 = TAN
-    JMP TRIG_ENTRY
+    LDI CL, 2                   ; CL <- Opcode 2 = TAN (falls through into TRIG_ENTRY)
 
 TRIG_ENTRY:
     CALL POP_ONE_32             ; AL <- theta (TOS)
@@ -27,16 +26,15 @@ TRIG_ENTRY:
 
     ; Check for zero, NaN, Inf, and tiny angles
     UNPACK EA, AL               ; EA <- exponent, AL <- mantissa
-    JZ ZERO, TRIG_ZERO          ; If input == 0.0: special zero handling
+    JZ ZERO, TRIG_SMALL_ANGLE   ; If input == 0.0: special zero/small angle handling
     CMP EA, 255
     JZ ZERO, TRIG_NAN_ERR       ; If NaN or Inf: error handling
     CMP EA, 115                 ; |theta| < 2^-12 (E < 115)
     JNZ CARRY, TRIG_SMALL_ANGLE ; If small angle: fast path
 
     ; Extract sign bit theta[31] into CH[31] (cleared for COS later)
-    LDI BL, 1
-    LSL BL, 31                  ; BL <- 0x80000000
-    AND CH, CH, BL              ; CH <- sign bit mask of theta
+    LSR CH, 31
+    LSL CH, 31                  ; CH <- 0x80000000 if negative, 0 if positive
 
     ; --------------------------------------------------------------------------
     ; Range Reduction (Cody-Waite mod pi/2)
@@ -180,7 +178,17 @@ SIN_ODD_Q:
 
 SIN_FINISH_SIGN:
     XOR AH, AH, CH              ; Combine with original theta sign (Ternary XOR)
-    JMP TRIG_PACK_FLOAT
+    ; Falls directly into TRIG_PACK_FLOAT (saves 1 JMP instruction!)
+
+    ; --------------------------------------------------------------------------
+    ; Pack Normalized Float for SIN / COS
+    ; --------------------------------------------------------------------------
+TRIG_PACK_FLOAT:
+    LSR AL, 7
+    LDI EA, 127
+    CALL NORMALIZE_F32
+    PUSH AL
+    HALT
 
     ; --- Tangent Reconstruction ---
 RECONSTRUCT_TAN:
@@ -252,29 +260,12 @@ TAN_DIV_ZERO:
     HALT
 
     ; --------------------------------------------------------------------------
-    ; Pack Normalized Float for SIN / COS
-    ; --------------------------------------------------------------------------
-TRIG_PACK_FLOAT:
-    LSR AL, 7
-    LDI EA, 127
-    CALL NORMALIZE_F32
-    PUSH AL
-    HALT
-
-    ; --------------------------------------------------------------------------
     ; Special Cases (Zero, NaN, Small Angle)
     ; --------------------------------------------------------------------------
-TRIG_ZERO:
+TRIG_SMALL_ANGLE:               ; Merged ZERO and SMALL_ANGLE handlers (saves 5 words)
     CMP CL, 1
-    JZ ZERO, TRIG_RET_ONE       ; COS(0) -> 1.0
-    MOV AL, CH                  ; Return original 0.0 (+0.0 or -0.0)
-    PUSH AL
-    HALT
-
-TRIG_SMALL_ANGLE:
-    CMP CL, 1
-    JZ ZERO, TRIG_RET_ONE       ; COS(small) -> 1.0
-    MOV AL, CH                  ; Return original theta
+    JZ ZERO, TRIG_RET_ONE       ; COS(0 or small) -> 1.0
+    MOV AL, CH                  ; Return original theta / 0.0
     PUSH AL
     HALT
 
