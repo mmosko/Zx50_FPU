@@ -8,8 +8,8 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 
 ## Current Status & Capacity
 
-- **Test Suite Status:** 100% pass rate (**1,432 / 1,432 tests passing**).
-- **Microcode Capacity:** **981 / 1,024 words used** (**43 instruction words of headroom remaining**).
+- **Test Suite Status:** 100% pass rate (**1,473 / 1,473 tests passing**).
+- **Microcode Capacity:** **1,023 / 1,024 words used** (**1 instruction word of headroom remaining** in a single 10-bit UPC address space).
 - **Hardware Call Stack:** 16-deep $\times$ 10-bit return-address stack in distributed LUT RAM (`RAM16X1S`) with 4-bit `CSP` pointer fully implemented and verified.
 - **Datapath Bus Symmetry:** `HA_MUX` and `HB_MUX` widened to full 4-bit symmetry (14:1 32-bit muxing across all 10 registers `AL`..`FH`, `EA`, `EB`, `C`, and `IMM`), allowing any register as `src1` without register shuffling.
 - **Completed 32-Bit Math Operations:**
@@ -26,6 +26,7 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
   - Standard integer arithmetic: `ADD_I64`, `SUB_I64`, `MUL_I64`, `DIV_I64` (100% complete).
   - Unsigned integer arithmetic: `ADD_U64`, `SUB_U64`, `MUL_U64`, `DIV_U64` (100% complete).
   - Floating-point arithmetic: `ADD_F64`, `SUB_F64`, `MUL_F64`, `DIV_F64` (100% complete).
+  - Rounding operations: `FLOOR_F64`, `CEIL_F64` (100% complete, 41 integration tests passing, 42 words).
   - Utilities: `ABS_I64`, `CHS_I64`, `ABS_F64`, `CHS_F64`, `DUP8`.
   - Math Constants: `PUSH_PI_64`, `PUSH_E_64`, `PUSH_LN2_64`, `PUSH_LOG2E_64`, `PUSH_LOG2_10_64`, `PUSH_LOG10_2_64`, `PUSH_SQRT2_64`, `PUSH_INV_SQRT2_64`.
 
@@ -91,9 +92,9 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 - [ ] Implement `CONV_F32_F64` (`0xC9`): Expand IEEE single float to double float (net $+4$ bytes on stack, ~12–16 words).
 - [ ] Implement `CONV_F64_F32` (`0xCB`): Narrow IEEE double float to single float (net $-4$ bytes on stack, $V=1$ on exponent overflow, $U=1$ on underflow, ~14–18 words).
 - [x] Implement `FLOOR_F32` (`0x61`): Mathematical floor toward $-\infty$.
-- [ ] Implement `FLOOR_F64` (`0x63`): Mathematical floor toward $-\infty$ (~18–25 words).
+- [x] Implement `FLOOR_F64` (`0x63`): Mathematical floor toward $-\infty$ (100% complete, 41 integration tests passing, shared implementation with `CEIL_F64`).
 - [x] Implement `CEIL_F32` (`0x69`): Mathematical ceiling toward $+\infty$.
-- [ ] Implement `CEIL_F64` (`0x6B`): Mathematical ceiling toward $+\infty$ (~18–25 words).
+- [x] Implement `CEIL_F64` (`0x6B`): Mathematical ceiling toward $+\infty$ (100% complete, 41 integration tests passing, 42 words total for both).
 
 ### 4. 64-Bit Floating-Point Arithmetic & Transcendentals
 - [x] Implement `ADD_F64` (`0x04`): 64-bit IEEE-754 double-precision addition with `align_f64` and `normalize_f64` (100% complete, 30 integration tests passing, 28 words).
@@ -112,17 +113,17 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 | **Basic 64-Bit Float Arithmetic** | `ADD_F64`, `SUB_F64`, `MUL_F64`, `DIV_F64` | **Done** | **87 words (actual)** |
 | **Sign / Magnitude Utilities** | `CHS_F64`, `ABS_F64`, `DUP8` | **Done** | **11 words (actual)** |
 | **Math Constants** | `PUSH_PI_64` .. `PUSH_INV_SQRT2_64` (8) | **Done** | **22 words (actual)** |
-| **Rounding Operations** | `FLOOR_F64`, `CEIL_F64` | Pending | **~36 – 50 words** |
+| **Rounding Operations** | `FLOOR_F64`, `CEIL_F64` | **Done** | **42 words (actual)** |
 | **Pure Float Conversions** | `CONV_F32_F64`, `CONV_F64_F32` | Pending | **~26 – 34 words** |
 | **Integer $\leftrightarrow$ Float Conversions** | `CONV_U64_F64`, `CONV_I64_F64`, `CONV_F64_I64` | Pending | **~42 – 54 words** |
 | **Square Root** | `SQRT_F64` | Pending | **~35 – 45 words** |
 | **Transcendentals** | `LOG2_F64`, `EXP2_F64`, `POW_F64` | Pending | **~190 – 270 words** |
 | **CORDIC Trigonometrics** | `SIN_F64`, `COS_F64`, `TAN_F64` | Pending | **~180 – 240 words** |
-| **TOTAL REMAINING F64 INSTRUCTIONS** | **15 remaining operations** | Pending | **~509 – 693 words** |
+| **TOTAL REMAINING F64 INSTRUCTIONS** | **13 remaining operations** | Pending | **~473 – 643 words** |
 
 > [!NOTE]
 > **Microcode ROM Architecture Requirement:**
-> Current microcode usage is **981 / 1,024 words** (43 words headroom in a single 10-bit UPC address space). Implementing the full 64-bit floating-point and transcendental suite requires expanding microcode capacity:
+> Current microcode usage is **1,023 / 1,024 words** (1 word headroom remaining in a single 10-bit UPC address space). Implementing the full 64-bit floating-point and transcendental suite requires expanding microcode capacity:
 > - **Option A (Recommended - 2,048 Words):** Expand `UPC` address width from 10 bits (`0x3FF`) to 11 bits (`0x7FF`) by allocating a 2nd EBR block on the Lattice MachXO2-2000 (which has 8 EBR blocks total, with only 1 currently dedicated to microcode).
 > - **Option B (Microcode Bank Switching / Overlay):** Add a 1-bit bank register switching two 1,024-word pages (Bank 0: 32-bit & integer operations; Bank 1: 64-bit float operations).
 > - **Option C (Staged Implementation):** Implement pure conversions and integer operations within current ROM space via microcode compaction, deferring transcendental/CORDIC 64-bit routines until 2K expansion is enabled.

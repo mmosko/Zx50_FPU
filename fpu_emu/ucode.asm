@@ -49,6 +49,7 @@
 .include "asm/conv_int_f32.asm"
 .include "asm/conv_f32_i32.asm"
 .include "asm/floor_ceil_f32.asm"
+.include "asm/floor_ceil_f64.asm"
 
 .include "asm/push_const.asm"
 .include "asm/cp_mem.asm"
