@@ -58,6 +58,7 @@ class ShifterBlock(FunctionalBlock):
             self._lzc_64(instr)
 
     def _lzc_32(self, instr: MicroInstruction) -> None:
+        assert instr.src1 is Reg.NONE
         src = instr.src if instr.src is not Reg.NONE else Reg.AL
         dst = instr.dst if instr.dst is not Reg.NONE else Reg.C
 
@@ -81,6 +82,7 @@ class ShifterBlock(FunctionalBlock):
         self._writeback()
 
     def _lzc_64(self, instr: MicroInstruction) -> None:
+        assert instr.src1 is Reg.NONE
         src = instr.src if instr.src is not Reg.NONE else Reg.AL
         dst = instr.dst if instr.dst is not Reg.NONE else Reg.C
         assert src.is_lo_half(), f"64-bit LZC source must be low-half register, got {src}"
@@ -176,6 +178,7 @@ class ShifterBlock(FunctionalBlock):
 
     def _shift_32(self, instr: MicroInstruction, shift_fn: Callable[[int, int, ShifterAdder], ShifterResult]) -> None:
         assert instr.dst is not Reg.NONE, "Shift destination register must be specified"
+        assert instr.src1 is Reg.NONE
         src = instr.src if instr.src is not Reg.NONE else Reg.C
         dst = instr.dst
 
@@ -213,6 +216,7 @@ class ShifterBlock(FunctionalBlock):
     def _shift_64(self, instr: MicroInstruction, shift_fn: Callable[[int, int, ShifterAdder], ShifterResult]) -> None:
         assert instr.dst is not Reg.NONE, "Shift destination register must be specified"
         assert instr.dst.is_lo_half(), f"64-bit shift destination must be low-half register, got {instr.dst}"
+        assert instr.src1 is Reg.NONE
         src = instr.src if instr.src is not Reg.NONE else Reg.C
         dst = instr.dst
 

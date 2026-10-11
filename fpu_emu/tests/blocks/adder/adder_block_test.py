@@ -208,7 +208,7 @@ def test_adder_block_cmp_64_signed_overflow(fpga: FpgaModel):
     fpga.reg_file.bl.write(0x00000001)
     fpga.reg_file.bh.write(0x00000002)
 
-    instr = MicroInstruction(op=MicroOp.ADD, w=IW.W64, src=Reg.BL)
+    instr = MicroInstruction(op=MicroOp.ADD, w=IW.W64, dst=Reg.AL, src=Reg.BL)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
 
     fpga.adder.execute()
@@ -227,7 +227,7 @@ def test_adder_block_sub_64(fpga: FpgaModel):
     fpga.reg_file.bl.write(0x00000001)
     fpga.reg_file.bh.write(0x00000002)
 
-    instr = MicroInstruction(op=MicroOp.SUB, w=IW.W64, src=Reg.BL)
+    instr = MicroInstruction(op=MicroOp.SUB, w=IW.W64, dst=Reg.AL, src=Reg.BL)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
 
     fpga.adder.execute()
@@ -243,7 +243,7 @@ def test_adder_block_exp_add_basic(fpga: FpgaModel):
     fpga.reg_file.ea.write(10)
     fpga.reg_file.eb.write(20)
 
-    instr = MicroInstruction(op=MicroOp.EXP_ADD, src=Reg.EB)
+    instr = MicroInstruction(op=MicroOp.EXP_ADD, dst=Reg.EA, src=Reg.EB)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
     fpga.adder.execute()
 
@@ -259,7 +259,7 @@ def test_adder_block_exp_add_overflow(fpga: FpgaModel):
     fpga.reg_file.ea.write(1000)
     fpga.reg_file.eb.write(50)
 
-    instr = MicroInstruction(op=MicroOp.EXP_ADD, src=Reg.EB)
+    instr = MicroInstruction(op=MicroOp.EXP_ADD, dst=Reg.EA, src=Reg.EB)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
     fpga.adder.execute()
 
@@ -275,7 +275,7 @@ def test_adder_block_exp_add_underflow(fpga: FpgaModel):
     fpga.reg_file.ea.write((-1000) & 0x0FFF)
     fpga.reg_file.eb.write((-30) & 0x0FFF)
 
-    instr = MicroInstruction(op=MicroOp.EXP_ADD, src=Reg.EB)
+    instr = MicroInstruction(op=MicroOp.EXP_ADD, dst=Reg.EA, src=Reg.EB)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
     fpga.adder.execute()
 
@@ -291,7 +291,7 @@ def test_adder_block_exp_add_zero(fpga: FpgaModel):
     fpga.reg_file.ea.write(50)
     fpga.reg_file.eb.write((-50) & 0x0FFF)
 
-    instr = MicroInstruction(op=MicroOp.EXP_ADD, src=Reg.EB)
+    instr = MicroInstruction(op=MicroOp.EXP_ADD, dst=Reg.EA, src=Reg.EB)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
     fpga.adder.execute()
 
@@ -306,7 +306,7 @@ def test_adder_block_exp_add_imm(fpga: FpgaModel):
     # EA = 100, IMM = 25 -> EA = 125
     fpga.reg_file.ea.write(100)
 
-    instr = MicroInstruction(op=MicroOp.EXP_ADD, src=Reg.IMM, imm=25)
+    instr = MicroInstruction(op=MicroOp.EXP_ADD, dst=Reg.EA, src=Reg.IMM, imm=25)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
     fpga.adder.execute()
 
@@ -319,7 +319,7 @@ def test_adder_block_exp_sub_basic(fpga: FpgaModel):
     fpga.reg_file.ea.write(30)
     fpga.reg_file.eb.write(10)
 
-    instr = MicroInstruction(op=MicroOp.EXP_SUB, src=Reg.EB)
+    instr = MicroInstruction(op=MicroOp.EXP_SUB, dst=Reg.EA, src=Reg.EB)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
     fpga.adder.execute()
 
@@ -335,7 +335,7 @@ def test_adder_block_exp_sub_underflow(fpga: FpgaModel):
     fpga.reg_file.ea.write((-1000) & 0x0FFF)
     fpga.reg_file.eb.write(50)
 
-    instr = MicroInstruction(op=MicroOp.EXP_SUB, src=Reg.EB)
+    instr = MicroInstruction(op=MicroOp.EXP_SUB, dst=Reg.EA, src=Reg.EB)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
     fpga.adder.execute()
 
@@ -351,7 +351,7 @@ def test_adder_block_exp_sub_overflow(fpga: FpgaModel):
     fpga.reg_file.ea.write(1000)
     fpga.reg_file.eb.write((-50) & 0x0FFF)
 
-    instr = MicroInstruction(op=MicroOp.EXP_SUB, src=Reg.EB)
+    instr = MicroInstruction(op=MicroOp.EXP_SUB, dst=Reg.EA, src=Reg.EB)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
     fpga.adder.execute()
 
@@ -364,7 +364,7 @@ def test_adder_block_exp_sub_zero(fpga: FpgaModel):
     fpga.reg_file.ea.write(100)
     fpga.reg_file.eb.write(100)
 
-    instr = MicroInstruction(op=MicroOp.EXP_SUB, src=Reg.EB)
+    instr = MicroInstruction(op=MicroOp.EXP_SUB, dst=Reg.EA, src=Reg.EB)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
     fpga.adder.execute()
 
@@ -380,13 +380,13 @@ def test_adder_block_exp_preserves_carry_flag(fpga: FpgaModel):
 
     fpga.reg_file.ea.write(10)
     fpga.reg_file.eb.write(20)
-    instr = MicroInstruction(op=MicroOp.EXP_ADD, src=Reg.EB)
+    instr = MicroInstruction(op=MicroOp.EXP_ADD, dst=Reg.EA, src=Reg.EB)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
     fpga.adder.execute()
 
     assert fpga.reg_file.status.is_bit_set(StatusFlag.CARRY) is True
 
-    instr_sub = MicroInstruction(op=MicroOp.EXP_SUB, src=Reg.EB)
+    instr_sub = MicroInstruction(op=MicroOp.EXP_SUB, dst=Reg.EA, src=Reg.EB)
     instr_sub.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
     fpga.adder.execute()
 
@@ -397,7 +397,7 @@ def test_adder_block_exp_boundary_conditions(fpga: FpgaModel):
     # Max valid exponent: +1023 (VF=0)
     fpga.reg_file.ea.write(1023)
     fpga.reg_file.eb.write(0)
-    instr = MicroInstruction(op=MicroOp.EXP_ADD, src=Reg.EB)
+    instr = MicroInstruction(op=MicroOp.EXP_ADD, dst=Reg.EA, src=Reg.EB)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
     fpga.adder.execute()
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
@@ -406,7 +406,7 @@ def test_adder_block_exp_boundary_conditions(fpga: FpgaModel):
     fpga.clock.tick(1)
     fpga.reg_file.ea.write(1023)
     fpga.reg_file.eb.write(1)
-    instr = MicroInstruction(op=MicroOp.EXP_ADD, src=Reg.EB)
+    instr = MicroInstruction(op=MicroOp.EXP_ADD, dst=Reg.EA, src=Reg.EB)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
     fpga.adder.execute()
     assert fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW) is True
@@ -415,7 +415,7 @@ def test_adder_block_exp_boundary_conditions(fpga: FpgaModel):
     fpga.clock.tick(1)
     fpga.reg_file.ea.write((-1022) & 0x0FFF)
     fpga.reg_file.eb.write(0)
-    instr = MicroInstruction(op=MicroOp.EXP_ADD, src=Reg.EB)
+    instr = MicroInstruction(op=MicroOp.EXP_ADD, dst=Reg.EA, src=Reg.EB)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
     fpga.adder.execute()
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
@@ -424,7 +424,7 @@ def test_adder_block_exp_boundary_conditions(fpga: FpgaModel):
     fpga.clock.tick(1)
     fpga.reg_file.ea.write((-1022) & 0x0FFF)
     fpga.reg_file.eb.write(1)
-    instr = MicroInstruction(op=MicroOp.EXP_SUB, src=Reg.EB)
+    instr = MicroInstruction(op=MicroOp.EXP_SUB, dst=Reg.EA, src=Reg.EB)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
     fpga.adder.execute()
     assert fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW) is True
@@ -508,17 +508,12 @@ def test_adder_block_mul_with_fl_src(fpga: FpgaModel):
     assert fpga.reg_file.ah.read_int() == 0
 
 
-def test_adder_block_mul_default_dst(fpga: FpgaModel):
-    # dst=Reg.NONE defaults to Reg.AL
-    fpga.reg_file.al.write(6)
-    fpga.reg_file.bl.write(7)
-
+def test_adder_block_mul_requires_dst(fpga: FpgaModel):
+    # dst must not be Reg.NONE
     instr = MicroInstruction(op=MicroOp.MUL, w=IW.W32, dst=Reg.NONE, src=Reg.BL)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
-    fpga.adder.execute()
-
-    assert fpga.reg_file.al.read_int() == 42
-    assert fpga.reg_file.ah.read_int() == 0
+    with pytest.raises(AssertionError):
+        fpga.adder.execute()
 
 
 def test_adder_block_mulu_three_operand(fpga: FpgaModel):
@@ -641,17 +636,12 @@ def test_adder_block_div_by_zero(fpga: FpgaModel):
     assert fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
 
 
-def test_adder_block_div_default_dst(fpga: FpgaModel):
-    # dst=Reg.NONE defaults to Reg.AL
-    fpga.reg_file.al.write(10)
-    fpga.reg_file.bl.write(2)
-
+def test_adder_block_div_requires_dst(fpga: FpgaModel):
+    # dst must not be Reg.NONE
     instr = MicroInstruction(op=MicroOp.DIV, w=IW.W32, dst=Reg.NONE, src=Reg.BL)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
-    fpga.adder.execute()
-
-    assert fpga.reg_file.al.read_int() == 5
-    assert fpga.reg_file.dl.read_int() == 0
+    with pytest.raises(AssertionError):
+        fpga.adder.execute()
 
 
 def test_adder_block_div_invalid_dst(fpga: FpgaModel):
@@ -960,6 +950,258 @@ def test_adder_block_sub_64_three_operand_with_cx(fpga: FpgaModel):
     # Ensure source registers were unmodified
     assert fpga.reg_file.al.read_int() == 0x00000000
     assert fpga.reg_file.ah.read_int() == 0x00000005
+
+
+def test_adder_block_ternary_add_32(fpga: FpgaModel):
+    # ADD CL, AL, BL: CL = AL + BL
+    fpga.reg_file.al.write(20)
+    fpga.reg_file.bl.write(30)
+    fpga.reg_file.cl.write(0)
+
+    instr = MicroInstruction(op=MicroOp.ADD, w=IW.W32, dst=Reg.CL, src1=Reg.AL, src=Reg.BL)
+    instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
+    fpga.adder.execute()
+
+    assert fpga.reg_file.cl.read_int() == 50
+    assert fpga.reg_file.al.read_int() == 20
+    assert fpga.reg_file.bl.read_int() == 30
+
+
+def test_adder_block_ternary_adc_32(fpga: FpgaModel):
+    # ADC CL, AL, BL with Carry In = 1: CL = AL + BL + 1
+    fpga.reg_file.al.write(10)
+    fpga.reg_file.bl.write(15)
+    fpga.reg_file.cl.write(0)
+    fpga.reg_file.status.set_bit(StatusFlag.CARRY, 1)
+
+    instr = MicroInstruction(op=MicroOp.ADC, w=IW.W32, dst=Reg.CL, src1=Reg.AL, src=Reg.BL)
+    instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
+    fpga.adder.execute()
+
+    assert fpga.reg_file.cl.read_int() == 26
+    assert fpga.reg_file.al.read_int() == 10
+    assert fpga.reg_file.bl.read_int() == 15
+
+
+def test_adder_block_ternary_sub_32(fpga: FpgaModel):
+    # SUB CL, AL, BL: CL = AL - BL
+    fpga.reg_file.al.write(50)
+    fpga.reg_file.bl.write(18)
+    fpga.reg_file.cl.write(0)
+
+    instr = MicroInstruction(op=MicroOp.SUB, w=IW.W32, dst=Reg.CL, src1=Reg.AL, src=Reg.BL)
+    instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
+    fpga.adder.execute()
+
+    assert fpga.reg_file.cl.read_int() == 32
+    assert fpga.reg_file.al.read_int() == 50
+    assert fpga.reg_file.bl.read_int() == 18
+
+
+def test_adder_block_ternary_sbb_32(fpga: FpgaModel):
+    # SBB CL, AL, BL with Borrow In = 1: CL = AL - BL - 1
+    fpga.reg_file.al.write(50)
+    fpga.reg_file.bl.write(18)
+    fpga.reg_file.cl.write(0)
+    fpga.reg_file.status.set_bit(StatusFlag.CARRY, 1)
+
+    instr = MicroInstruction(op=MicroOp.SBB, w=IW.W32, dst=Reg.CL, src1=Reg.AL, src=Reg.BL)
+    instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
+    fpga.adder.execute()
+
+    assert fpga.reg_file.cl.read_int() == 31
+    assert fpga.reg_file.al.read_int() == 50
+    assert fpga.reg_file.bl.read_int() == 18
+
+
+def test_adder_block_ternary_add_64(fpga: FpgaModel):
+    # ADD CX, AX, BX: CX = AX + BX
+    fpga.reg_file.al.write(0x10000000)
+    fpga.reg_file.ah.write(0x00000001)
+    fpga.reg_file.bl.write(0x20000000)
+    fpga.reg_file.bh.write(0x00000002)
+
+    instr = MicroInstruction(op=MicroOp.ADD, w=IW.W64, dst=Reg.CL, src1=Reg.AL, src=Reg.BL)
+    instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
+    fpga.adder.execute()
+
+    assert fpga.reg_file.cl.read_int() == 0x30000000
+    assert fpga.reg_file.ch.read_int() == 0x00000003
+    assert fpga.reg_file.al.read_int() == 0x10000000
+    assert fpga.reg_file.ah.read_int() == 0x00000001
+    assert fpga.reg_file.bl.read_int() == 0x20000000
+    assert fpga.reg_file.bh.read_int() == 0x00000002
+
+
+def test_adder_block_cmp_32_with_src1(fpga: FpgaModel):
+    # CMP AL, BL: compares AL - BL with RES_SEL = NONE
+    fpga.reg_file.al.write(100)
+    fpga.reg_file.bl.write(100)
+
+    instr = MicroInstruction(op=MicroOp.CMP, w=IW.W32, dst=Reg.AL, src1=Reg.AL, src=Reg.BL)
+    instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
+    fpga.adder.execute()
+
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.ZERO)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.SIGN)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.CARRY)
+    assert fpga.reg_file.al.read_int() == 100
+    assert fpga.reg_file.bl.read_int() == 100
+
+
+def test_adder_block_cmp_64_with_src1(fpga: FpgaModel):
+    # CMP AX, BX: compares AX - BX with RES_SEL = NONE
+    fpga.reg_file.al.write(0x50)
+    fpga.reg_file.ah.write(0x01)
+    fpga.reg_file.bl.write(0x50)
+    fpga.reg_file.bh.write(0x01)
+
+    instr = MicroInstruction(op=MicroOp.CMP, w=IW.W64, dst=Reg.AL, src1=Reg.AL, src=Reg.BL)
+    instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
+    fpga.adder.execute()
+
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.ZERO)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.SIGN)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.CARRY)
+    assert fpga.reg_file.al.read_int() == 0x50
+    assert fpga.reg_file.ah.read_int() == 0x01
+
+
+def test_adder_block_ternary_exp_add(fpga: FpgaModel):
+    # EXP_ADD C, EA, EB: C = EA + EB, EA preserved (C is 6-bit counter)
+    fpga.reg_file.ea.write(20)
+    fpga.reg_file.eb.write(15)
+    fpga.reg_file.c.write(0)
+
+    instr = MicroInstruction(op=MicroOp.EXP_ADD, dst=Reg.C, src1=Reg.EA, src=Reg.EB)
+    instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
+    fpga.adder.execute()
+
+    assert fpga.reg_file.c.read_int() == 35
+    assert fpga.reg_file.ea.read_int() == 20
+    assert fpga.reg_file.eb.read_int() == 15
+
+
+def test_adder_block_ternary_exp_sub(fpga: FpgaModel):
+    # EXP_SUB C, EA, EB: C = EA - EB, EA preserved (C is 6-bit counter)
+    fpga.reg_file.ea.write(30)
+    fpga.reg_file.eb.write(10)
+    fpga.reg_file.c.write(0)
+
+    instr = MicroInstruction(op=MicroOp.EXP_SUB, dst=Reg.C, src1=Reg.EA, src=Reg.EB)
+    instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
+    fpga.adder.execute()
+
+    assert fpga.reg_file.c.read_int() == 20
+    assert fpga.reg_file.ea.read_int() == 30
+    assert fpga.reg_file.eb.read_int() == 10
+
+
+def test_adder_block_ternary_unpack_32(fpga: FpgaModel):
+    # UNPACK AL, EA, BL (W=0): unpack float from BL into EA (exp) and AL (mantissa). BL preserved!
+    # +1.0f = 0x3F800000: exp = 127 (0x7F), mantissa = 0x00800000
+    fpga.reg_file.bl.write(0x3F800000)
+    fpga.reg_file.al.write(0)
+    fpga.reg_file.ea.write(0)
+
+    instr = MicroInstruction(op=MicroOp.UNPACK, w=IW.W32, dst=Reg.AL, src1=Reg.EA, src=Reg.BL)
+    instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
+    fpga.adder.execute()
+
+    assert fpga.reg_file.ea.read_int() == 127
+    assert fpga.reg_file.al.read_int() == 0x00800000
+    assert fpga.reg_file.bl.read_int() == 0x3F800000  # BL unchanged!
+
+
+def test_adder_block_ternary_pack_32(fpga: FpgaModel):
+    # PACK AL, EA, BL (W=0): pack float from EA (exp=127) and BL (mantissa=0x00800000) into AL. BL preserved!
+    fpga.reg_file.ea.write(127)
+    fpga.reg_file.bl.write(0x00800000)
+    fpga.reg_file.al.write(0)
+    fpga.reg_file.status.set_bit(StatusFlag.SIGN, 0)
+
+    instr = MicroInstruction(op=MicroOp.PACK, w=IW.W32, dst=Reg.AL, src1=Reg.EA, src=Reg.BL)
+    instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
+    fpga.adder.execute()
+
+    assert fpga.reg_file.al.read_int() == 0x3F800000  # +1.0f
+    assert fpga.reg_file.bl.read_int() == 0x00800000  # BL unchanged!
+    assert fpga.reg_file.ea.read_int() == 127
+
+
+def test_adder_block_ternary_unpack_64(fpga: FpgaModel):
+    # UNPACK AX, EA, BX (W=1): unpack float64 from BX into EA (exp) and AX (mantissa). BX preserved!
+    # +1.0 double: 0x3FF00000_00000000 -> exp = 1023, mantissa_hi = 0x00100000, mantissa_lo = 0
+    fpga.reg_file.bh.write(0x3FF00000)
+    fpga.reg_file.bl.write(0x12345678)
+    fpga.reg_file.al.write(0)
+    fpga.reg_file.ah.write(0)
+    fpga.reg_file.ea.write(0)
+
+    instr = MicroInstruction(op=MicroOp.UNPACK, w=IW.W64, dst=Reg.AL, src1=Reg.EA, src=Reg.BL)
+    instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
+    fpga.adder.execute()
+
+    assert fpga.reg_file.ea.read_int() == 1023
+    assert fpga.reg_file.ah.read_int() == 0x00100000
+    assert fpga.reg_file.al.read_int() == 0x12345678
+    # BX preserved!
+    assert fpga.reg_file.bh.read_int() == 0x3FF00000
+    assert fpga.reg_file.bl.read_int() == 0x12345678
+
+
+def test_adder_block_ternary_pack_64(fpga: FpgaModel):
+    # PACK AX, EA, BX (W=1): pack float64 from EA (exp=1023) and BX (mantissa) into AX. BX preserved!
+    fpga.reg_file.ea.write(1023)
+    fpga.reg_file.bh.write(0x00100000)
+    fpga.reg_file.bl.write(0x12345678)
+    fpga.reg_file.ah.write(0)
+    fpga.reg_file.al.write(0)
+    fpga.reg_file.status.set_bit(StatusFlag.SIGN, 0)
+
+    instr = MicroInstruction(op=MicroOp.PACK, w=IW.W64, dst=Reg.AL, src1=Reg.EA, src=Reg.BL)
+    instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
+    fpga.adder.execute()
+
+    assert fpga.reg_file.ah.read_int() == 0x3FF00000
+    assert fpga.reg_file.al.read_int() == 0x12345678
+    # BX preserved!
+    assert fpga.reg_file.bh.read_int() == 0x00100000
+    assert fpga.reg_file.bl.read_int() == 0x12345678
+
+
+def test_adder_block_ternary_mul_32(fpga: FpgaModel):
+    # MUL AL, BL, CL: {AH, AL} = BL * CL
+    fpga.reg_file.bl.write(6)
+    fpga.reg_file.cl.write(7)
+    fpga.reg_file.al.write(0)
+    fpga.reg_file.ah.write(0)
+
+    instr = MicroInstruction(op=MicroOp.MUL, w=IW.W32, dst=Reg.AL, src1=Reg.BL, src=Reg.CL)
+    instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
+    fpga.adder.execute()
+
+    assert fpga.reg_file.al.read_int() == 42
+    assert fpga.reg_file.ah.read_int() == 0
+    assert fpga.reg_file.bl.read_int() == 6
+    assert fpga.reg_file.cl.read_int() == 7
+
+
+def test_adder_block_ternary_div_32(fpga: FpgaModel):
+    # DIV AL, BL, CL: AL = BL / CL, DL = BL % CL
+    fpga.reg_file.bl.write(45)
+    fpga.reg_file.cl.write(7)
+    fpga.reg_file.al.write(0)
+    fpga.reg_file.dl.write(0)
+
+    instr = MicroInstruction(op=MicroOp.DIV, w=IW.W32, dst=Reg.AL, src1=Reg.BL, src=Reg.CL)
+    instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
+    fpga.adder.execute()
+
+    assert fpga.reg_file.al.read_int() == 6
+    assert fpga.reg_file.dl.read_int() == 3
+    assert fpga.reg_file.bl.read_int() == 45
+    assert fpga.reg_file.cl.read_int() == 7
 
 
 

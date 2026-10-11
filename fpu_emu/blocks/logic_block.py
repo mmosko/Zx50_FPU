@@ -82,27 +82,72 @@ class LogicBlock(FunctionalBlock):
             self._logic_64(instr, operator.xor)
 
     def _test(self, instr: MicroInstruction) -> None:
-        assert instr.op == MicroOp.AND
-        # We cannot simply call _logic_32 or _logic_64 without refactoring them,
-        # as they have _writeback() baked in.
-        # Do not writeback
-        raise NotImplementedError()
+        assert instr.op == MicroOp.TEST
+        assert instr.src is not Reg.NONE
+        assert instr.dst is not Reg.NONE
+        src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
 
+        if instr.is_w32():
+            self._test_32(instr, src1)
+        else:
+            self._test_64(instr, src1)
+
+    def _test_32(self, instr: MicroInstruction, src1: Reg) -> None:
+        self._ha_mux.select(src1.value)
+        self._hb_mux.select(instr.src.value)
+        result = self._logic_core(operator.and_)
+        self._outputs.block_res.set(0)
+        self._outputs.block_res_sel.set(Reg.NONE.value)
+        self._outputs.exec_done.set(1)
+        self._wb_flags(result)
+        self._writeback()
+
+    def _test_64(self, instr: MicroInstruction, src1: Reg) -> None:
+        assert src1.is_lo_half()
+        assert instr.src.is_lo_half()
+
+        # Cycle 1: low word
+        self._ha_mux.select(src1.value)
+        self._hb_mux.select(instr.src.value)
+        result_lo = self._logic_core(operator.and_)
+        self._outputs.block_res.set(0)
+        self._outputs.block_res_sel.set(Reg.NONE.value)
+        self._writeback()
+
+        # Cycle 2: high word
+        self._ha_mux.select(src1.value | 1)
+        self._hb_mux.select(instr.src.value | 1)
+        result_hi = self._logic_core(operator.and_)
+        result_hi.zf = result_lo.zf and result_hi.zf
+        self._outputs.block_res.set(0)
+        self._outputs.block_res_sel.set(Reg.NONE.value)
+        self._outputs.exec_done.set(1)
+        self._wb_flags(result_hi)
+        self._writeback()
 
     def _not(self, instr: MicroInstruction) -> None:
         assert instr.op == MicroOp.NOT
         assert instr.dst is not Reg.NONE
+        assert instr.src is Reg.NONE
+        src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
 
-        wr_mask = (1 << StatusFlag.ZERO.value) | (1 << StatusFlag.SIGN.value)
+        wr_mask = (
+            (1 << StatusFlag.CARRY.value)
+            | (1 << StatusFlag.OVERFLOW.value)
+            | (1 << StatusFlag.ZERO.value)
+            | (1 << StatusFlag.SIGN.value)
+        )
 
         if instr.is_w32():
-            self._ha_mux.select(instr.dst.value)
+            self._ha_mux.select(src1.value)
             a_val = self._inputs.ha_mux.read_int()
             res = (~a_val) & 0xFFFFFFFF
             result = LogicResult(
                 res=res,
+                cf=False,
                 zf=(res == 0),
                 sf=bool(res & 0x80000000),
+                vf=False,
             )
             self._outputs.block_res.set(result.res)
             self._outputs.block_res_sel.set(instr.dst.value)
@@ -111,8 +156,9 @@ class LogicBlock(FunctionalBlock):
             self._writeback()
         else:
             assert instr.dst.is_lo_half()
+            assert src1.is_lo_half()
             # Cycle 1: invert low word
-            self._ha_mux.select(instr.dst.value)
+            self._ha_mux.select(src1.value)
             a_lo = self._inputs.ha_mux.read_int()
             res_lo = (~a_lo) & 0xFFFFFFFF
             self._outputs.block_res.set(res_lo)
@@ -120,13 +166,15 @@ class LogicBlock(FunctionalBlock):
             self._writeback()
 
             # Cycle 2: invert high word and commit flags
-            self._ha_mux.select(instr.dst.value | 1)
+            self._ha_mux.select(src1.value | 1)
             a_hi = self._inputs.ha_mux.read_int()
             res_hi = (~a_hi) & 0xFFFFFFFF
             result_64 = LogicResult(
                 res=res_hi,
+                cf=False,
                 zf=(res_lo == 0 and res_hi == 0),
                 sf=bool(res_hi & 0x80000000),
+                vf=False,
             )
             self._outputs.block_res.set(res_hi)
             self._outputs.block_res_sel.set(instr.dst.value | 1)
@@ -138,7 +186,7 @@ class LogicBlock(FunctionalBlock):
         assert instr.op == MicroOp.FABS
         assert instr.dst is not Reg.NONE
         assert instr.src is Reg.NONE
-        src1 = instr.src1 if instr.src1 is not None else instr.dst
+        src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
 
         wr_mask = (1 << StatusFlag.ZERO.value) | (1 << StatusFlag.SIGN.value)
 
@@ -158,12 +206,20 @@ class LogicBlock(FunctionalBlock):
             self._wb_flags(result, wr_mask=wr_mask)
             self._writeback()
         else:
-            # 64-bit: 1 cycle, clear bit 31 of high half (bit 63 of float64)
+            # 64-bit: 2 cycles per SystemReference.md
+            assert instr.dst.is_lo_half()
             assert src1.is_lo_half()
+
+            # Cycle 1: copy low word
+            self._ha_mux.select(src1.value)
+            a_lo = self._inputs.ha_mux.read_int()
+            self._outputs.block_res.set(a_lo)
+            self._outputs.block_res_sel.set(instr.dst.value)
+            self._writeback()
+
+            # Cycle 2: clear bit 31 of high half (bit 63 of float64)
             self._ha_mux.select(src1.value | 1)
-            self._hb_mux.select(src1.value)
             a_hi = self._inputs.ha_mux.read_int()
-            a_lo = self._inputs.hb_mux.read_int()
             res_hi = a_hi & 0x7FFFFFFF
             result = LogicResult(
                 res=res_hi,
@@ -179,13 +235,15 @@ class LogicBlock(FunctionalBlock):
     def _fchs(self, instr: MicroInstruction) -> None:
         assert instr.op == MicroOp.FCHS
         assert instr.dst is not Reg.NONE
+        assert instr.src is Reg.NONE
+        src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
 
         # Inverts sign bit and sets STATUS.S; other flags unaffected
         wr_mask = 1 << StatusFlag.SIGN.value
 
         if instr.is_w32():
             # 32-bit: 1 cycle, toggle bit 31
-            self._ha_mux.select(instr.dst.value)
+            self._ha_mux.select(src1.value)
             a_val = self._inputs.ha_mux.read_int()
             res = a_val ^ 0x80000000
             result = LogicResult(
@@ -198,9 +256,19 @@ class LogicBlock(FunctionalBlock):
             self._wb_flags(result, wr_mask=wr_mask)
             self._writeback()
         else:
-            # 64-bit: 1 cycle, toggle bit 31 of high half (bit 63 of float64)
+            # 64-bit: 2 cycles per SystemReference.md
             assert instr.dst.is_lo_half()
-            self._ha_mux.select(instr.dst.value | 1)
+            assert src1.is_lo_half()
+
+            # Cycle 1: copy low word
+            self._ha_mux.select(src1.value)
+            a_lo = self._inputs.ha_mux.read_int()
+            self._outputs.block_res.set(a_lo)
+            self._outputs.block_res_sel.set(instr.dst.value)
+            self._writeback()
+
+            # Cycle 2: toggle bit 31 of high half (bit 63 of float64)
+            self._ha_mux.select(src1.value | 1)
             a_hi = self._inputs.ha_mux.read_int()
             res_hi = a_hi ^ 0x80000000
             result = LogicResult(
@@ -244,12 +312,12 @@ class LogicBlock(FunctionalBlock):
         """64-bit generic binary logic operation (2 cycles)."""
         assert instr.src is not Reg.NONE
         assert instr.dst is not Reg.NONE
+        src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
         assert instr.src.is_lo_half()
-        assert instr.src1 is Reg.NONE or instr.src1.is_lo_half()
+        assert src1.is_lo_half()
         assert instr.dst.is_lo_half()
 
         # Cycle 1: low word
-        src1 = instr.dst if instr.src1 is Reg.NONE else instr.src1
         self._ha_mux.select(src1.value)
         self._hb_mux.select(instr.src.value)
         result_lo = self._logic_core(op)
@@ -261,7 +329,7 @@ class LogicBlock(FunctionalBlock):
         self._ha_mux.select(src1.value | 1)
         self._hb_mux.select(instr.src.value | 1)
         result_hi = self._logic_core(op)
-        result_hi.zf &= result_lo.zf
+        result_hi.zf = result_lo.zf and result_hi.zf
         self._outputs.block_res.set(result_hi.res)
         self._outputs.block_res_sel.set(instr.dst.value | 1)
         self._outputs.exec_done.set(1)

@@ -134,7 +134,7 @@ def test_xor_64(fpga: FpgaModel):
 
 
 def test_not_32(fpga: FpgaModel):
-    # Set CARRY and OVERFLOW to 1 before NOT to verify they are unaffected
+    # Set CARRY and OVERFLOW to 1 before NOT to verify they are cleared to 0 per SystemReference.md
     fpga.reg_file.status.set_bit(StatusFlag.CARRY, 1)
     fpga.reg_file.status.set_bit(StatusFlag.OVERFLOW, 1)
 
@@ -146,12 +146,14 @@ def test_not_32(fpga: FpgaModel):
     assert fpga.reg_file.al.read_int() == 0xFFFFFFFF
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.ZERO)
     assert fpga.reg_file.status.is_bit_set(StatusFlag.SIGN)
-    # C and V unaffected
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.CARRY)
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
+    # C and V cleared to 0
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.CARRY)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
 
 
 def test_not_64(fpga: FpgaModel):
+    fpga.reg_file.status.set_bit(StatusFlag.CARRY, 1)
+    fpga.reg_file.status.set_bit(StatusFlag.OVERFLOW, 1)
     fpga.reg_file.al.write(0xFFFFFFFF)
     fpga.reg_file.ah.write(0xFFFFFFFF)
 
@@ -163,6 +165,9 @@ def test_not_64(fpga: FpgaModel):
     assert fpga.reg_file.ah.read_int() == 0
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ZERO)
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.SIGN)
+    # C and V cleared to 0
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.CARRY)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
 
 
 def test_fabs_32(fpga: FpgaModel):
@@ -188,14 +193,14 @@ def test_fabs_32(fpga: FpgaModel):
 
 def test_fabs_64(fpga: FpgaModel):
     # -1.0 double = 0xBFF00000_00000000 -> +1.0 = 0x3FF00000_00000000
-    # 1 cycle, low half untouched
+    # 2 cycles per SystemReference.md
     fpga.reg_file.al.write(0x12345678)
     fpga.reg_file.ah.write(0xBFF00000)
 
     instr = MicroInstruction(op=MicroOp.FABS, w=IW.W64, dst=Reg.AL)
     elapsed = run_logic(fpga, instr)
 
-    assert elapsed == 1
+    assert elapsed == 2
     assert fpga.reg_file.al.read_int() == 0x12345678
     assert fpga.reg_file.ah.read_int() == 0x3FF00000
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.ZERO)
@@ -220,16 +225,269 @@ def test_fchs_32(fpga: FpgaModel):
 
 
 def test_fchs_64(fpga: FpgaModel):
-    # Double: 0x3FF00000_12345678 -> 0xBFF00000_12345678 (1 cycle, low half untouched)
+    # Double: 0x3FF00000_12345678 -> 0xBFF00000_12345678
+    # 2 cycles per SystemReference.md
     fpga.reg_file.al.write(0x12345678)
     fpga.reg_file.ah.write(0x3FF00000)
 
     instr = MicroInstruction(op=MicroOp.FCHS, w=IW.W64, dst=Reg.AL)
     elapsed = run_logic(fpga, instr)
 
-    assert elapsed == 1
+    assert elapsed == 2
     assert fpga.reg_file.al.read_int() == 0x12345678
     assert fpga.reg_file.ah.read_int() == 0xBFF00000
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.SIGN)
+
+
+# -------------------------------------------------------------------------
+# New Ternary and Binary Tests
+# -------------------------------------------------------------------------
+
+def test_and_32_ternary(fpga: FpgaModel):
+    # AND CL, AL, BL: CL = AL & BL, AL & BL unmodified
+    fpga.reg_file.al.write(0x0000FFFF)
+    fpga.reg_file.bl.write(0x00FF00FF)
+    fpga.reg_file.cl.write(0)
+
+    instr = MicroInstruction(op=MicroOp.AND, w=IW.W32, dst=Reg.CL, src1=Reg.AL, src=Reg.BL)
+    elapsed = run_logic(fpga, instr)
+
+    assert elapsed == 1
+    assert fpga.reg_file.cl.read_int() == 0x000000FF
+    assert fpga.reg_file.al.read_int() == 0x0000FFFF
+    assert fpga.reg_file.bl.read_int() == 0x00FF00FF
+
+
+def test_and_64_ternary(fpga: FpgaModel):
+    # AND CX, AX, BX: CX = AX & BX, AX & BX unmodified
+    fpga.reg_file.al.write(0x0000FFFF)
+    fpga.reg_file.ah.write(0x80000000)
+    fpga.reg_file.bl.write(0x00FF00FF)
+    fpga.reg_file.bh.write(0xFFFFFFFF)
+    fpga.reg_file.cl.write(0)
+    fpga.reg_file.ch.write(0)
+
+    instr = MicroInstruction(op=MicroOp.AND, w=IW.W64, dst=Reg.CL, src1=Reg.AL, src=Reg.BL)
+    elapsed = run_logic(fpga, instr)
+
+    assert elapsed == 2
+    assert fpga.reg_file.cl.read_int() == 0x000000FF
+    assert fpga.reg_file.ch.read_int() == 0x80000000
+    assert fpga.reg_file.al.read_int() == 0x0000FFFF
+    assert fpga.reg_file.ah.read_int() == 0x80000000
+    assert fpga.reg_file.bl.read_int() == 0x00FF00FF
+    assert fpga.reg_file.bh.read_int() == 0xFFFFFFFF
+
+
+def test_or_32_ternary(fpga: FpgaModel):
+    # OR CL, AL, BL: CL = AL | BL
+    fpga.reg_file.al.write(0x12000000)
+    fpga.reg_file.bl.write(0x00000034)
+    fpga.reg_file.cl.write(0)
+
+    instr = MicroInstruction(op=MicroOp.OR, w=IW.W32, dst=Reg.CL, src1=Reg.AL, src=Reg.BL)
+    elapsed = run_logic(fpga, instr)
+
+    assert elapsed == 1
+    assert fpga.reg_file.cl.read_int() == 0x12000034
+    assert fpga.reg_file.al.read_int() == 0x12000000
+    assert fpga.reg_file.bl.read_int() == 0x00000034
+
+
+def test_or_64_ternary(fpga: FpgaModel):
+    # OR CX, AX, BX: CX = AX | BX
+    fpga.reg_file.al.write(0x00001111)
+    fpga.reg_file.ah.write(0x80000000)
+    fpga.reg_file.bl.write(0x22220000)
+    fpga.reg_file.bh.write(0x00003333)
+    fpga.reg_file.cl.write(0)
+    fpga.reg_file.ch.write(0)
+
+    instr = MicroInstruction(op=MicroOp.OR, w=IW.W64, dst=Reg.CL, src1=Reg.AL, src=Reg.BL)
+    elapsed = run_logic(fpga, instr)
+
+    assert elapsed == 2
+    assert fpga.reg_file.cl.read_int() == 0x22221111
+    assert fpga.reg_file.ch.read_int() == 0x80003333
+    assert fpga.reg_file.al.read_int() == 0x00001111
+    assert fpga.reg_file.ah.read_int() == 0x80000000
+    assert fpga.reg_file.bl.read_int() == 0x22220000
+    assert fpga.reg_file.bh.read_int() == 0x00003333
+
+
+def test_xor_32_ternary(fpga: FpgaModel):
+    # XOR CL, AL, BL: CL = AL ^ BL
+    fpga.reg_file.al.write(0xFFFFFFFF)
+    fpga.reg_file.bl.write(0x0F0F0F0F)
+    fpga.reg_file.cl.write(0)
+
+    instr = MicroInstruction(op=MicroOp.XOR, w=IW.W32, dst=Reg.CL, src1=Reg.AL, src=Reg.BL)
+    elapsed = run_logic(fpga, instr)
+
+    assert elapsed == 1
+    assert fpga.reg_file.cl.read_int() == 0xF0F0F0F0
+    assert fpga.reg_file.al.read_int() == 0xFFFFFFFF
+    assert fpga.reg_file.bl.read_int() == 0x0F0F0F0F
+
+
+def test_xor_64_ternary(fpga: FpgaModel):
+    # XOR CX, AX, BX: CX = AX ^ BX
+    fpga.reg_file.al.write(0xFFFFFFFF)
+    fpga.reg_file.ah.write(0x12345678)
+    fpga.reg_file.bl.write(0xFFFFFFFF)
+    fpga.reg_file.bh.write(0x12345678)
+    fpga.reg_file.cl.write(0xFF)
+    fpga.reg_file.ch.write(0xFF)
+
+    instr = MicroInstruction(op=MicroOp.XOR, w=IW.W64, dst=Reg.CL, src1=Reg.AL, src=Reg.BL)
+    elapsed = run_logic(fpga, instr)
+
+    assert elapsed == 2
+    assert fpga.reg_file.cl.read_int() == 0
+    assert fpga.reg_file.ch.read_int() == 0
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.ZERO)
+    assert fpga.reg_file.al.read_int() == 0xFFFFFFFF
+    assert fpga.reg_file.ah.read_int() == 0x12345678
+
+
+def test_test_32(fpga: FpgaModel):
+    # TEST AL, BL (32-bit): evaluates AL & BL, sets flags, no writeback to AL or BL
+    fpga.reg_file.al.write(0x80000000)
+    fpga.reg_file.bl.write(0x80000000)
+
+    instr = MicroInstruction(op=MicroOp.TEST, w=IW.W32, dst=Reg.AL, src=Reg.BL)
+    elapsed = run_logic(fpga, instr)
+
+    assert elapsed == 1
+    assert fpga.reg_file.al.read_int() == 0x80000000
+    assert fpga.reg_file.bl.read_int() == 0x80000000
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.ZERO)
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.SIGN)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.CARRY)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
+
+    # Test with zero result
+    fpga.reg_file.al.write(0x00FF0000)
+    fpga.reg_file.bl.write(0x000000FF)
+    run_logic(fpga, instr)
+
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.ZERO)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.SIGN)
+
+
+def test_test_64(fpga: FpgaModel):
+    # TEST AX, BX (64-bit): evaluates AX & BX, sets flags, no register modification
+    fpga.reg_file.al.write(0x00000000)
+    fpga.reg_file.ah.write(0x80000000)
+    fpga.reg_file.bl.write(0x12345678)
+    fpga.reg_file.bh.write(0x80000000)
+
+    instr = MicroInstruction(op=MicroOp.TEST, w=IW.W64, dst=Reg.AL, src=Reg.BL)
+    elapsed = run_logic(fpga, instr)
+
+    assert elapsed == 2
+    assert fpga.reg_file.al.read_int() == 0x00000000
+    assert fpga.reg_file.ah.read_int() == 0x80000000
+    assert fpga.reg_file.bl.read_int() == 0x12345678
+    assert fpga.reg_file.bh.read_int() == 0x80000000
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.ZERO)
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.SIGN)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.CARRY)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
+
+
+def test_not_32_binary(fpga: FpgaModel):
+    # NOT BL, AL: BL = ~AL, AL unmodified
+    fpga.reg_file.al.write(0x0000FFFF)
+    fpga.reg_file.bl.write(0)
+
+    instr = MicroInstruction(op=MicroOp.NOT, w=IW.W32, dst=Reg.BL, src1=Reg.AL, src=Reg.NONE)
+    elapsed = run_logic(fpga, instr)
+
+    assert elapsed == 1
+    assert fpga.reg_file.bl.read_int() == 0xFFFF0000
+    assert fpga.reg_file.al.read_int() == 0x0000FFFF
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.SIGN)
+    assert not fpga.reg_file.status.is_bit_set(StatusFlag.ZERO)
+
+
+def test_not_64_binary(fpga: FpgaModel):
+    # NOT BX, AX: BX = ~AX, AX unmodified
+    fpga.reg_file.al.write(0x12345678)
+    fpga.reg_file.ah.write(0x00000000)
+    fpga.reg_file.bl.write(0)
+    fpga.reg_file.bh.write(0)
+
+    instr = MicroInstruction(op=MicroOp.NOT, w=IW.W64, dst=Reg.BL, src1=Reg.AL, src=Reg.NONE)
+    elapsed = run_logic(fpga, instr)
+
+    assert elapsed == 2
+    assert fpga.reg_file.bl.read_int() == (~0x12345678) & 0xFFFFFFFF
+    assert fpga.reg_file.bh.read_int() == 0xFFFFFFFF
+    assert fpga.reg_file.al.read_int() == 0x12345678
+    assert fpga.reg_file.ah.read_int() == 0x00000000
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.SIGN)
+
+
+def test_fabs_32_binary(fpga: FpgaModel):
+    # FABS BL, AL: BL = fabs(AL), AL unmodified
+    fpga.reg_file.al.write(0xBF800000)  # -1.0f
+    fpga.reg_file.bl.write(0)
+
+    instr = MicroInstruction(op=MicroOp.FABS, w=IW.W32, dst=Reg.BL, src1=Reg.AL, src=Reg.NONE)
+    elapsed = run_logic(fpga, instr)
+
+    assert elapsed == 1
+    assert fpga.reg_file.bl.read_int() == 0x3F800000  # +1.0f
+    assert fpga.reg_file.al.read_int() == 0xBF800000  # unmodified
+
+
+def test_fabs_64_binary(fpga: FpgaModel):
+    # FABS BX, AX: BX = fabs(AX), AX unmodified
+    fpga.reg_file.al.write(0x12345678)
+    fpga.reg_file.ah.write(0xBFF00000)  # -1.0 double
+    fpga.reg_file.bl.write(0)
+    fpga.reg_file.bh.write(0)
+
+    instr = MicroInstruction(op=MicroOp.FABS, w=IW.W64, dst=Reg.BL, src1=Reg.AL, src=Reg.NONE)
+    elapsed = run_logic(fpga, instr)
+
+    assert elapsed == 2
+    assert fpga.reg_file.bl.read_int() == 0x12345678
+    assert fpga.reg_file.bh.read_int() == 0x3FF00000
+    assert fpga.reg_file.al.read_int() == 0x12345678
+    assert fpga.reg_file.ah.read_int() == 0xBFF00000
+
+
+def test_fchs_32_binary(fpga: FpgaModel):
+    # FCHS BL, AL: BL = fchs(AL), AL unmodified
+    fpga.reg_file.al.write(0x3F800000)  # +1.0f
+    fpga.reg_file.bl.write(0)
+
+    instr = MicroInstruction(op=MicroOp.FCHS, w=IW.W32, dst=Reg.BL, src1=Reg.AL, src=Reg.NONE)
+    elapsed = run_logic(fpga, instr)
+
+    assert elapsed == 1
+    assert fpga.reg_file.bl.read_int() == 0xBF800000  # -1.0f
+    assert fpga.reg_file.al.read_int() == 0x3F800000  # unmodified
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.SIGN)
+
+
+def test_fchs_64_binary(fpga: FpgaModel):
+    # FCHS BX, AX: BX = fchs(AX), AX unmodified
+    fpga.reg_file.al.write(0x12345678)
+    fpga.reg_file.ah.write(0x3FF00000)  # +1.0 double
+    fpga.reg_file.bl.write(0)
+    fpga.reg_file.bh.write(0)
+
+    instr = MicroInstruction(op=MicroOp.FCHS, w=IW.W64, dst=Reg.BL, src1=Reg.AL, src=Reg.NONE)
+    elapsed = run_logic(fpga, instr)
+
+    assert elapsed == 2
+    assert fpga.reg_file.bl.read_int() == 0x12345678
+    assert fpga.reg_file.bh.read_int() == 0xBFF00000  # -1.0 double
+    assert fpga.reg_file.al.read_int() == 0x12345678
+    assert fpga.reg_file.ah.read_int() == 0x3FF00000
     assert fpga.reg_file.status.is_bit_set(StatusFlag.SIGN)
 
 

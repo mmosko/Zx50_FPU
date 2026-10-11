@@ -94,28 +94,19 @@ class AdderBlock(FunctionalBlock):
         return AdderCore.adder_core(a=ha_bus, b=hb_bus, cin=cin, sub=sub)
 
     def _add_32(self, instr: MicroInstruction, cin: int, sub: bool) -> None:
+        """32-bit Add/Sub with carry/borrow.
+
+        dst <- (src1 or dst) +/- src +/- cin
         """
-        32-bit Add with carry
-
-            instr.dst <- instr.dst - instr.src
-
-        This allows 32-bit math on EA, EB, and C, in addition to AL or AH
-
-        :param instr:
-        :param cin:
-        :param sub:
-        :return:
-        """
-        assert (instr.src is not Reg.NONE)
-        assert (instr.dst is not Reg.NONE)
-
-        # Combinatorial setup in current cycle
+        assert instr.src is not Reg.NONE
+        assert instr.dst is not Reg.NONE
         src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
+
         self._ha_mux.select(src1.value)
         self._inputs.hb_mux.select(instr.src.value)
         adder_result = self._combinatorial_add(cin=cin, sub=sub)
 
-        # Writeback AL (edge-triggered tick in writeback)
+        # Writeback dst (edge-triggered tick in writeback)
         self._outputs.block_res.set(adder_result.res)
         self._outputs.block_res_sel.set(instr.dst.value)
         self._outputs.exec_done.set(1)
@@ -123,14 +114,17 @@ class AdderBlock(FunctionalBlock):
         self._writeback()
 
     def _add_64(self, instr: MicroInstruction, cin: int, sub: bool) -> None:
-        """ADD dst, src: 64-bit addition with carry (2 cycles)."""
-        assert (instr.src is not Reg.NONE)
-        self._validate_src64(instr.src)
+        """64-bit addition/subtraction with carry/borrow (2 cycles).
 
-        dst = instr.dst if instr.dst is not Reg.NONE else Reg.AL
-        src1 = instr.src1 if instr.src1 is not Reg.NONE else dst
+        dst_64 <- (src1_64 or dst_64) +/- src2_64 +/- cin
+        """
+        assert instr.src is not Reg.NONE
+        assert instr.dst is not Reg.NONE
+        src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
+
+        self._validate_src64(instr.dst)
         self._validate_src64(src1)
-        self._validate_src64(dst)
+        self._validate_src64(instr.src)
 
         # Low word
         self._ha_mux.select(src1.value)
@@ -140,7 +134,7 @@ class AdderBlock(FunctionalBlock):
         # Writeback low word (status write disabled for intermediate low word)
         self._outputs.status_wr_sel.set(0)
         self._outputs.block_res.set(low_result.res)
-        self._outputs.block_res_sel.set(dst.value)
+        self._outputs.block_res_sel.set(instr.dst.value)
         self._writeback()
 
         # Upper word with carry from lower word
@@ -160,7 +154,7 @@ class AdderBlock(FunctionalBlock):
         )
         self._wb_flags(final_result)
         self._outputs.block_res.set(high_result.res)
-        self._outputs.block_res_sel.set(dst.value | 0b0001)
+        self._outputs.block_res_sel.set(instr.dst.value | 0b0001)
         self._outputs.exec_done.set(1)
         self._writeback()
 
@@ -176,11 +170,12 @@ class AdderBlock(FunctionalBlock):
             self._cmp_64(instr)
 
     def _cmp_32(self, instr: MicroInstruction):
-        """CMP dst, src: 32-bit compare dst - src without modifying dst (1 cycle)."""
-        assert (instr.src is not Reg.NONE)
-        assert (instr.dst is not Reg.NONE)
-        assert (instr.src1 is Reg.NONE)
-        self._ha_mux.select(instr.dst.value)
+        """CMP src1, src2: 32-bit compare src1 - src2 without modifying dst (1 cycle)."""
+        assert instr.src is not Reg.NONE
+        assert instr.dst is not Reg.NONE
+        src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
+
+        self._ha_mux.select(src1.value)
         self._inputs.hb_mux.select(instr.src.value)
         adder_result = self._combinatorial_add(cin=0, sub=True)
 
@@ -190,14 +185,12 @@ class AdderBlock(FunctionalBlock):
         self._writeback()
 
     def _cmp_64(self, instr: MicroInstruction):
-        """CMP dst, src: 64-bit compare dst - src without modifying dst (2 cycles)."""
+        """CMP src1_64, src2_64: 64-bit compare src1_64 - src2_64 without modifying registers (2 cycles)."""
         assert instr.src is not Reg.NONE
+        assert instr.dst is not Reg.NONE
+        src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
         self._validate_src64(instr.src)
-
-        dst = instr.dst if instr.dst is not Reg.NONE else Reg.AL
-        src1 = instr.src1 if instr.src1 is not Reg.NONE else dst
         self._validate_src64(src1)
-        self._validate_src64(dst)
 
         # Low word (Cycle 1)
         self._ha_mux.select(src1.value)
@@ -272,8 +265,8 @@ class AdderBlock(FunctionalBlock):
 
     def _exp_op(self, instr: MicroInstruction, sub: bool) -> None:
         assert instr.src is not Reg.NONE
-        dst = instr.dst if instr.dst is not Reg.NONE else Reg.EA
-        src1 = instr.src1 if instr.src1 is not Reg.NONE else dst
+        assert instr.dst is not Reg.NONE
+        src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
 
         self._ha_mux.select(src1.value)
         self._inputs.hb_mux.select(instr.src.value)
@@ -289,7 +282,7 @@ class AdderBlock(FunctionalBlock):
         sf = bool(res_12 & self.SIGN_12BIT)
 
         self._outputs.block_res.set(res_12)
-        self._outputs.block_res_sel.set(dst.value)
+        self._outputs.block_res_sel.set(instr.dst.value)
 
         status_byte = (
             (int(zf) << StatusFlag.ZERO.value)
@@ -321,13 +314,37 @@ class AdderBlock(FunctionalBlock):
     )
 
     @staticmethod
-    def _resolve_unpack_pack_regs(instr: MicroInstruction) -> tuple[Reg, Reg]:
-        """Resolves (mantissa_reg, exp_reg) from instruction dst and src."""
+    def _resolve_unpack_pack_regs(instr: MicroInstruction) -> tuple[Reg, Reg, Reg]:
+        """Resolves (dst_reg, exp_reg, src_reg) for UNPACK/PACK operations.
+
+        dst_reg: target register for unpacked mantissa / packed float
+        exp_reg: exponent register (EA or EB)
+        src_reg: source register containing input float / input mantissa
+        """
         assert instr.dst is not Reg.NONE, "Destination register cannot be NONE"
         assert instr.src is not Reg.NONE, "Source register cannot be NONE"
-        if instr.dst in (Reg.EA, Reg.EB):
-            return instr.src, instr.dst
-        return instr.dst, instr.src
+
+        if instr.src1 is not Reg.NONE:
+            exp_reg = instr.src1
+            src_reg = instr.src
+            dst_reg = instr.dst
+        elif instr.src in (Reg.EA, Reg.EB):
+            # Legacy 2-field form: dst=mantissa, src=exp
+            exp_reg = instr.src
+            src_reg = instr.dst
+            dst_reg = instr.dst
+        elif instr.dst in (Reg.EA, Reg.EB):
+            # Legacy inverted form: dst=exp, src=mantissa
+            exp_reg = instr.dst
+            src_reg = instr.src
+            dst_reg = instr.src
+        else:
+            raise HardwareBusError(
+                f"UNPACK/PACK requires an exponent register (EA or EB), got dst={instr.dst}, src1={instr.src1}, src={instr.src}"
+            )
+
+        assert exp_reg in (Reg.EA, Reg.EB), f"Exponent register must be EA or EB, got {exp_reg}"
+        return dst_reg, exp_reg, src_reg
 
     def _unpack(self, instr: MicroInstruction) -> None:
         if instr.is_w32():
@@ -336,10 +353,10 @@ class AdderBlock(FunctionalBlock):
             self._unpack_64(instr)
 
     def _unpack_32(self, instr: MicroInstruction) -> None:
-        mantissa_reg, exp_reg = self._resolve_unpack_pack_regs(instr)
+        dst_reg, exp_reg, src_reg = self._resolve_unpack_pack_regs(instr)
 
-        # Read float value from mantissa_reg via HB_MUX
-        self._inputs.hb_mux.select(mantissa_reg.value)
+        # Read float value from src_reg via HB_MUX
+        self._inputs.hb_mux.select(src_reg.value)
         raw_val = self._inputs.hb_mux.read_int()
 
         sign_bit = (raw_val >> 31) & 1
@@ -364,23 +381,25 @@ class AdderBlock(FunctionalBlock):
         self._outputs.block_res_sel.set(exp_reg.value)
         self._writeback()
 
-        # Cycle 2: Write restored mantissa into mantissa_reg and commit status flags
+        # Cycle 2: Write restored mantissa into dst_reg and commit status flags
         self._outputs.res_status.set(status_byte)
         self._outputs.status_wr_sel.set(self.STATUS_UNPACK_MASK)
         self._outputs.block_res.set(mantissa)
-        self._outputs.block_res_sel.set(mantissa_reg.value)
+        self._outputs.block_res_sel.set(dst_reg.value)
         self._outputs.exec_done.set(1)
         self._writeback()
 
     def _unpack_64(self, instr: MicroInstruction) -> None:
-        mantissa_reg, exp_reg = self._resolve_unpack_pack_regs(instr)
-        self._validate_src64(mantissa_reg)
-        mantissa_reg_hi = Reg(mantissa_reg.value | 0b0001)
+        dst_reg, exp_reg, src_reg = self._resolve_unpack_pack_regs(instr)
+        self._validate_src64(src_reg)
+        self._validate_src64(dst_reg)
+        src_reg_hi = Reg(src_reg.value | 0b0001)
+        dst_reg_hi = Reg(dst_reg.value | 0b0001)
 
-        # Read high and low words via HB_MUX
-        self._inputs.hb_mux.select(mantissa_reg_hi.value)
+        # Read high and low words via HB_MUX from src_reg
+        self._inputs.hb_mux.select(src_reg_hi.value)
         raw_hi = self._inputs.hb_mux.read_int()
-        self._inputs.hb_mux.select(mantissa_reg.value)
+        self._inputs.hb_mux.select(src_reg.value)
         raw_lo = self._inputs.hb_mux.read_int()
 
         sign_bit = (raw_hi >> 31) & 1
@@ -405,11 +424,18 @@ class AdderBlock(FunctionalBlock):
         self._outputs.block_res_sel.set(exp_reg.value)
         self._writeback()
 
-        # Cycle 2: Write restored high mantissa into mantissa_reg_hi and commit status flags
+        # If ternary and dst != src, copy low mantissa to dst_reg
+        if dst_reg != src_reg:
+            self._outputs.status_wr_sel.set(0)
+            self._outputs.block_res.set(raw_lo)
+            self._outputs.block_res_sel.set(dst_reg.value)
+            self._writeback()
+
+        # Final Cycle: Write restored high mantissa into dst_reg_hi and commit status flags
         self._outputs.res_status.set(status_byte)
         self._outputs.status_wr_sel.set(self.STATUS_UNPACK_MASK)
         self._outputs.block_res.set(mantissa_hi)
-        self._outputs.block_res_sel.set(mantissa_reg_hi.value)
+        self._outputs.block_res_sel.set(dst_reg_hi.value)
         self._outputs.exec_done.set(1)
         self._writeback()
 
@@ -420,7 +446,7 @@ class AdderBlock(FunctionalBlock):
             self._pack_64(instr)
 
     def _pack_32(self, instr: MicroInstruction) -> None:
-        mantissa_reg, exp_reg = self._resolve_unpack_pack_regs(instr)
+        dst_reg, exp_reg, src_reg = self._resolve_unpack_pack_regs(instr)
 
         # Read exponent from exp_reg via HA_MUX
         self._ha_mux.select(exp_reg.value)
@@ -431,8 +457,8 @@ class AdderBlock(FunctionalBlock):
         else:
             exp_s = exp_12
 
-        # Read mantissa from mantissa_reg via HB_MUX
-        self._inputs.hb_mux.select(mantissa_reg.value)
+        # Read mantissa from src_reg via HB_MUX
+        self._inputs.hb_mux.select(src_reg.value)
         mantissa = self._inputs.hb_mux.read_int()
 
         sign = 1 if self._inputs.status.is_bit_set(StatusFlag.SIGN) else 0
@@ -469,14 +495,16 @@ class AdderBlock(FunctionalBlock):
         self._outputs.res_status.set(status_byte)
         self._outputs.status_wr_sel.set(self.STATUS_PACK_MASK)
         self._outputs.block_res.set(packed)
-        self._outputs.block_res_sel.set(mantissa_reg.value)
+        self._outputs.block_res_sel.set(dst_reg.value)
         self._outputs.exec_done.set(1)
         self._writeback()
 
     def _pack_64(self, instr: MicroInstruction) -> None:
-        mantissa_reg, exp_reg = self._resolve_unpack_pack_regs(instr)
-        self._validate_src64(mantissa_reg)
-        mantissa_reg_hi = Reg(mantissa_reg.value | 0b0001)
+        dst_reg, exp_reg, src_reg = self._resolve_unpack_pack_regs(instr)
+        self._validate_src64(src_reg)
+        self._validate_src64(dst_reg)
+        src_reg_hi = Reg(src_reg.value | 0b0001)
+        dst_reg_hi = Reg(dst_reg.value | 0b0001)
 
         # Read exponent from exp_reg via HA_MUX
         self._ha_mux.select(exp_reg.value)
@@ -487,10 +515,10 @@ class AdderBlock(FunctionalBlock):
         else:
             exp_s = exp_12
 
-        # Read mantissa low and high words via HB_MUX
-        self._inputs.hb_mux.select(mantissa_reg.value)
+        # Read mantissa low and high words via HB_MUX from src_reg
+        self._inputs.hb_mux.select(src_reg.value)
         mantissa_lo = self._inputs.hb_mux.read_int()
-        self._inputs.hb_mux.select(mantissa_reg_hi.value)
+        self._inputs.hb_mux.select(src_reg_hi.value)
         mantissa_hi = self._inputs.hb_mux.read_int()
 
         sign = 1 if self._inputs.status.is_bit_set(StatusFlag.SIGN) else 0
@@ -528,39 +556,37 @@ class AdderBlock(FunctionalBlock):
             | (int(uf) << StatusFlag.UNDERFLOW.value)
         )
 
-        # Cycle 1: write low word to mantissa_reg
+        # Cycle 1: write low word to dst_reg
         self._outputs.status_wr_sel.set(0)
         self._outputs.block_res.set(packed_lo)
-        self._outputs.block_res_sel.set(mantissa_reg.value)
+        self._outputs.block_res_sel.set(dst_reg.value)
         self._writeback()
 
-        # Cycle 2: write high word to mantissa_reg_hi and commit status flags
+        # Cycle 2: write high word to dst_reg_hi and commit status flags
         self._outputs.res_status.set(status_byte)
         self._outputs.status_wr_sel.set(self.STATUS_PACK_MASK)
         self._outputs.block_res.set(packed_hi)
-        self._outputs.block_res_sel.set(mantissa_reg_hi.value)
+        self._outputs.block_res_sel.set(dst_reg_hi.value)
         self._outputs.exec_done.set(1)
         self._writeback()
 
-
     def _mul(self, instr: MicroInstruction, signed: bool = True) -> None:
-        """MUL dst, src: 32-bit multiply yielding 64-bit product in {dst_hi, dst} (16 cycles).
-
-        :param instr: MicroInstruction with dst (e.g. AL) and src (e.g. BL)
-        :param signed: True for signed two's-complement multiplication, False for unsigned
-        """
+        """MUL dst, src (or dst, src1, src): 32-bit multiply yielding 64-bit product in {AH, AL} (16 cycles)."""
         assert instr.src is not Reg.NONE
+        assert instr.dst is not Reg.NONE
+        src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
+
         if not instr.is_w32():
             raise NotImplementedError("64-bit multiplication is orchestrated via microcode")
 
-        if instr.dst not in (Reg.NONE, Reg.AL):
+        if instr.dst != Reg.AL:
             raise HardwareBusError(f"MUL destination on HA_MUX must be AL, got {instr.dst}")
 
-        dst = Reg.AL
+        # Hardware Booth multiplier outputs 64-bit product into fixed {AH, AL}
+        dst_lo = Reg.AL
         dst_hi = Reg.AH
 
         # Step 1: Combinatorial latch of inputs from HA_MUX and HB_MUX
-        src1 = instr.src1 if instr.src1 is not Reg.NONE else dst
         self._ha_mux.select(src1.value)
         self._inputs.hb_mux.select(instr.src.value)
         ha_val = self._inputs.ha_mux.read()
@@ -571,13 +597,13 @@ class AdderBlock(FunctionalBlock):
         # Step 2: 14 compute cycles (Radix-4 Booth iteration)
         self._clock.tick(14)
 
-        # Step 3: Cycle 15 - Writeback low word (e.g. AL) without status write
+        # Step 3: Cycle 15 - Writeback low word (AL) without status write
         self._outputs.status_wr_sel.set(0)
         self._outputs.block_res.set(mul_result.res[0:4])
-        self._outputs.block_res_sel.set(dst.value)
+        self._outputs.block_res_sel.set(dst_lo.value)
         self._writeback()
 
-        # Step 4: Cycle 16 - Writeback high word (e.g. AH) and commit status flags
+        # Step 4: Cycle 16 - Writeback high word (AH) and commit status flags
         self._outputs.block_res.set(mul_result.res[4:8])
         self._outputs.block_res_sel.set(dst_hi.value)
         self._outputs.exec_done.set(1)
@@ -585,23 +611,20 @@ class AdderBlock(FunctionalBlock):
         self._writeback()
 
     def _div(self, instr: MicroInstruction, signed: bool = True) -> None:
-        """DIV dst, src: 32-bit division yielding quotient in AL and remainder in DL (32 cycles).
-
-        :param instr: MicroInstruction with dst (e.g. AL) and src (e.g. BL)
-        :param signed: True for signed two's-complement division, False for unsigned
-        """
+        """DIV dst, src (or dst, src1, src): 32-bit division yielding quotient in AL and remainder in DL (32 cycles)."""
         assert instr.src is not Reg.NONE
+        assert instr.dst is not Reg.NONE
+        src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
+
         if not instr.is_w32():
             raise NotImplementedError("64-bit division is orchestrated via microcode")
 
-        if instr.dst not in (Reg.NONE, Reg.AL):
+        if instr.dst != Reg.AL:
             raise HardwareBusError(f"DIV destination on HA_MUX must be AL, got {instr.dst}")
 
-        dst = Reg.AL
         rem_reg = Reg.DL
 
         # Step 1: Combinatorial latch of inputs from HA_MUX and HB_MUX
-        src1 = instr.src1 if instr.src1 is not Reg.NONE else dst
         self._ha_mux.select(src1.value)
         self._inputs.hb_mux.select(instr.src.value)
         ha_val = self._inputs.ha_mux.read()
@@ -620,10 +643,10 @@ class AdderBlock(FunctionalBlock):
         # Step 2: 30 compute cycles (Non-Restoring Division iterations)
         self._clock.tick(30)
 
-        # Step 3: Cycle 31 - Writeback quotient to AL without status write
+        # Step 3: Cycle 31 - Writeback quotient to dst without status write
         self._outputs.status_wr_sel.set(0)
         self._outputs.block_res.set(div_result.quotient)
-        self._outputs.block_res_sel.set(dst.value)
+        self._outputs.block_res_sel.set(instr.dst.value)
         self._writeback()
 
         # Step 4: Cycle 32 - Writeback remainder to DL and commit status flags

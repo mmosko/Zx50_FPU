@@ -499,6 +499,62 @@ def test_swap_with_fl(fpga: FpgaModel):
     assert fpga.reg_file.bl.read_int() == 0xAAAAAAAA
 
 
+def test_swap_64_basic(fpga: FpgaModel):
+    """SWAP AX, BX exchanges (AL, AH) and (BL, BH)."""
+    fpga.reg_file.al.write(0x11112222)
+    fpga.reg_file.ah.write(0x33334444)
+    fpga.reg_file.bl.write(0x55556666)
+    fpga.reg_file.bh.write(0x77778888)
+    microcode = [
+        MicroInstruction(op=MicroOp.SWAP, dst=Reg.AL, src=Reg.BL, w=IW.W64),
+    ]
+    fpga.dispatcher._run(microcode)
+    assert fpga.reg_file.al.read_int() == 0x55556666
+    assert fpga.reg_file.ah.read_int() == 0x77778888
+    assert fpga.reg_file.bl.read_int() == 0x11112222
+    assert fpga.reg_file.bh.read_int() == 0x33334444
+
+
+def test_swap_64_same_reg(fpga: FpgaModel):
+    """SWAP AX, AX is a no-op."""
+    fpga.reg_file.al.write(0x12345678)
+    fpga.reg_file.ah.write(0x9ABCDEF0)
+    microcode = [
+        MicroInstruction(op=MicroOp.SWAP, dst=Reg.AL, src=Reg.AL, w=IW.W64),
+    ]
+    fpga.dispatcher._run(microcode)
+    assert fpga.reg_file.al.read_int() == 0x12345678
+    assert fpga.reg_file.ah.read_int() == 0x9ABCDEF0
+
+
+def test_swap_64_with_fx(fpga: FpgaModel):
+    """SWAP FX, BX uses DX as fallback intermediary."""
+    fpga.reg_file.fl.write(0x11111111)
+    fpga.reg_file.fh.write(0x22222222)
+    fpga.reg_file.bl.write(0x33333333)
+    fpga.reg_file.bh.write(0x44444444)
+    microcode = [
+        MicroInstruction(op=MicroOp.SWAP, dst=Reg.FL, src=Reg.BL, w=IW.W64),
+    ]
+    fpga.dispatcher._run(microcode)
+    assert fpga.reg_file.fl.read_int() == 0x33333333
+    assert fpga.reg_file.fh.read_int() == 0x44444444
+    assert fpga.reg_file.bl.read_int() == 0x11111111
+    assert fpga.reg_file.bh.read_int() == 0x22222222
+
+
+def test_swap_src1_operand(fpga: FpgaModel):
+    """SWAP supports specifying first operand as src1 alongside dst."""
+    fpga.reg_file.al.write(0xAAAAAAAA)
+    fpga.reg_file.bl.write(0x55555555)
+    microcode = [
+        MicroInstruction(op=MicroOp.SWAP, dst=Reg.AL, src1=Reg.AL, src=Reg.BL),
+    ]
+    fpga.dispatcher._run(microcode)
+    assert fpga.reg_file.al.read_int() == 0x55555555
+    assert fpga.reg_file.bl.read_int() == 0xAAAAAAAA
+
+
 def test_ssav_sres_basic(fpga: FpgaModel):
     """SSAV saves status flags and SRES restores condition flags."""
     # Set initial flags: ZERO, CARRY, SIGN

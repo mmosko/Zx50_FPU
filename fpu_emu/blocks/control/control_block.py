@@ -75,7 +75,11 @@ class ControlBlock(FunctionalBlock):
                 raise HardwareBusError(f"Unsupported opcode: {instr.op}")
 
     def _jmp(self, instr: MicroInstruction) -> None:
-        assert (instr.op == MicroOp.JMP)
+        assert instr.op == MicroOp.JMP
+        assert instr.dst is Reg.NONE
+        assert instr.src1 is Reg.NONE
+        assert instr.src is Reg.NONE or instr.src == Reg.IMM
+
         self._inputs.hb_mux.select(Reg.IMM.value)
         addr = self._inputs.hb_mux.read()
         self._outputs.block_res.set(addr)
@@ -102,14 +106,22 @@ class ControlBlock(FunctionalBlock):
             return not bit_is_set if instr.op == MicroOp.JZ else bit_is_set
 
     def _jnz(self, instr: MicroInstruction) -> None:
-        assert (instr.op == MicroOp.JNZ)
+        assert instr.op == MicroOp.JNZ
+        assert instr.dst is Reg.NONE
+        assert instr.src1 is Reg.NONE
+        assert instr.src is Reg.NONE or instr.src == Reg.IMM
+
         flag = 1 if self._test_condition(instr) else 0
         self._jump_zero(flag)
         self._clock.tick()
         # N.B.: No call to _writeback, the UPC is handled by the upc_mux
 
     def _jz(self, instr: MicroInstruction) -> None:
-        assert (instr.op == MicroOp.JZ)
+        assert instr.op == MicroOp.JZ
+        assert instr.dst is Reg.NONE
+        assert instr.src1 is Reg.NONE
+        assert instr.src is Reg.NONE or instr.src == Reg.IMM
+
         flag = 1 if self._test_condition(instr) else 0
         self._jump_zero(flag)
         self._clock.tick()
@@ -124,7 +136,11 @@ class ControlBlock(FunctionalBlock):
         self._outputs.exec_done.set(1)
 
     def _djnz(self, instr: MicroInstruction) -> None:
-        assert (instr.op == MicroOp.DJNZ)
+        assert instr.op == MicroOp.DJNZ
+        assert instr.dst is Reg.NONE
+        assert instr.src1 is Reg.NONE
+        assert instr.src is Reg.NONE or instr.src == Reg.IMM
+
         count_adder = self._count_adder
         new_c = count_adder.val
         is_zero = count_adder.is_zero
@@ -143,7 +159,11 @@ class ControlBlock(FunctionalBlock):
         self._writeback()
 
     def _call(self, instr: MicroInstruction) -> None:
-        assert (instr.op == MicroOp.CALL)
+        assert instr.op == MicroOp.CALL
+        assert instr.dst is Reg.NONE
+        assert instr.src1 is Reg.NONE
+        assert instr.src is Reg.NONE or instr.src == Reg.IMM
+
         csp = self._csp.read_int()
         next_csp = csp + 1
 
@@ -169,7 +189,11 @@ class ControlBlock(FunctionalBlock):
         # N.B.: No call to _writeback, the UPC is handled by the upc_mux
 
     def _ret(self, instr: MicroInstruction) -> None:
-        assert (instr.op == MicroOp.RET)
+        assert instr.op == MicroOp.RET
+        assert instr.dst is Reg.NONE
+        assert instr.src1 is Reg.NONE
+        assert instr.src is Reg.NONE
+
         # small adder or state machine for 4-bit CSP
         csp = self._csp.read_int() - 1
         assert 0 <= csp < self._call_stack.size, f"Call stack out of range: {csp}"
@@ -184,7 +208,11 @@ class ControlBlock(FunctionalBlock):
         # N.B.: No call to _writeback, the UPC is handled by the upc_mux
 
     def _nop(self, instr: MicroInstruction) -> None:
-        assert (instr.op == MicroOp.NOP)
+        assert instr.op == MicroOp.NOP
+        assert instr.dst is Reg.NONE
+        assert instr.src1 is Reg.NONE
+        assert instr.src is Reg.NONE
+
         self._outputs.exec_wb.set(0)
         self._outputs.status_wr_sel.set(0)
         self._outputs.block_res_sel.set(Reg.NONE.value)
@@ -192,7 +220,11 @@ class ControlBlock(FunctionalBlock):
         self._clock.tick()
 
     def _halt(self, instr: MicroInstruction) -> None:
-        assert (instr.op == MicroOp.HALT)
+        assert instr.op == MicroOp.HALT
+        assert instr.dst is Reg.NONE
+        assert instr.src1 is Reg.NONE
+        assert instr.src is Reg.NONE
+
         bsy_mask = 1 << StatusFlag.BUSY.value
         self._outputs.status_wr_sel.set(bsy_mask)
         self._outputs.res_status.set(0)  # BUSY=0
