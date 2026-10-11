@@ -46,6 +46,7 @@
 
 .include "asm/conv_i32_i64.asm"
 .include "asm/conv_i64_i32.asm"
+.include "asm/conv_u32_u64.asm"
 
 .include "asm/push_const.asm"
 .include "asm/cp_mem.asm"
