@@ -20,10 +20,7 @@
 .include "asm/mul_u64.asm"
 
 .include "asm/div_f32.asm"
-.include "asm/div_i32.asm"
-.include "asm/div_u32.asm"
-.include "asm/div_i64.asm"
-.include "asm/div_u64.asm"
+.include "asm/div_int.asm"
 
 .include "asm/sqrt_f32.asm"
 .include "asm/log2_f32.asm"
