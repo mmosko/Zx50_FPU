@@ -669,7 +669,7 @@ def test_adder_block_unpack_f32_one(fpga: FpgaModel):
     fpga.reg_file.al.write(0x3F800000)
     fpga.reg_file.status.set_bit(StatusFlag.SIGN, True)  # Previous sign negative
 
-    instr = MicroInstruction(op=MicroOp.UNPACK, w=IW.W32, dst=Reg.AL, src=Reg.EA)
+    instr = MicroInstruction(op=MicroOp.UNPACK, w=IW.W32, dst=Reg.AL, src1=Reg.EA)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
 
     clk_start = fpga.clock.cycles
@@ -689,7 +689,7 @@ def test_adder_block_unpack_f32_negative(fpga: FpgaModel):
     fpga.reg_file.al.write(0xBFC00000)
     fpga.reg_file.status.set_bit(StatusFlag.SIGN, False)
 
-    instr = MicroInstruction(op=MicroOp.UNPACK, w=IW.W32, dst=Reg.AL, src=Reg.EA)
+    instr = MicroInstruction(op=MicroOp.UNPACK, w=IW.W32, dst=Reg.AL, src1=Reg.EA)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
     fpga.adder.execute()
 
@@ -703,7 +703,7 @@ def test_adder_block_unpack_f32_negative(fpga: FpgaModel):
 def test_adder_block_unpack_f32_zero(fpga: FpgaModel):
     # -0.0f = 0x80000000
     fpga.reg_file.al.write(0x80000000)
-    instr = MicroInstruction(op=MicroOp.UNPACK, w=IW.W32, dst=Reg.AL, src=Reg.EA)
+    instr = MicroInstruction(op=MicroOp.UNPACK, w=IW.W32, dst=Reg.AL, src1=Reg.EA)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
     fpga.adder.execute()
 
@@ -716,7 +716,7 @@ def test_adder_block_unpack_f32_zero(fpga: FpgaModel):
 def test_adder_block_unpack_f32_secondary_regs(fpga: FpgaModel):
     # Test unpacking into BL and EB
     fpga.reg_file.bl.write(0x40000000)  # +2.0f (exp=128, frac=0)
-    instr = MicroInstruction(op=MicroOp.UNPACK, w=IW.W32, dst=Reg.BL, src=Reg.EB)
+    instr = MicroInstruction(op=MicroOp.UNPACK, w=IW.W32, dst=Reg.BL, src1=Reg.EB)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
     fpga.adder.execute()
 
@@ -730,7 +730,7 @@ def test_adder_block_unpack_f64_one(fpga: FpgaModel):
     fpga.reg_file.al.write(0x00000000)
     fpga.reg_file.status.set_bit(StatusFlag.SIGN, False)
 
-    instr = MicroInstruction(op=MicroOp.UNPACK, w=IW.W64, dst=Reg.AL, src=Reg.EA)
+    instr = MicroInstruction(op=MicroOp.UNPACK, w=IW.W64, dst=Reg.AL, src1=Reg.EA)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
 
     clk_start = fpga.clock.cycles
@@ -750,7 +750,7 @@ def test_adder_block_unpack_f64_negative_zero(fpga: FpgaModel):
     fpga.reg_file.ah.write(0x80000000)
     fpga.reg_file.al.write(0x00000000)
 
-    instr = MicroInstruction(op=MicroOp.UNPACK, w=IW.W64, dst=Reg.AL, src=Reg.EA)
+    instr = MicroInstruction(op=MicroOp.UNPACK, w=IW.W64, dst=Reg.AL, src1=Reg.EA)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
     fpga.adder.execute()
 
@@ -767,7 +767,7 @@ def test_adder_block_pack_f32_normal(fpga: FpgaModel):
     fpga.reg_file.ea.write(127)
     fpga.reg_file.status.set_bit(StatusFlag.SIGN, False)
 
-    instr = MicroInstruction(op=MicroOp.PACK, w=IW.W32, dst=Reg.AL, src=Reg.EA)
+    instr = MicroInstruction(op=MicroOp.PACK, w=IW.W32, dst=Reg.AL, src1=Reg.EA)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
 
     clk_start = fpga.clock.cycles
@@ -787,7 +787,7 @@ def test_adder_block_pack_f32_negative(fpga: FpgaModel):
     fpga.reg_file.ea.write(127)
     fpga.reg_file.status.set_bit(StatusFlag.SIGN, True)
 
-    instr = MicroInstruction(op=MicroOp.PACK, w=IW.W32, dst=Reg.AL, src=Reg.EA)
+    instr = MicroInstruction(op=MicroOp.PACK, w=IW.W32, dst=Reg.AL, src1=Reg.EA)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
     fpga.adder.execute()
 
@@ -802,7 +802,7 @@ def test_adder_block_pack_f32_zero_mantissa(fpga: FpgaModel):
     fpga.reg_file.ea.write(127)
     fpga.reg_file.status.set_bit(StatusFlag.SIGN, True)
 
-    instr = MicroInstruction(op=MicroOp.PACK, w=IW.W32, dst=Reg.AL, src=Reg.EA)
+    instr = MicroInstruction(op=MicroOp.PACK, w=IW.W32, dst=Reg.AL, src1=Reg.EA)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
     fpga.adder.execute()
 
@@ -819,7 +819,7 @@ def test_adder_block_pack_f32_overflow(fpga: FpgaModel):
     fpga.reg_file.ea.write(255)
     fpga.reg_file.status.set_bit(StatusFlag.SIGN, False)
 
-    instr = MicroInstruction(op=MicroOp.PACK, w=IW.W32, dst=Reg.AL, src=Reg.EA)
+    instr = MicroInstruction(op=MicroOp.PACK, w=IW.W32, dst=Reg.AL, src1=Reg.EA)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
     fpga.adder.execute()
 
@@ -834,7 +834,7 @@ def test_adder_block_pack_f32_underflow(fpga: FpgaModel):
     fpga.reg_file.ea.write(0)
     fpga.reg_file.status.set_bit(StatusFlag.SIGN, True)
 
-    instr = MicroInstruction(op=MicroOp.PACK, w=IW.W32, dst=Reg.AL, src=Reg.EA)
+    instr = MicroInstruction(op=MicroOp.PACK, w=IW.W32, dst=Reg.AL, src1=Reg.EA)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
     fpga.adder.execute()
 
@@ -851,7 +851,7 @@ def test_adder_block_pack_f64_normal(fpga: FpgaModel):
     fpga.reg_file.ea.write(1023)
     fpga.reg_file.status.set_bit(StatusFlag.SIGN, False)
 
-    instr = MicroInstruction(op=MicroOp.PACK, w=IW.W64, dst=Reg.AL, src=Reg.EA)
+    instr = MicroInstruction(op=MicroOp.PACK, w=IW.W64, dst=Reg.AL, src1=Reg.EA)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
 
     clk_start = fpga.clock.cycles
@@ -871,7 +871,7 @@ def test_adder_block_pack_f64_overflow(fpga: FpgaModel):
     fpga.reg_file.ea.write(2047)
     fpga.reg_file.status.set_bit(StatusFlag.SIGN, False)
 
-    instr = MicroInstruction(op=MicroOp.PACK, w=IW.W64, dst=Reg.AL, src=Reg.EA)
+    instr = MicroInstruction(op=MicroOp.PACK, w=IW.W64, dst=Reg.AL, src1=Reg.EA)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
     fpga.adder.execute()
 
@@ -887,7 +887,7 @@ def test_adder_block_pack_f64_underflow(fpga: FpgaModel):
     fpga.reg_file.ea.write(0)
     fpga.reg_file.status.set_bit(StatusFlag.SIGN, True)
 
-    instr = MicroInstruction(op=MicroOp.PACK, w=IW.W64, dst=Reg.AL, src=Reg.EA)
+    instr = MicroInstruction(op=MicroOp.PACK, w=IW.W64, dst=Reg.AL, src1=Reg.EA)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
     fpga.adder.execute()
 
@@ -903,12 +903,12 @@ def test_adder_block_unpack_pack_roundtrip(fpga: FpgaModel):
     fpga.reg_file.al.write(original)
 
     # UNPACK AL, EA
-    unpack_instr = MicroInstruction(op=MicroOp.UNPACK, w=IW.W32, dst=Reg.AL, src=Reg.EA)
+    unpack_instr = MicroInstruction(op=MicroOp.UNPACK, w=IW.W32, dst=Reg.AL, src1=Reg.EA)
     unpack_instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
     fpga.adder.execute()
 
     # PACK AL, EA
-    pack_instr = MicroInstruction(op=MicroOp.PACK, w=IW.W32, dst=Reg.AL, src=Reg.EA)
+    pack_instr = MicroInstruction(op=MicroOp.PACK, w=IW.W32, dst=Reg.AL, src1=Reg.EA)
     pack_instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
     fpga.adder.execute()
 

@@ -317,33 +317,22 @@ class AdderBlock(FunctionalBlock):
     def _resolve_unpack_pack_regs(instr: MicroInstruction) -> tuple[Reg, Reg, Reg]:
         """Resolves (dst_reg, exp_reg, src_reg) for UNPACK/PACK operations.
 
-        dst_reg: target register for unpacked mantissa / packed float
-        exp_reg: exponent register (EA or EB)
-        src_reg: source register containing input float / input mantissa
+        dst is always dst. src1 is always exp. The only choice is if src2 is present or not.
+        dst_reg: target register for unpacked mantissa / packed float (dst)
+        exp_reg: exponent register EA or EB (src1)
+        src_reg: source register containing input float / input mantissa (src2 if present, else dst)
         """
         assert instr.dst is not Reg.NONE, "Destination register cannot be NONE"
-        assert instr.src is not Reg.NONE, "Source register cannot be NONE"
-
-        if instr.src1 is not Reg.NONE:
-            exp_reg = instr.src1
-            src_reg = instr.src
-            dst_reg = instr.dst
-        elif instr.src in (Reg.EA, Reg.EB):
-            # Legacy 2-field form: dst=mantissa, src=exp
-            exp_reg = instr.src
-            src_reg = instr.dst
-            dst_reg = instr.dst
-        elif instr.dst in (Reg.EA, Reg.EB):
-            # Legacy inverted form: dst=exp, src=mantissa
-            exp_reg = instr.dst
-            src_reg = instr.src
-            dst_reg = instr.src
-        else:
+        assert instr.src1 is not Reg.NONE, "Exponent register (src1) cannot be NONE"
+        if instr.src1 not in (Reg.EA, Reg.EB):
             raise HardwareBusError(
-                f"UNPACK/PACK requires an exponent register (EA or EB), got dst={instr.dst}, src1={instr.src1}, src={instr.src}"
+                f"UNPACK/PACK requires an exponent register (EA or EB) for src1, got {instr.src1}"
             )
 
-        assert exp_reg in (Reg.EA, Reg.EB), f"Exponent register must be EA or EB, got {exp_reg}"
+        dst_reg = instr.dst
+        exp_reg = instr.src1
+        src_reg = instr.src if instr.src is not Reg.NONE else instr.dst
+
         return dst_reg, exp_reg, src_reg
 
     def _unpack(self, instr: MicroInstruction) -> None:
