@@ -8,8 +8,8 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 
 ## Current Status & Capacity
 
-- **Test Suite Status:** 100% pass rate (**1,057 / 1,057 tests passing**).
-- **Microcode Capacity:** **873 / 1,024 words used** (151 instruction words of headroom remaining).
+- **Test Suite Status:** 100% pass rate (**1,097 / 1,097 tests passing**).
+- **Microcode Capacity:** **895 / 1,024 words used** (129 instruction words of headroom remaining).
 - **Hardware Call Stack:** 16-deep $\times$ 10-bit return-address stack in distributed LUT RAM (`RAM16X1S`) with 4-bit `CSP` pointer fully implemented and verified.
 - **Datapath Bus Symmetry:** `HA_MUX` and `HB_MUX` widened to full 4-bit symmetry (14:1 32-bit muxing across all 10 registers `AL`..`FH`, `EA`, `EB`, `C`, and `IMM`), allowing any register as `src1` without register shuffling.
 - **Completed 32-Bit Math Operations:**
@@ -29,27 +29,25 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 
 ---
 
-## Next Steps: Architecture Improvements to Reduce Microcode Size
+## Architectural Optimizations
 
-To reclaim microcode capacity for remaining 64-bit routines (`MUL_F64`, `DIV_F64`, `SQRT_F64`, and 64-bit CORDIC), the following architectural and microcode improvements are prioritized:
-
-### 1. Populate Range Reduction Constants in `CONST` ROM (~8 Words Saved)
-- [ ] **Add Cody-Waite Constants to `CONST` ROM**:
-  - Add $C_1 = 102943$ and $C_2 = 11601$ into unused slots of `CONST` ROM.
-  - Eliminates multi-instruction synthesis loops (`LDI`, `LSL`, `LDI`, `ADD`), saving **8 instructions**.
-
-### 2. Widen `HA_MUX` to Full 4-Bit Symmetry (~20–30 Words Saved)
+### 1. Widen `HA_MUX` to Full 4-Bit Symmetry (~20–30 Words Saved)
 - [x] **Expand `HA_MUX` from 3 Bits to 4 Bits (Completed)**:
   - `HA_MUX` and `HB_MUX` both support full 4-bit addressing across `{AL, AH, BL, BH, CL, CH, DL, DH, FL, FH, EA, EB, C, IMM}`.
   - Eliminates redundant register shuffling (`MOV AL, FL; ADD AL, BL; MOV FL, AL`), allowing any register as `src1`.
+
+### 2. Populate Range Reduction Constants in `CONST` ROM (Low Priority - Minimal Savings)
+- [ ] **Add Cody-Waite Constants to `CONST` ROM (Low Priority)**:
+  - Add $C_1 = 102943$ and $C_2 = 11601$ into unused slots of `CONST` ROM.
+  - Low priority: saves very little microcode space (~8 words) and is deferred in favor of functional features.
 
 ---
 
 ## Remaining Functional Roadmap
 
 ### 1. Pure Integer Conversions (Final Remaining Pure-Integer Operations)
-- [ ] Implement `CONV_I32_I64` (`0xC8`): Sign-extend signed 32-bit int to 64-bit int (net $+4$ bytes on stack).
-- [ ] Implement `CONV_I64_I32` (`0xCA`): Narrow signed 64-bit int to 32-bit int with truncation overflow check ($V=1$) (net $-4$ bytes on stack).
+- [x] Implement `CONV_I32_I64` (`0xC8`): Sign-extend signed 32-bit int to 64-bit int (net $+4$ bytes on stack).
+- [x] Implement `CONV_I64_I32` (`0xCA`): Narrow signed 64-bit int to 32-bit int with truncation overflow check ($V=1$) (net $-4$ bytes on stack).
 - [ ] Implement `CONV_U32_U64` (`0xC2`): Zero-extend unsigned 32-bit uint to 64-bit uint (net $+4$ bytes on stack).
 - [ ] Implement `CONV_U64_U32` (`0xC3`): Narrow unsigned 64-bit uint to 32-bit uint with truncation overflow check ($V=1$) (net $-4$ bytes on stack).
 - [ ] Implement `CONV_U32_I32` (`0xC6`): Convert unsigned 32-bit uint to signed 32-bit int with range overflow check ($V=1$ if $u32 \ge 2^{31}$) (net $0$ bytes).

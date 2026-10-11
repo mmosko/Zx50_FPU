@@ -2286,11 +2286,9 @@ After execution of JMP 0x040:
 
 ---
 
-```
 ================================================================================
-JNZ [flag,] addr — JUMP IF FLAG NOT SET (DEFAULT: ZERO FLAG)
+JNZ [flag,] addr — JUMP IF NOT ZERO / JUMP IF FLAG SET
 ================================================================================
-```
 
 #### Status Flags Affected
 
@@ -2301,16 +2299,19 @@ JNZ [flag,] addr — JUMP IF FLAG NOT SET (DEFAULT: ZERO FLAG)
 +-----+-----+-----+-----+-----+-----+-----+-----+
 ```
 
-* **Flags**: None affected.
+* **Flags**: None affected[cite: 7].
 
-The condition operand `flag` is always a status flag (`ZF`, `ERR`, `UF`, `VF`, `CF`, `SF`, `DF`, `BSY`). If omitted,
-`ZF` is implied.
+The condition operand `flag` can be `ZERO` (default if omitted), `ERR`, `UF`, `VF`, `CF`, `SF`, `DF`, or `BSY`[cite: 7].
 
 #### Register Transfer & Datapath Flow
 
 ```text
-cond = flag if flag provided else STATUS.Z
-if cond == 0:
+if flag is omitted or flag == ZERO:
+    branch_taken = (STATUS.Z == 0)     # Jump if result is NOT zero (ZF == 0)
+else:
+    branch_taken = (STATUS[flag] == 1) # Jump if flag bit value is 1 (SET)
+
+if branch_taken:
     UPC [9:0] <- INSTR [9:0]  (addr)
 else:
     UPC [9:0] <- UPC [9:0] + 1
@@ -2318,37 +2319,32 @@ else:
 
 #### Instruction Word Format
 
-`OPCODE = 011001`. `W = 0` (1 cycle). `RES_SEL = UPC`, `HA_MUX = IMM`, `HB_MUX = NONE`, `FLAG_COND = flag`.
+`OPCODE = 011001` (`0x19`). `W = 0` (1 cycle). `RES_SEL = UPC`, `HA_MUX = IMM`, `HB_MUX = NONE`, `FLAG_COND = flag`[cite: 7].
 
 #### Description
 
-Branches to `addr` if the selected status `flag` is 0. If `flag` is not specified, `STATUS.Z` is tested. If the flag is
-1, execution falls through to `UPC + 1`.
+Evaluates a conditional branch to `addr` based on the default `ZERO` flag or an explicit status flag[cite: 7].
 
-#### Concrete Numeric Example
+> **Condition Evaluation Rules:**
+> - **Arithmetic Result (`ZERO` / default):** `JNZ` branches when the result was **Non-Zero** (`ZF == 0`)[cite: 7].
+> - **Explicit Status Flags (`SIGN`, `CARRY`, `ERR`, etc.):** `JNZ` branches when the target flag bit **equals 1 (SET)**[cite: 7].
+>   - `JNZ SIGN, addr` $\rightarrow$ Branches if `SIGN == 1` (Negative)[cite: 7].
+>   - `JNZ CARRY, addr` $\rightarrow$ Branches if `CARRY == 1` (Carry/Borrow occurred)[cite: 7].
+>   - `JNZ ERR, addr` $\rightarrow$ Branches if `ERR == 1` (Error trapped)[cite: 7].
 
-```text
-Suppose STATUS.Z = 0, current UPC = 0x010, INSTR[9:0] = 0x030.
-After execution of JNZ 0x030:
-  Branch taken: UPC <- 0x030
-  Flags are unaffected.
-```
-
-#### Examples:
+#### Examples
 
 ```text
-JNZ 0x32        ; tests STATUS.Z (default)
-JNZ VF, 0x10    ; tests STATUS.V (OVERFLOW)
-JNZ ERR, error  ; tests STATUS.ERR
+JNZ 0x032        ; Branches if ZF == 0 (result is non-zero)
+JNZ SIGN, 0x010   ; Branches if SF == 1 (number is negative)
+JNZ ERR, trap    ; Branches if ERR == 1 (exception occurred)
 ```
 
 ---
 
-```
 ================================================================================
-JZ [flag,] addr — JUMP IF FLAG SET (DEFAULT: ZERO FLAG)
+JZ [flag,] addr — JUMP IF ZERO / JUMP IF FLAG CLEAR
 ================================================================================
-```
 
 #### Status Flags Affected
 
@@ -2359,16 +2355,19 @@ JZ [flag,] addr — JUMP IF FLAG SET (DEFAULT: ZERO FLAG)
 +-----+-----+-----+-----+-----+-----+-----+-----+
 ```
 
-* **Flags**: None affected.
+* **Flags**: None affected[cite: 7].
 
-The condition operand `flag` is always a status flag (`ZF`, `ERR`, `UF`, `VF`, `CF`, `SF`, `DF`, `BSY`). If omitted,
-`ZF` is implied.
+The condition operand `flag` can be `ZERO` (default if omitted), `ERR`, `UF`, `VF`, `CF`, `SF`, `DF`, or `BSY`[cite: 7].
 
 #### Register Transfer & Datapath Flow
 
 ```text
-cond = flag if flag provided else STATUS.Z
-if cond == 1:
+if flag is omitted or flag == ZERO:
+    branch_taken = (STATUS.Z == 1)     # Jump if result is ZERO (ZF == 1)
+else:
+    branch_taken = (STATUS[flag] == 0) # Jump if flag bit value is 0 (CLEAR)
+
+if branch_taken:
     UPC [9:0] <- INSTR [9:0]  (addr)
 else:
     UPC [9:0] <- UPC [9:0] + 1
@@ -2376,28 +2375,25 @@ else:
 
 #### Instruction Word Format
 
-`OPCODE = 011010`. `W = 0` (1 cycle). `RES_SEL = UPC`, `HA_MUX = IMM`, `HB_MUX = NONE`, `FLAG_COND = flag`.
+`OPCODE = 011010` (`0x1A`). `W = 0` (1 cycle). `RES_SEL = UPC`, `HA_MUX = IMM`, `HB_MUX = NONE`, `FLAG_COND = flag`[cite: 7].
 
 #### Description
 
-Branches to `addr` if the selected status `flag` is 1. If `flag` is not specified, `STATUS.Z` is tested. If the flag is
-0, execution falls through to `UPC + 1`.
+Evaluates a conditional branch to `addr` based on the default `ZERO` flag or an explicit status flag[cite: 7].
 
-#### Concrete Numeric Example
+> **Condition Evaluation Rules:**
+> - **Arithmetic Result (`ZERO` / default):** `JZ` branches when the result was **Zero** (`ZF == 1`)[cite: 7].
+> - **Explicit Status Flags (`SIGN`, `CARRY`, `ERR`, etc.):** `JZ` branches when the target flag bit **equals 0 (CLEAR)**[cite: 7].
+>   - `JZ SIGN, addr` $\rightarrow$ Branches if `SIGN == 0` (Positive or zero)[cite: 7].
+>   - `JZ CARRY, addr` $\rightarrow$ Branches if `CARRY == 0` (No carry/borrow)[cite: 7].
+>   - `JZ ERR, addr` $\rightarrow$ Branches if `ERR == 0` (No error)[cite: 7].
 
-```text
-Suppose STATUS.Z = 1, current UPC = 0x010, INSTR[9:0] = 0x050.
-After execution of JZ 0x050:
-  Branch taken: UPC <- 0x050
-  Flags are unaffected.
-```
-
-#### Examples:
+#### Examples
 
 ```text
-JZ 0x50         ; tests STATUS.Z (default)
-JZ CF, carry_set ; tests STATUS.C (CARRY)
-JZ SF, negative  ; tests STATUS.S (SIGN)
+JZ 0x050         ; Branches if ZF == 1 (result is zero)
+JZ SIGN, 0x020   ; Branches if SF == 0 (number is positive/zero)
+JZ CARRY, 0x015  ; Branches if CF == 0 (no carry out)
 ```
 
 ---
