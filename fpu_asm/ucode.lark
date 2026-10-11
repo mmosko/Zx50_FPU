@@ -51,7 +51,7 @@ inst_body: inst_arith
          | inst_noarg
 
 // Block 0: Adder / Arithmetic Block
-inst_arith: ARITH_OP [WIDTH_SUFFIX] reg "," [reg ","] reg_or_imm
+inst_arith: ARITH_OP [WIDTH_SUFFIX] reg "," [reg_or_imm ","] reg_or_imm
 ARITH_OP: "ADD"i | "ADC"i | "SUB"i | "SBB"i | "EXP_ADD"i | "EXP_SUB"i
 
 inst_cmp: "CMP"i [WIDTH_SUFFIX] reg "," reg_or_imm
@@ -60,11 +60,11 @@ inst_cmp: "CMP"i [WIDTH_SUFFIX] reg "," reg_or_imm
 inst_pack: PACK_OP [WIDTH_SUFFIX] reg "," reg
 PACK_OP: "PACK"i | "UNPACK"i
 
-inst_math_alu: MATH_ALU_OP [WIDTH_SUFFIX] reg "," [reg ","] reg_or_imm
+inst_math_alu: MATH_ALU_OP [WIDTH_SUFFIX] reg "," [reg_or_imm ","] reg_or_imm
 MATH_ALU_OP: "MULU"i | "DIVU"i | "MUL"i | "DIV"i
 
 // Block 2: Logic Block
-inst_logic_bin: LOGIC_BIN_OP [WIDTH_SUFFIX] reg "," [reg ","] reg_or_imm
+inst_logic_bin: LOGIC_BIN_OP [WIDTH_SUFFIX] reg "," [reg_or_imm ","] reg_or_imm
 LOGIC_BIN_OP: "AND"i | "OR"i | "XOR"i
 
 inst_logic_unary: LOGIC_UNARY_OP [WIDTH_SUFFIX] reg

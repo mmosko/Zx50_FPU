@@ -256,6 +256,18 @@ class Pass2Encoder(Transformer):
             return norm_reg, 0, is_64
         return Reg.IMM, int(val), False
 
+    def _parse_ternary_sources(
+        self, s1_child, s2_child
+    ) -> Tuple[Reg, Reg, int, bool, bool]:
+        src1_cand, imm1, is_64_s1 = self._parse_reg_or_imm(s1_child)
+        src2_cand, imm2, is_64_s2 = self._parse_reg_or_imm(s2_child)
+        if src1_cand == Reg.IMM and src2_cand == Reg.IMM:
+            raise AssemblerError("Instruction cannot have two immediate operands")
+        if src1_cand == Reg.IMM:
+            return Reg.IMM, src2_cand, imm1, is_64_s1, is_64_s2
+        else:
+            return src1_cand, src2_cand, imm2, is_64_s1, is_64_s2
+
     # -------------------------------------------------------------------------
     # Instruction Constructors
     # -------------------------------------------------------------------------
@@ -274,8 +286,9 @@ class Pass2Encoder(Transformer):
 
         rem = len(children) - idx
         if rem == 2:
-            src1, is_64_s1 = self._normalize_reg(children[idx])
-            src2, imm, is_64_s2 = self._parse_reg_or_imm(children[idx + 1])
+            src1, src2, imm, is_64_s1, is_64_s2 = self._parse_ternary_sources(
+                children[idx], children[idx + 1]
+            )
         else:
             src1 = Reg.NONE
             is_64_s1 = False
@@ -349,8 +362,9 @@ class Pass2Encoder(Transformer):
 
         rem = len(children) - idx
         if rem == 2:
-            src1, is_64_s1 = self._normalize_reg(children[idx])
-            src2, imm, is_64_s2 = self._parse_reg_or_imm(children[idx + 1])
+            src1, src2, imm, is_64_s1, is_64_s2 = self._parse_ternary_sources(
+                children[idx], children[idx + 1]
+            )
         else:
             src1 = Reg.NONE
             is_64_s1 = False
@@ -381,8 +395,9 @@ class Pass2Encoder(Transformer):
 
         rem = len(children) - idx
         if rem == 2:
-            src1, is_64_s1 = self._normalize_reg(children[idx])
-            src2, imm, is_64_s2 = self._parse_reg_or_imm(children[idx + 1])
+            src1, src2, imm, is_64_s1, is_64_s2 = self._parse_ternary_sources(
+                children[idx], children[idx + 1]
+            )
         else:
             src1 = Reg.NONE
             is_64_s1 = False
