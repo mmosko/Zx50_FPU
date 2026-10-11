@@ -8,8 +8,8 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 
 ## Current Status & Capacity
 
-- **Test Suite Status:** 100% pass rate (**1,306 / 1,306 tests passing**).
-- **Microcode Capacity:** **962 / 1,024 words used** (**62 instruction words of headroom remaining**).
+- **Test Suite Status:** 100% pass rate (**1,344 / 1,344 tests passing**).
+- **Microcode Capacity:** **924 / 1,024 words used** (**100 instruction words of headroom remaining**).
 - **Hardware Call Stack:** 16-deep $\times$ 10-bit return-address stack in distributed LUT RAM (`RAM16X1S`) with 4-bit `CSP` pointer fully implemented and verified.
 - **Datapath Bus Symmetry:** `HA_MUX` and `HB_MUX` widened to full 4-bit symmetry (14:1 32-bit muxing across all 10 registers `AL`..`FH`, `EA`, `EB`, `C`, and `IMM`), allowing any register as `src1` without register shuffling.
 - **Completed 32-Bit Math Operations:**
@@ -50,6 +50,22 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 - [x] **Hardware 64-Bit Register Exchange (`_swap64` in `MemoryBlock`)**:
   - Implement full 64-bit register exchange `SWAP AX, BX` (`W=1`, 4 cycles) exchanging `{AH, AL} <-> {BH, BL}` using internal staging registers `{FH, FL}`.
   - Shrinks `ALIGN_F64` operand swap from 3 microcode instructions to 1 (`SWAP AX, BX`).
+
+### 4. Microcode Compaction & ISA Optimization (36 Words Saved, 100 Words Headroom Opened)
+- [x] **Dynamic Constant Table Loading (`push_const.asm`)**:
+  - Replaced individual constant loaders with dynamic lookup using `LSL C, 1` into the `CONST` table for all 16 float32/float64 constants.
+  - Saved **24 words** of microcode ROM.
+- [x] **64-Bit Alignment Optimization (`align_f64.asm`)**:
+  - Leveraged 64-bit `CMP AX, BX` (replacing 5-word comparison) and 64-bit `SWAP AX, BX` (replacing 3-word register juggling).
+  - Saved **5 words** of microcode ROM.
+- [x] **Integer Division Optimizations (`div_int.asm`)**:
+  - Ternary sign setup: `XOR DL, AH, BH` (saved 1 word).
+  - Consolidated restoring loop branches Path 1 & Path 2 at `.restoring_step` (saved 3 words).
+  - Shared exit tails across 64-bit division paths (saved 2 words).
+  - Saved **6 words** of microcode ROM total.
+- [x] **64-Bit Integer Negation Optimization (`chs_i64.asm`)**:
+  - Replaced `MOV FX, AX` + `XOR AX, AX` + `SUB AX, FX` with `XOR FX, FX` + `SUB AX, FX, AX`.
+  - Saved **1 word** of microcode ROM and **2 clock cycles** of execution latency.
 
 ---
 
@@ -101,7 +117,7 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 
 > [!NOTE]
 > **Microcode ROM Architecture Requirement:**
-> Current microcode usage is **992 / 1,024 words** (32 words headroom in a single 10-bit UPC address space). Implementing the full 64-bit floating-point and transcendental suite requires expanding microcode capacity:
+> Current microcode usage is **924 / 1,024 words** (100 words headroom in a single 10-bit UPC address space). Implementing the full 64-bit floating-point and transcendental suite requires expanding microcode capacity:
 > - **Option A (Recommended - 2,048 Words):** Expand `UPC` address width from 10 bits (`0x3FF`) to 11 bits (`0x7FF`) by allocating a 2nd EBR block on the Lattice MachXO2-2000 (which has 8 EBR blocks total, with only 1 currently dedicated to microcode).
 > - **Option B (Microcode Bank Switching / Overlay):** Add a 1-bit bank register switching two 1,024-word pages (Bank 0: 32-bit & integer operations; Bank 1: 64-bit float operations).
 > - **Option C (Staged Implementation):** Implement pure conversions and integer operations within current ROM space via microcode compaction, deferring transcendental/CORDIC 64-bit routines until 2K expansion is enabled.
