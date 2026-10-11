@@ -440,4 +440,304 @@ def test_status_flag_encodings():
     assert prog[23].imm == 0
 
 
+def test_test_instruction_assemble():
+    code = """
+        TEST AL, BL
+        TEST AX, BX
+        TEST AL, 0x10
+        TEST.64 AL, BL
+    """
+    assembler = Assembler()
+    prog = [u for _, u in assembler.assemble(code)]
+
+    assert prog[0].op == MicroOp.TEST
+    assert prog[0].w == IW.W32
+    assert prog[0].dst == Reg.AL
+    assert prog[0].src == Reg.BL
+
+    assert prog[1].op == MicroOp.TEST
+    assert prog[1].w == IW.W64
+    assert prog[1].dst == Reg.AL
+    assert prog[1].src == Reg.BL
+
+    assert prog[2].op == MicroOp.TEST
+    assert prog[2].w == IW.W32
+    assert prog[2].dst == Reg.AL
+    assert prog[2].src == Reg.IMM
+    assert prog[2].imm == 0x10
+
+    assert prog[3].op == MicroOp.TEST
+    assert prog[3].w == IW.W64
+    assert prog[3].dst == Reg.AL
+    assert prog[3].src == Reg.BL
+
+
+def test_pack_unpack_binary_and_ternary_assemble():
+    code = """
+        PACK AL, EA
+        PACK AL, EA, BL
+        PACK AX, EA
+        PACK AX, EA, BX
+        PACK.64 AL, EA, BL
+        UNPACK AL, EA
+        UNPACK AL, EA, BL
+        UNPACK AX, EA
+        UNPACK AX, EA, BX
+        UNPACK.64 AL, EA, BL
+    """
+    assembler = Assembler()
+    prog = [u for _, u in assembler.assemble(code)]
+
+    # PACK AL, EA (binary: dst=AL, src1=EA, src=AL)
+    assert prog[0].op == MicroOp.PACK
+    assert prog[0].w == IW.W32
+    assert prog[0].dst == Reg.AL
+    assert prog[0].src1 == Reg.EA
+    assert prog[0].src == Reg.AL
+
+    # PACK AL, EA, BL (ternary: dst=AL, src1=EA, src=BL)
+    assert prog[1].op == MicroOp.PACK
+    assert prog[1].w == IW.W32
+    assert prog[1].dst == Reg.AL
+    assert prog[1].src1 == Reg.EA
+    assert prog[1].src == Reg.BL
+
+    # PACK AX, EA (binary 64-bit: dst=AL, src1=EA, src=AL)
+    assert prog[2].op == MicroOp.PACK
+    assert prog[2].w == IW.W64
+    assert prog[2].dst == Reg.AL
+    assert prog[2].src1 == Reg.EA
+    assert prog[2].src == Reg.AL
+
+    # PACK AX, EA, BX (ternary 64-bit: dst=AL, src1=EA, src=BL)
+    assert prog[3].op == MicroOp.PACK
+    assert prog[3].w == IW.W64
+    assert prog[3].dst == Reg.AL
+    assert prog[3].src1 == Reg.EA
+    assert prog[3].src == Reg.BL
+
+    # PACK.64 AL, EA, BL (ternary 64-bit: dst=AL, src1=EA, src=BL)
+    assert prog[4].op == MicroOp.PACK
+    assert prog[4].w == IW.W64
+    assert prog[4].dst == Reg.AL
+    assert prog[4].src1 == Reg.EA
+    assert prog[4].src == Reg.BL
+
+    # UNPACK AL, EA (binary: dst=AL, src1=EA, src=AL)
+    assert prog[5].op == MicroOp.UNPACK
+    assert prog[5].w == IW.W32
+    assert prog[5].dst == Reg.AL
+    assert prog[5].src1 == Reg.EA
+    assert prog[5].src == Reg.AL
+
+    # UNPACK AL, EA, BL (ternary: dst=AL, src1=EA, src=BL)
+    assert prog[6].op == MicroOp.UNPACK
+    assert prog[6].w == IW.W32
+    assert prog[6].dst == Reg.AL
+    assert prog[6].src1 == Reg.EA
+    assert prog[6].src == Reg.BL
+
+    # UNPACK AX, EA (binary 64-bit: dst=AL, src1=EA, src=AL)
+    assert prog[7].op == MicroOp.UNPACK
+    assert prog[7].w == IW.W64
+    assert prog[7].dst == Reg.AL
+    assert prog[7].src1 == Reg.EA
+    assert prog[7].src == Reg.AL
+
+    # UNPACK AX, EA, BX (ternary 64-bit: dst=AL, src1=EA, src=BL)
+    assert prog[8].op == MicroOp.UNPACK
+    assert prog[8].w == IW.W64
+    assert prog[8].dst == Reg.AL
+    assert prog[8].src1 == Reg.EA
+    assert prog[8].src == Reg.BL
+
+    # UNPACK.64 AL, EA, BL (ternary 64-bit: dst=AL, src1=EA, src=BL)
+    assert prog[9].op == MicroOp.UNPACK
+    assert prog[9].w == IW.W64
+    assert prog[9].dst == Reg.AL
+    assert prog[9].src1 == Reg.EA
+    assert prog[9].src == Reg.BL
+
+
+def test_logic_unary_and_binary_assemble():
+    code = """
+        FABS AL
+        FABS AL, BL
+        FABS AX
+        FABS AX, BX
+        FCHS AL
+        FCHS AL, BL
+        FCHS AX
+        FCHS AX, BX
+        NOT AL
+        NOT AL, BL
+        NOT AX
+        NOT AX, BX
+        FCHS.64 AL, BL
+    """
+    assembler = Assembler()
+    prog = [u for _, u in assembler.assemble(code)]
+
+    assert prog[0].op == MicroOp.FABS
+    assert prog[0].w == IW.W32
+    assert prog[0].dst == Reg.AL
+    assert prog[0].src1 == Reg.NONE
+
+    assert prog[1].op == MicroOp.FABS
+    assert prog[1].w == IW.W32
+    assert prog[1].dst == Reg.AL
+    assert prog[1].src1 == Reg.BL
+
+    assert prog[2].op == MicroOp.FABS
+    assert prog[2].w == IW.W64
+    assert prog[2].dst == Reg.AL
+    assert prog[2].src1 == Reg.NONE
+
+    assert prog[3].op == MicroOp.FABS
+    assert prog[3].w == IW.W64
+    assert prog[3].dst == Reg.AL
+    assert prog[3].src1 == Reg.BL
+
+    assert prog[4].op == MicroOp.FCHS
+    assert prog[4].w == IW.W32
+    assert prog[4].dst == Reg.AL
+    assert prog[4].src1 == Reg.NONE
+
+    assert prog[5].op == MicroOp.FCHS
+    assert prog[5].w == IW.W32
+    assert prog[5].dst == Reg.AL
+    assert prog[5].src1 == Reg.BL
+
+    assert prog[6].op == MicroOp.FCHS
+    assert prog[6].w == IW.W64
+    assert prog[6].dst == Reg.AL
+    assert prog[6].src1 == Reg.NONE
+
+    assert prog[7].op == MicroOp.FCHS
+    assert prog[7].w == IW.W64
+    assert prog[7].dst == Reg.AL
+    assert prog[7].src1 == Reg.BL
+
+    assert prog[8].op == MicroOp.NOT
+    assert prog[8].w == IW.W32
+    assert prog[8].dst == Reg.AL
+    assert prog[8].src1 == Reg.NONE
+
+    assert prog[9].op == MicroOp.NOT
+    assert prog[9].w == IW.W32
+    assert prog[9].dst == Reg.AL
+    assert prog[9].src1 == Reg.BL
+
+    assert prog[10].op == MicroOp.NOT
+    assert prog[10].w == IW.W64
+    assert prog[10].dst == Reg.AL
+    assert prog[10].src1 == Reg.NONE
+
+    assert prog[11].op == MicroOp.NOT
+    assert prog[11].w == IW.W64
+    assert prog[11].dst == Reg.AL
+    assert prog[11].src1 == Reg.BL
+
+    assert prog[12].op == MicroOp.FCHS
+    assert prog[12].w == IW.W64
+    assert prog[12].dst == Reg.AL
+    assert prog[12].src1 == Reg.BL
+
+
+def test_ternary_shift_assemble():
+    code = """
+        LSL AL
+        LSL AL, C
+        LSL AL, 8
+        LSL AL, C, BL
+        LSL AL, 8, BL
+        LSL AX, C, BX
+        ASL AX, 4, BX
+        ASR BL, C, DL
+    """
+    assembler = Assembler()
+    prog = [u for _, u in assembler.assemble(code)]
+
+    # Unary: LSL AL (count = C)
+    assert prog[0].op == MicroOp.LSL
+    assert prog[0].w == IW.W32
+    assert prog[0].dst == Reg.AL
+    assert prog[0].src == Reg.C
+
+    # Binary: LSL AL, C
+    assert prog[1].op == MicroOp.LSL
+    assert prog[1].w == IW.W32
+    assert prog[1].dst == Reg.AL
+    assert prog[1].src == Reg.C
+
+    # Binary imm: LSL AL, 8
+    assert prog[2].op == MicroOp.LSL
+    assert prog[2].w == IW.W32
+    assert prog[2].dst == Reg.AL
+    assert prog[2].src == Reg.IMM
+    assert prog[2].imm == 8
+
+    # Ternary reg count: LSL AL, C, BL
+    assert prog[3].op == MicroOp.LSL
+    assert prog[3].w == IW.W32
+    assert prog[3].dst == Reg.AL
+    assert prog[3].src1 == Reg.C
+    assert prog[3].src == Reg.BL
+
+    # Ternary imm count: LSL AL, 8, BL
+    assert prog[4].op == MicroOp.LSL
+    assert prog[4].w == IW.W32
+    assert prog[4].dst == Reg.AL
+    assert prog[4].src1 == Reg.IMM
+    assert prog[4].src == Reg.BL
+    assert prog[4].imm == 8
+
+    # Ternary 64-bit reg count: LSL AX, C, BX
+    assert prog[5].op == MicroOp.LSL
+    assert prog[5].w == IW.W64
+    assert prog[5].dst == Reg.AL
+    assert prog[5].src1 == Reg.C
+    assert prog[5].src == Reg.BL
+
+    # Ternary 64-bit imm count: ASL AX, 4, BX
+    assert prog[6].op == MicroOp.ASL
+    assert prog[6].w == IW.W64
+    assert prog[6].dst == Reg.AL
+    assert prog[6].src1 == Reg.IMM
+    assert prog[6].src == Reg.BL
+    assert prog[6].imm == 4
+
+    # Ternary reg count: ASR BL, C, DL
+    assert prog[7].op == MicroOp.ASR
+    assert prog[7].w == IW.W32
+    assert prog[7].dst == Reg.BL
+    assert prog[7].src1 == Reg.C
+    assert prog[7].src == Reg.DL
+
+
+def test_swap_64_assemble():
+    code = """
+        SWAP AL, BL
+        SWAP AX, BX
+        SWAP.64 AL, BL
+    """
+    assembler = Assembler()
+    prog = [u for _, u in assembler.assemble(code)]
+
+    assert prog[0].op == MicroOp.SWAP
+    assert prog[0].w == IW.W32
+    assert prog[0].dst == Reg.AL
+    assert prog[0].src == Reg.BL
+
+    assert prog[1].op == MicroOp.SWAP
+    assert prog[1].w == IW.W64
+    assert prog[1].dst == Reg.AL
+    assert prog[1].src == Reg.BL
+
+    assert prog[2].op == MicroOp.SWAP
+    assert prog[2].w == IW.W64
+    assert prog[2].dst == Reg.AL
+    assert prog[2].src == Reg.BL
+
+
 

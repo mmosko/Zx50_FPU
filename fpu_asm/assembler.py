@@ -326,6 +326,27 @@ class Pass2Encoder(Transformer):
             imm=imm,
         )
 
+    def inst_test(self, children):
+        idx = 0
+        forced_w64 = False
+        if idx < len(children) and children[idx] in (".64", ".32"):
+            if children[idx] == ".64":
+                forced_w64 = True
+            idx += 1
+
+        src1, is_64_s1 = self._normalize_reg(children[idx])
+        src2, imm, is_64_s2 = self._parse_reg_or_imm(children[idx + 1])
+
+        w = IW.W64 if (forced_w64 or is_64_s1 or is_64_s2) else IW.W32
+
+        return MicroInstruction(
+            op=MicroOp.TEST,
+            w=w,
+            dst=src1,
+            src=src2,
+            imm=imm,
+        )
+
     def inst_pack(self, children):
         op_str = str(children[0].value).upper()
         idx = 1
@@ -334,19 +355,20 @@ class Pass2Encoder(Transformer):
             if children[idx] == ".64":
                 forced_w64 = True
             idx += 1
-        r1, is_64_r1 = self._normalize_reg(children[idx])
-        r2, is_64_r2 = self._normalize_reg(children[idx + 1])
-        w = IW.W64 if (forced_w64 or is_64_r1 or is_64_r2) else IW.W32
-
-        if op_str == "UNPACK":
-            if r2 in (Reg.EA, Reg.EB):
-                dst, src = r2, r1
-            else:
-                dst, src = r1, r2
+        dst, is_64_dst = self._normalize_reg(children[idx])
+        src1, is_64_s1 = self._normalize_reg(children[idx + 1])
+        idx += 2
+        if idx < len(children):
+            # 3-operand ternary form: PACK/UNPACK dst, src1, src2
+            src2, is_64_s2 = self._normalize_reg(children[idx])
         else:
-            dst, src = r1, r2
+            # 2-operand binary form: PACK/UNPACK dst, src1 (src2 = dst)
+            src2 = dst
+            is_64_s2 = is_64_dst
 
-        return MicroInstruction(op=MicroOp.parse(op_str), w=w, dst=dst, src=src)
+        w = IW.W64 if (forced_w64 or is_64_dst or is_64_s1 or is_64_s2) else IW.W32
+
+        return MicroInstruction(op=MicroOp.parse(op_str), w=w, dst=dst, src1=src1, src=src2)
 
     def inst_math_alu(self, children):
         op_str = str(children[0].value).upper()
@@ -423,8 +445,17 @@ class Pass2Encoder(Transformer):
                 forced_w64 = True
             idx += 1
         dst, is_64_dst = self._normalize_reg(children[idx])
-        w = IW.W64 if (forced_w64 or is_64_dst) else IW.W32
-        return MicroInstruction(op=MicroOp.parse(op_str), w=w, dst=dst, src1=Reg.NONE, src=Reg.NONE)
+        idx += 1
+        if idx < len(children):
+            # Binary non-destructive form: OP dst, src1
+            src1, is_64_s1 = self._normalize_reg(children[idx])
+        else:
+            # Unary in-place form: OP dst
+            src1 = Reg.NONE
+            is_64_s1 = False
+
+        w = IW.W64 if (forced_w64 or is_64_dst or is_64_s1) else IW.W32
+        return MicroInstruction(op=MicroOp.parse(op_str), w=w, dst=dst, src1=src1, src=Reg.NONE)
 
     def inst_shift(self, children):
         op_str = str(children[0].value).upper()
@@ -449,12 +480,40 @@ class Pass2Encoder(Transformer):
         else:
             dst, is_64_dst = self._normalize_reg(children[idx])
             idx += 1
-            if idx < len(children):
-                src2, imm, is_64_s2 = self._parse_reg_or_imm(children[idx])
-            else:
+            rem = len(children) - idx
+            if rem == 0:
+                # Unary form: OP dst (count = C, data = dst)
+                src1 = Reg.NONE
+                is_64_s1 = False
                 src2, imm, is_64_s2 = Reg.C, 0, False
-            w = IW.W64 if (forced_w64 or is_64_dst or is_64_s2) else IW.W32
-            return MicroInstruction(op=MicroOp.parse(op_str), w=w, dst=dst, src=src2, imm=imm)
+            elif rem == 1:
+                # Binary form: OP dst, src1 (count = src1, data = dst)
+                src1 = Reg.NONE
+                is_64_s1 = False
+                src2, imm, is_64_s2 = self._parse_reg_or_imm(children[idx])
+            elif rem == 2:
+                # Ternary form: OP dst, src1, src2 (count = src1, data = src2)
+                src1_cand, imm1, is_64_s1 = self._parse_reg_or_imm(children[idx])
+                src2_cand, imm2, is_64_s2 = self._parse_reg_or_imm(children[idx + 1])
+                if src1_cand == Reg.IMM and src2_cand == Reg.IMM:
+                    raise AssemblerError("Shift instruction cannot have two immediate operands")
+                if src1_cand == Reg.IMM:
+                    src1 = Reg.IMM
+                    src2 = src2_cand
+                    imm = imm1
+                elif src2_cand == Reg.IMM:
+                    src1 = src1_cand
+                    src2 = Reg.IMM
+                    imm = imm2
+                else:
+                    src1 = src1_cand
+                    src2 = src2_cand
+                    imm = 0
+            else:
+                raise AssemblerError(f"Too many operands for {op_str}")
+
+            w = IW.W64 if (forced_w64 or is_64_dst or is_64_s1 or is_64_s2) else IW.W32
+            return MicroInstruction(op=MicroOp.parse(op_str), w=w, dst=dst, src1=src1, src=src2, imm=imm)
 
     def inst_push(self, children):
         idx = 0

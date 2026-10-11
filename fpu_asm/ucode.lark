@@ -40,6 +40,7 @@ DELAY_ATTR: ".delay"i
 
 inst_body: inst_arith
          | inst_cmp
+         | inst_test
          | inst_pack
          | inst_math_alu
          | inst_logic_bin
@@ -55,9 +56,10 @@ inst_arith: ARITH_OP [WIDTH_SUFFIX] reg "," [reg_or_imm ","] reg_or_imm
 ARITH_OP: "ADD"i | "ADC"i | "SUB"i | "SBB"i | "EXP_ADD"i | "EXP_SUB"i
 
 inst_cmp: "CMP"i [WIDTH_SUFFIX] reg "," reg_or_imm
+inst_test: "TEST"i [WIDTH_SUFFIX] reg "," reg_or_imm
 
 // Block 1: Math / Float / Multiply / Divide
-inst_pack: PACK_OP [WIDTH_SUFFIX] reg "," reg
+inst_pack: PACK_OP [WIDTH_SUFFIX] reg "," reg ["," reg]
 PACK_OP: "PACK"i | "UNPACK"i
 
 inst_math_alu: MATH_ALU_OP [WIDTH_SUFFIX] reg "," [reg_or_imm ","] reg_or_imm
@@ -67,11 +69,11 @@ MATH_ALU_OP: "MULU"i | "DIVU"i | "MUL"i | "DIV"i
 inst_logic_bin: LOGIC_BIN_OP [WIDTH_SUFFIX] reg "," [reg_or_imm ","] reg_or_imm
 LOGIC_BIN_OP: "AND"i | "OR"i | "XOR"i
 
-inst_logic_unary: LOGIC_UNARY_OP [WIDTH_SUFFIX] reg
+inst_logic_unary: LOGIC_UNARY_OP [WIDTH_SUFFIX] reg ["," reg]
 LOGIC_UNARY_OP: "FABS"i | "FCHS"i | "NOT"i
 
 // Block 6: Shifter / LZC Block
-inst_shift: SHIFT_OP [WIDTH_SUFFIX] reg ["," reg_or_imm]
+inst_shift: SHIFT_OP [WIDTH_SUFFIX] reg ["," reg_or_imm ["," reg_or_imm]]
 SHIFT_OP: "LSL"i | "LSR"i | "ASL"i | "ASR"i | "LZC"i
 
 // Block 4 & 5: Stack, Memory & Status Blocks
