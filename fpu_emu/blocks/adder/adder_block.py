@@ -16,8 +16,8 @@ from fpu_emu.micro_opcodes import MicroOp
 
 @fpga_resource(
     approach="Adder controller, 32/64-bit sequencer, exponent bounds comparators, IEEE-754 pack/unpack, and multiplier/divider interface",
-    luts=75,
-    ffs=14,
+    luts=88,
+    ffs=16,
     delay_ns=2.6,
     cycles=1,
     shared_unit="adder_block",
@@ -28,7 +28,7 @@ class AdderBlock(FunctionalBlock):
         assert isinstance(inputs.ha_mux, Mux)
         self._ha_mux: Mux = inputs.ha_mux
 
-    def execute(self):
+    def execute(self):  # noqa: C901
         instr = MicroInstruction.from_register(self._inputs.instr)
         match instr.op:
             case MicroOp.ADD:
@@ -61,14 +61,14 @@ class AdderBlock(FunctionalBlock):
                 raise HardwareBusError(f"Unsupported opcode: {instr.op}")
 
     def _add(self, instr: MicroInstruction) -> None:
-        assert (instr.op == MicroOp.ADD)
+        assert instr.op == MicroOp.ADD
         if instr.is_w32():
             self._add_32(instr, cin=0, sub=False)
         else:
             self._add_64(instr, cin=0, sub=False)
 
     def _adc(self, instr: MicroInstruction) -> None:
-        assert (instr.op == MicroOp.ADC)
+        assert instr.op == MicroOp.ADC
         cin = 1 if self._inputs.status.is_bit_set(StatusFlag.CARRY) else 0
         if instr.is_w32():
             self._add_32(instr, cin=cin, sub=False)
@@ -119,6 +119,7 @@ class AdderBlock(FunctionalBlock):
         dst_64 <- (src1_64 or dst_64) +/- src2_64 +/- cin
         """
         assert instr.src is not Reg.NONE
+        assert isinstance(instr.src, Reg)
         assert instr.dst is not Reg.NONE
         src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
 
@@ -187,6 +188,7 @@ class AdderBlock(FunctionalBlock):
     def _cmp_64(self, instr: MicroInstruction):
         """CMP src1_64, src2_64: 64-bit compare src1_64 - src2_64 without modifying registers (2 cycles)."""
         assert instr.src is not Reg.NONE
+        assert isinstance(instr.src, Reg)
         assert instr.dst is not Reg.NONE
         src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
         self._validate_src64(instr.src)
@@ -233,12 +235,14 @@ class AdderBlock(FunctionalBlock):
         status_byte |= err << StatusFlag.ERR.value
         self._outputs.res_status.set(status_byte)
 
-        status_wr_select = (1 << StatusFlag.CARRY.value) | \
-                           (1 << StatusFlag.SIGN.value) | \
-                           (1 << StatusFlag.OVERFLOW.value) | \
-                           (1 << StatusFlag.ZERO.value)
+        status_wr_select = (
+            (1 << StatusFlag.CARRY.value)
+            | (1 << StatusFlag.SIGN.value)
+            | (1 << StatusFlag.OVERFLOW.value)
+            | (1 << StatusFlag.ZERO.value)
+        )
         if hasattr(result, "err"):
-            status_wr_select |= (1 << StatusFlag.ERR.value)
+            status_wr_select |= 1 << StatusFlag.ERR.value
 
         self._outputs.status_wr_sel.set(status_wr_select)
 
@@ -307,11 +311,7 @@ class AdderBlock(FunctionalBlock):
         | (1 << StatusFlag.UNDERFLOW.value)
     )
 
-    STATUS_UNPACK_MASK = (
-        (1 << StatusFlag.ZERO.value)
-        | (1 << StatusFlag.SIGN.value)
-        | (1 << StatusFlag.DIFF_SIGN.value)
-    )
+    STATUS_UNPACK_MASK = (1 << StatusFlag.ZERO.value) | (1 << StatusFlag.SIGN.value) | (1 << StatusFlag.DIFF_SIGN.value)
 
     @staticmethod
     def _resolve_unpack_pack_regs(instr: MicroInstruction) -> tuple[Reg, Reg, Reg]:
@@ -325,13 +325,12 @@ class AdderBlock(FunctionalBlock):
         assert instr.dst is not Reg.NONE, "Destination register cannot be NONE"
         assert instr.src1 is not Reg.NONE, "Exponent register (src1) cannot be NONE"
         if instr.src1 not in (Reg.EA, Reg.EB):
-            raise HardwareBusError(
-                f"UNPACK/PACK requires an exponent register (EA or EB) for src1, got {instr.src1}"
-            )
+            raise HardwareBusError(f"UNPACK/PACK requires an exponent register (EA or EB) for src1, got {instr.src1}")
 
         dst_reg = instr.dst
         exp_reg = instr.src1
         src_reg = instr.src if instr.src is not Reg.NONE else instr.dst
+        assert isinstance(src_reg, Reg)
 
         return dst_reg, exp_reg, src_reg
 
@@ -452,7 +451,7 @@ class AdderBlock(FunctionalBlock):
 
         sign = 1 if self._inputs.status.is_bit_set(StatusFlag.SIGN) else 0
 
-        is_zero_mantissa = (mantissa == 0)
+        is_zero_mantissa = mantissa == 0
         vf = False
         uf = False
         zf = False
@@ -512,7 +511,7 @@ class AdderBlock(FunctionalBlock):
 
         sign = 1 if self._inputs.status.is_bit_set(StatusFlag.SIGN) else 0
 
-        is_zero_mantissa = (mantissa_hi == 0 and mantissa_lo == 0)
+        is_zero_mantissa = mantissa_hi == 0 and mantissa_lo == 0
         vf = False
         uf = False
         zf = False
@@ -644,5 +643,3 @@ class AdderBlock(FunctionalBlock):
         self._outputs.exec_done.set(1)
         self._wb_flags(div_result)
         self._writeback()
-
-

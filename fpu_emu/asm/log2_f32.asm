@@ -21,7 +21,7 @@ LOG2_HALT:
 
 LOG2_CORE:
     MOV BH, AL                      ; BH <- input (preserves sign and original value)
-    UNPACK EA, AL                   ; EA <- exponent, AL <- mantissa, status.SIGN <- sign
+    UNPACK AL, EA                   ; EA <- exponent, AL <- mantissa, status.SIGN <- sign
     JZ ZERO, LOG2_DOMAIN_ERR        ; log2(0) or log2(-0) -> domain error
     JNZ SIGN, LOG2_DOMAIN_ERR       ; log2(negative) -> domain error
     CMP EA, 255                     ; Check for NaN / +Inf directly on EA

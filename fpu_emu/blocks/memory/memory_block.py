@@ -16,9 +16,9 @@ from fpu_emu.rom.fpu_const_map import FpuTable
 
 
 @fpga_resource(
-    approach="Memory controller, stack sequencer, scratch/user RAM, and unified LDC table ROM interface",
-    luts=60,
-    ffs=8,
+    approach="Memory controller, stack sequencer, scratch/user RAM, 64-bit swap sequencer, and unified LDC table ROM interface",
+    luts=68,
+    ffs=14,
     delay_ns=2.8,
     cycles=1,
     shared_unit="memory_block",
@@ -71,7 +71,7 @@ class MemoryBlock(FunctionalBlock):
         self._stack_adder = StackAdder(sp_reg)
         self._status_shadow = StatusRegister(name=Reg.STATUS_SHADOW, size_in_bits=8, clock=clock)
 
-    def execute(self):
+    def execute(self):  # noqa: C901
         instr = MicroInstruction.from_register(self._inputs.instr)
         match instr.op:
             case MicroOp.PUSH:
@@ -125,7 +125,8 @@ class MemoryBlock(FunctionalBlock):
     def _push64(self, instr: MicroInstruction) -> None:
         """push src to TOS, pushes low order bytes first"""
         assert instr.src is not Reg.NONE
-        assert (instr.src.is_lo_half())
+        assert isinstance(instr.src, Reg)
+        assert instr.src.is_lo_half()
         self._inputs.hb_mux.select(instr.src.value)
         self._inner_push32()
         self._writeback()
@@ -427,6 +428,7 @@ class MemoryBlock(FunctionalBlock):
             self._outputs.exec_done.set(1)
             self._writeback()
         else:
+            assert isinstance(instr.src, Reg)
             assert instr.src.is_lo_half()
             assert addr % 2 == 0, "64-bit STO must use even base"
 
@@ -503,6 +505,7 @@ class MemoryBlock(FunctionalBlock):
             self._outputs.exec_done.set(1)
             self._writeback()
         else:
+            assert isinstance(instr.src, Reg)
             assert instr.src.is_lo_half()
             assert imm % 2 == 0, "64-bit STU must use even base"
 
@@ -538,6 +541,7 @@ class MemoryBlock(FunctionalBlock):
             self._outputs.exec_done.set(1)
             self._writeback()
         else:
+            assert isinstance(instr.src, Reg)
             assert instr.src.is_lo_half()
             assert instr.dst.is_lo_half()
             # 1. Transfer LO word
@@ -608,6 +612,7 @@ class MemoryBlock(FunctionalBlock):
     def _swap_64(self, instr: MicroInstruction, src1: Reg) -> None:
         """Exchanges the contents of two 64-bit registers using FL/FH (or DL/DH) as intermediary."""
         assert src1.is_lo_half()
+        assert isinstance(instr.src, Reg)
         assert instr.src.is_lo_half()
 
         self._outputs.status_wr_sel.set(0)

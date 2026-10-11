@@ -25,8 +25,8 @@ class LogicResult:
 
 
 @fpga_resource(
-    approach="Logic controller, 32/64-bit bitwise logic operations (AND, OR, XOR, NOT) and FP sign manipulation (FABS, FCHS)",
-    luts=45,
+    approach="Logic controller, 32/64-bit bitwise logic operations (AND, OR, XOR, NOT, TEST) and FP sign manipulation (FABS, FCHS)",
+    luts=54,
     ffs=8,
     delay_ns=2.5,
     cycles=1,
@@ -104,6 +104,7 @@ class LogicBlock(FunctionalBlock):
 
     def _test_64(self, instr: MicroInstruction, src1: Reg) -> None:
         assert src1.is_lo_half()
+        assert isinstance(instr.src, Reg)
         assert instr.src.is_lo_half()
 
         # Cycle 1: low word
@@ -311,6 +312,7 @@ class LogicBlock(FunctionalBlock):
     def _logic_64(self, instr: MicroInstruction, op: Callable) -> None:
         """64-bit generic binary logic operation (2 cycles)."""
         assert instr.src is not Reg.NONE
+        assert isinstance(instr.src, Reg)
         assert instr.dst is not Reg.NONE
         src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
         assert instr.src.is_lo_half()

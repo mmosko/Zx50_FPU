@@ -18,7 +18,7 @@ USER_EXP2_F32:
 
 EXP2_CORE:
     MOV BH, AL                      ; BH <- raw input (preserves sign and value)
-    UNPACK EA, AL                   ; EA <- exponent, AL <- mantissa, status.SIGN <- sign
+    UNPACK AL, EA                   ; EA <- exponent, AL <- mantissa, status.SIGN <- sign
     JZ ZERO, EXP2_RET_ONE           ; 2^0 == 1.0
 
     CMP EA, 255                     ; Check for NaN / Inf directly on EA

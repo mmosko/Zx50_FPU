@@ -16,8 +16,8 @@ from fpu_emu.micro_opcodes import MicroOp
 
 
 @fpga_resource(
-    approach="Shifter controller, sequencer, and pipeline registers",
-    luts=16,
+    approach="Shifter controller, sequencer, result multiplexer, and pipeline registers",
+    luts=42,
     ffs=42,
     delay_ns=2.4,
     cycles=1,
@@ -85,6 +85,7 @@ class ShifterBlock(FunctionalBlock):
         assert instr.src1 is Reg.NONE
         src = instr.src if instr.src is not Reg.NONE else Reg.AL
         dst = instr.dst if instr.dst is not Reg.NONE else Reg.C
+        assert isinstance(src, Reg)
         assert src.is_lo_half(), f"64-bit LZC source must be low-half register, got {src}"
 
         # Cycle 1: Read high half (src | 1)

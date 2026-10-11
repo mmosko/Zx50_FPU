@@ -25,7 +25,7 @@ TRIG_ENTRY:
     MOV CH, AL                  ; CH <- original theta (preserves sign and value)
 
     ; Check for zero, NaN, Inf, and tiny angles
-    UNPACK EA, AL               ; EA <- exponent, AL <- mantissa
+    UNPACK AL, EA               ; EA <- exponent, AL <- mantissa
     JZ ZERO, TRIG_SMALL_ANGLE   ; If input == 0.0: special zero/small angle handling
     CMP EA, 255
     JZ ZERO, TRIG_NAN_ERR       ; If NaN or Inf: error handling
@@ -61,7 +61,7 @@ TRIG_REDUCE_GENERAL:
     ; EA >= 126: Compute k = round(|theta| * 2/pi)
     MOV DH, AL                  ; DH <- original mantissa
     LDC BL, CONST, 44           ; BL <- TWO_OVER_PI_F32 (0x3F22F983)
-    UNPACK EB, BL               ; BL <- mantissa of 2/pi
+    UNPACK BL, EB               ; BL <- mantissa of 2/pi
     MULU AL, BL                 ; {AH, AL} <- mantissa * (2/pi mantissa)
 
     ; Shift amount s_hi = 142 - EA

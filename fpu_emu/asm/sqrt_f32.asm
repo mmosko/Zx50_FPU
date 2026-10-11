@@ -21,7 +21,7 @@ SQRT_F32_HALT:
 
 SQRT_F32_CORE:
     MOV BH, AL                      ; BH <- raw input (preserves sign and value)
-    UNPACK EA, AL                   ; AL <- mantissa (bit 23 set), EA <- biased exponent
+    UNPACK AL, EA                   ; AL <- mantissa (bit 23 set), EA <- biased exponent
     JZ ZERO, SQRT_F32_RET_BH        ; If X == 0 (+0.0 or -0.0): return original input
     JNZ SIGN, SQRT_F32_DOMAIN_ERR   ; If X < 0: domain error (assert ERR and abort)
 

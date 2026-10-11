@@ -2,9 +2,7 @@ from typing import List
 
 from fpu_emu.blocks.functional_block import FunctionalBlock
 from fpu_emu.fpga_resource import fpga_resource
-from fpu_emu.hardware.bus import Bus
 from fpu_emu.hardware.mux import Mux
-from fpu_emu.hardware.reg import Reg
 
 
 @fpga_resource(

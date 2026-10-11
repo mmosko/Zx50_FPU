@@ -48,9 +48,9 @@ class UpcOverflowError(HardwareBusError):
 
 
 @fpga_resource(
-    approach="MachXO2 PFU Slice Flip-Flops for 19 Hardware Registers",
+    approach="MachXO2 PFU Slice Flip-Flops for 22 Hardware Registers",
     luts=0,
-    ffs=414,
+    ffs=417,
     delay_ns=1.5,
     cycles=1,
     shared_unit="register_file",

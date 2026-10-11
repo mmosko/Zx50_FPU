@@ -546,7 +546,6 @@ def test_adder_block_divu_three_operand(fpga: FpgaModel):
     assert fpga.reg_file.ch.read_int() == 27
 
 
-
 def test_adder_block_mul_invalid_dst(fpga: FpgaModel):
     # Only AL is valid destination for MUL on HA_MUX
     from fpu_emu.hardware.registers import HardwareBusError
@@ -663,6 +662,7 @@ def test_adder_block_div_w64_not_implemented(fpga: FpgaModel):
 # =============================================================================
 # UNPACK and PACK Tests
 # =============================================================================
+
 
 def test_adder_block_unpack_f32_one(fpga: FpgaModel):
     # +1.0f = 0x3F800000: EA -> 127, AL -> 0x00800000
@@ -1202,7 +1202,3 @@ def test_adder_block_ternary_div_32(fpga: FpgaModel):
     assert fpga.reg_file.dl.read_int() == 3
     assert fpga.reg_file.bl.read_int() == 45
     assert fpga.reg_file.cl.read_int() == 7
-
-
-
-
