@@ -110,13 +110,13 @@ def test_opcode_matcher_implemented():
     assert match_test_vector(vec_abs) == UserOpcode.ABS_F32
 
 
-def test_opcode_matcher_div_f64_stubbed():
-    """Verifies that DIV_F64 is matched and flagged as stubbed pass-through."""
+def test_opcode_matcher_div_f64():
+    """Verifies that DIV_F64 is matched and recognized as fully implemented."""
     line_div64 = "b64/ =0 +1.0000000000000P0 +1.0000000000000P0 -> +1.0000000000000P0"
     vec_div64 = parse_fptest_line(line_div64)
     opcode = match_test_vector(vec_div64)
     assert opcode == UserOpcode.DIV_F64
-    assert is_stubbed_pass_through(opcode) is True
+    assert is_stubbed_pass_through(opcode) is False
 
 
 def test_opcode_matcher_unsupported_rounding():
@@ -172,16 +172,26 @@ def test_programmersguide_z80_program_generation():
 # 4. Integration Tests Running Actual Test Vectors
 # ==============================================================================
 
-def test_ieee754_div_f64_pass_through(fpga: FpgaModel):
-    """Verifies that stubbed DIV_F64 passes through successfully."""
-    line = "b64/ =0 +1.0000000000000P0 +1.0000000000000P0 -> +1.0000000000000P0"
-    vec = parse_fptest_line(line)
-    opcode = match_test_vector(vec)
-    assert opcode == UserOpcode.DIV_F64
+def test_ieee754_div_f64_execution(fpga: FpgaModel):
+    """Verifies that DIV_F64 executes real IEEE-754 double precision division on FpgaModel."""
+    vectors = [
+        # Normal division: 6.0 / 2.0 = 3.0
+        "b64/ =0 +1.8000000000000P2 +1.0000000000000P1 -> +1.8000000000000P1",
+        # Fraction result: 1.0 / 4.0 = 0.25
+        "b64/ =0 +1.0000000000000P0 +1.0000000000000P2 -> +1.0000000000000P-2",
+        # Signed division: -12.0 / 3.0 = -4.0
+        "b64/ =0 -1.8000000000000P3 +1.8000000000000P1 -> -1.0000000000000P2",
+        # Division by zero: sets StatusFlag.ERR and raises z exception
+        "b64/ =0 +1.0000000000000P0 +Zero -> +Inf z",
+    ]
+    for line in vectors:
+        vec = parse_fptest_line(line)
+        opcode = match_test_vector(vec)
+        assert opcode == UserOpcode.DIV_F64
 
-    res = execute_test_vector(fpga, vec, opcode)
-    assert res.success is True
-    assert res.is_stubbed is True
+        res = execute_test_vector(fpga, vec, opcode)
+        assert res.success is True, f"Failed on {line}: {res.error_message}\n{res.z80_program}"
+        assert res.is_stubbed is False
 
 
 def test_ieee754_syntax_canonical_vectors(fpga: FpgaModel):

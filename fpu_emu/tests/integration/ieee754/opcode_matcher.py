@@ -22,17 +22,15 @@ VECTOR_OPCODE_MAP: Dict[Tuple[int, str], UserOpcode] = {
     (64, "+"): UserOpcode.ADD_F64,
     (64, "-"): UserOpcode.SUB_F64,
     (64, "*"): UserOpcode.MUL_F64,
-    (64, "/"): UserOpcode.DIV_F64,  # Stubbed as pass-through until implemented
+    (64, "/"): UserOpcode.DIV_F64,
     (64, "V"): UserOpcode.SQRT_F64,
     (64, "~"): UserOpcode.CHS_F64,
     (64, "A"): UserOpcode.ABS_F64,
     (64, "b32cff"): UserOpcode.CONV_F64_F32,
 }
 
-# Operations that are currently stubbed as pass-through
-STUBBED_OPCODES = {
-    UserOpcode.DIV_F64,
-}
+# Operations that are currently stubbed as pass-through (if any)
+STUBBED_OPCODES: set[UserOpcode] = set()
 
 
 def is_stubbed_pass_through(opcode: UserOpcode) -> bool:
