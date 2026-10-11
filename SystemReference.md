@@ -172,8 +172,8 @@ co-located:
 |                                  | `STO`     | `addr, src2_64`            | 1 |      2       | `0x25` (`0b100_101`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | 64-bit store to scratchpad                                          |
 |                                  | `STU`     | `addr, src2`               | 0 |      1       | `0x29` (`0b101_001`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `DATA_RAM[0x0C0 \| (addr & 0x3F)] <- src2` (user RAM)               |
 |                                  | `STU`     | `addr, src2_64`            | 1 |      2       | `0x29` (`0b101_001`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | 64-bit store to user scratchpad                                     |
-|                                  | `SWAP`    | `dst, src2`                | 0 |      2       | `0x27` (`0b100_111`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `dst <-> src2` (via staging register `F_`)                          |
-|                                  | `SWAP`    | `dst_64, src2_64`          | 1 |      4       | `0x27` (`0b100_111`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | 64-bit exchange `dst_64 <-> src2_64`                                |
+|                                  | `SWAP`    | `src1, src2`               | 0 |      2       | `0x27` (`0b100_111`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `src1 <-> src2` (via staging register `F_`)                          |
+|                                  | `SWAP`    | `src1_64, src2_64`         | 1 |      4       | `0x27` (`0b100_111`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | 64-bit exchange `src1_64 <-> src2_64`                                |
 | **Shifter**<br>`0b110`           | `ASL`     | `dst`                      | 0 |      1       | `0x32` (`0b110_010`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- dst << C` (V set if sign changed)                          |
 |                                  | `ASL`     | `dst, src1`                | 0 |      1       | `0x32` (`0b110_010`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- dst << src1` (V set if sign changed)                       |
 |                                  | `ASL`     | `dst, src1, src2`          | 0 |      1       | `0x32` (`0b110_010`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- src2 << src1` (V set if sign changed, src2 unmodified)      |
@@ -2313,7 +2313,7 @@ After execution of MOV AL, BL:
 
 ```
 ================================================================================
-SWAP dst, src2 / SWAP dst_64, src2_64 — REGISTER EXCHANGE
+SWAP src1, src2 / SWAP src1_64, src2_64 — REGISTER EXCHANGE
 ================================================================================
 ```
 
@@ -2332,26 +2332,26 @@ SWAP dst, src2 / SWAP dst_64, src2_64 — REGISTER EXCHANGE
 
 ```text
 if W == 0:
-    temp        <- dst
-    dst [31:0]  <- src2 [31:0]
+    temp        <- src1 [31:0]
+    src1 [31:0] <- src2 [31:0]
     src2 [31:0] <- temp
     UPC         <- UPC + 1
 else:
-    temp           <- dst_64
-    dst_64 [63:0]  <- src2_64 [63:0]
-    src2_64 [63:0] <- temp
+    temp_64        <- src1_64 [63:0]
+    src1_64 [63:0] <- src2_64 [63:0]
+    src2_64 [63:0] <- temp_64
     UPC            <- UPC + 1
 ```
 
 #### Instruction Word Format
 
-`OPCODE = 100111`. `W = 0` (32-bit, 1 cycle) or `W = 1` (64-bit, 1 cycle). `RES_SEL = dst`, `HA_MUX = dst`,
+`OPCODE = 100111`. `W = 0` (32-bit, 2 cycles) or `W = 1` (64-bit, 4 cycles). `RES_SEL = src1`, `HA_MUX = src1`,
 `HB_MUX = src2`.
 
 #### Description
 
-Exchanges the contents of registers `dst` and `src2` (or `dst_64` and `src2_64`) using the internal staging register in
-a single cycle.
+Exchanges the contents of registers `src1` and `src2` (or `src1_64` and `src2_64`) using the internal staging register
+across 2 cycles (32-bit) or 4 cycles (64-bit).
 
 #### Concrete Numeric Example
 
@@ -2360,6 +2360,12 @@ Suppose AL = 0xAAAAAAAA, BL = 0x55555555.
 After execution of SWAP AL, BL:
   AL <- 0x55555555
   BL <- 0xAAAAAAAA
+  Flags are unaffected.
+
+Suppose AX = 0x0123456789ABCDEF, BX = 0xFEDCBA9876543210.
+After execution of SWAP AX, BX:
+  AX <- 0xFEDCBA9876543210
+  BX <- 0x0123456789ABCDEF
   Flags are unaffected.
 ```
 
