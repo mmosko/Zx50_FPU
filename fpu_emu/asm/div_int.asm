@@ -69,94 +69,83 @@ DIV_HALT:
 ; 64-Bit Division Section
 ; ------------------------------------------------------------------------------
 USER_DIV_I64:
-    CALL POP_TWO_64             ; AX <- A (NOS), BX <- B (TOS)
-    OR BX, BX                   ; Test if divisor B == 0
-    JZ ZERO, DIV_64_ZERO        ; Abort on divide-by-zero
+    CALL    POP_TWO_64             ; AX <- A (NOS), BX <- B (TOS)
+    OR      BX, BX                 ; Test if divisor B == 0
+    JZ      ZERO, DIV_64_ZERO      ; Abort on divide-by-zero
 
     ; DL[31] = sign(A) ^ sign(B), DL[0] = 1 (signed mode flag)
-    MOV DL, AH
-    XOR DL, BH                  ; DL[31] = expected result sign
-    OR DL, 1                    ; DL[0] = 1 (signed mode)
+    XOR     DL, AH, BH             ; DL[31] = expected result sign (Ternary XOR)
+    OR      DL, 1                  ; DL[0] = 1 (signed mode)
 
-    ; Take |A|: if A < 0, AX = 0 - AX
-    OR AX, AX
-    JZ SIGN, DIV_64_ABS_A_DONE
-    XOR FX, FX
-    SUB AX, FX, AX
-DIV_64_ABS_A_DONE:
+    ; Take |A|
+    OR      AX, AX
+    JZ      SIGN, .abs_a_done
+    XOR     FX, FX
+    SUB     AX, FX, AX
+.abs_a_done:
 
-    ; Take |B|: if B < 0, BX = 0 - BX
-    OR BX, BX
-    JZ SIGN, DIV_64_ABS_B_DONE
-    XOR FX, FX
-    SUB BX, FX, BX
-DIV_64_ABS_B_DONE:
-    JMP DIV_64_CORE
+    ; Take |B|
+    OR      BX, BX
+    JZ      SIGN, .abs_b_done
+    XOR     FX, FX
+    SUB     BX, FX, BX
+.abs_b_done:
+    JMP     DIV_64_CORE
 
 USER_DIV_U64:
-    CALL POP_TWO_64             ; AX <- A (NOS), BX <- B (TOS)
-    OR BX, BX                   ; Test if divisor B == 0
-    JZ ZERO, DIV_64_ZERO        ; Abort on divide-by-zero
-    LDI DL, 0                   ; DL[31] = 0 (positive sign), DL[0] = 0 (unsigned mode)
+    CALL    POP_TWO_64             ; AX <- A (NOS), BX <- B (TOS)
+    OR      BX, BX                 ; Test if divisor B == 0
+    JZ      ZERO, DIV_64_ZERO      ; Abort on divide-by-zero
+    LDI     DL, 0                  ; DL[31] = 0, DL[0] = 0 (unsigned mode)
 
 DIV_64_CORE:
-    XOR CX, CX                  ; Initialize remainder R = 0 in CX
-    LDI C, 64                   ; Set loop counter C = 64 iterations
+    XOR     CX, CX                 ; Initialize remainder R = 0 in CX
+    LDI     C, 64                  ; Set loop counter C = 64 iterations
 
 DIV_64_LOOP:
-    LSL AX, 1                   ; Q << 1, CARRY = old Q[63]
-    JNZ CARRY, DIV_64_Q_CARRY
-
-    ; Path 1: Q[63] was 0
-    LSL CX, 1                   ; R << 1
-    SUB CX, CX, BX              ; R = R - B
-    JNZ CARRY, DIV_64_RESTORE
-    OR AL, 1                    ; R >= B: set Q[0] = 1
-    DJNZ DIV_64_LOOP
-    JMP DIV_64_DONE
-
-DIV_64_Q_CARRY:
-    ; Path 2: Q[63] was 1
-    LSL CX, 1                   ; R << 1
-    OR CL, 1                    ; R = (R << 1) | 1
-    SUB CX, CX, BX              ; R = R - B
-    JNZ CARRY, DIV_64_RESTORE
-    OR AL, 1                    ; R >= B: set Q[0] = 1
-    DJNZ DIV_64_LOOP
-    JMP DIV_64_DONE
+    LSL     AX, 1                  ; Q << 1, CARRY = old Q[63]
+    JNZ     CARRY, .q_carry
+    LSL     CX, 1                  ; R << 1 (Q[63] was 0)
+    JMP     .restoring_step
+.q_carry:
+    LSL     CX, 1                  ; R << 1 (Q[63] was 1)
+    OR      CL, 1                  ; R = (R << 1) | 1
+.restoring_step:
+    SUB     CX, CX, BX             ; R = R - B
+    JNZ     CARRY, DIV_64_RESTORE
+    OR      AL, 1                  ; R >= B: set Q[0] = 1
+    DJNZ    DIV_64_LOOP
+    JMP     DIV_64_DONE
 
 DIV_64_RESTORE:
-    ADD CX, CX, BX              ; R < B: restore R = R + B
-    DJNZ DIV_64_LOOP
-    ; When DJNZ completes (C == 0), falls through directly to DIV_64_DONE!
+    ADD     CX, CX, BX             ; R < B: restore R = R + B
+    DJNZ    DIV_64_LOOP            ; When DJNZ completes (C == 0), falls through!
 
 DIV_64_DONE:
-    AND BL, DL, 1               ; Check signed mode flag in DL[0]
-    JZ ZERO, DIV_64_PUSH_U64    ; If unsigned mode (DL[0] == 0): skip sign checks
+    AND     BL, DL, 1              ; Check signed mode flag in DL[0]
+    JZ      ZERO, DIV_64_PUSH_U64  ; Unsigned mode: set flags on AX and push
 
     ; Signed Mode (DIV_I64):
-    OR DL, DL                   ; Test expected result sign in DL[31]
-    JNZ SIGN, DIV_64_NEGATE     ; Negate if result should be negative
+    OR      DL, DL                 ; Test expected result sign in DL[31]
+    JNZ     SIGN, DIV_64_NEGATE    ; Negate if result should be negative
 
-    ; Expected positive result:
-    ; Check for signed overflow (-2^63 / -1):
-    ; If positive expected but bit 63 is set, overflow occurred!
-    OR AX, AX                   ; Check if bit 63 is set
-    JZ SIGN, DIV_64_PUSH_POS    ; Valid positive signed result
-    PUSH AX                     ; Overflow (-2^63 / -1): push AX then set OVERFLOW
-    LDI OVERFLOW, 1
+    ; Expected positive result: check for overflow (-2^63 / -1)
+    OR      AX, AX
+    JZ      SIGN, DIV_64_PUSH_POS
+    PUSH    AX                     ; Overflow: push AX then set OVERFLOW
+    LDI     OVERFLOW, 1
     HALT
 
 DIV_64_PUSH_U64:
-    OR AX, AX                   ; Set ZERO and SIGN flags for U64 quotient
-DIV_64_PUSH_POS:
-    PUSH AX                     ; Push 64-bit quotient {AH, AL}
-    HALT
+    OR      AX, AX                 ; Set ZERO and SIGN flags for U64 quotient
+    JMP     DIV_64_PUSH_POS
 
 DIV_64_NEGATE:
-    XOR FX, FX
-    SUB AX, FX, AX              ; AX = 0 - AX
-    PUSH AX                     ; Push 64-bit quotient {AH, AL}
+    XOR     FX, FX
+    SUB     AX, FX, AX             ; AX = 0 - AX (SUB sets SIGN and ZERO flags!)
+
+DIV_64_PUSH_POS:
+    PUSH    AX                     ; Shared 64-bit push exit
     HALT
 
 DIV_64_ZERO:

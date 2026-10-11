@@ -7,12 +7,12 @@
 ; Outputs:
 ;   Stack: TOS = -X (mod 2^64)
 ;   Status flags:
-;     Updated by SUB AX, FX (ZERO, SIGN, CARRY, OVERFLOW)
+;     Updated by SUB AX, FX, AX (ZERO, SIGN, CARRY, OVERFLOW)
 ;
 ; Register Allocation:
-;   AX (AL, AH) : Operand X, later zero and final negated result
-;   FX (FL, FH) : Scratch copy of operand X
-;   B, D        : Preserved / untouched
+;   AX (AL, AH) : Operand X, later negated result
+;   FX (FL, FH) : Scratch for 0
+;   B, D, C     : Preserved / untouched
 ;
 ; Subroutines Called:
 ;   POP_ONE_64
@@ -20,8 +20,7 @@
 
 USER_CHS_I64:
     CALL POP_ONE_64             ; AX <- X (TOS)
-    MOV FX, AX                  ; FX <- X (scratch copy)
-    XOR AX, AX                  ; AX <- 0
-    SUB AX, FX                  ; AX <- 0 - X = -X
+    XOR FX, FX                  ; FX <- 0
+    SUB AX, FX, AX              ; AX <- 0 - X = -X
     PUSH AX                     ; Push negated result
     HALT
