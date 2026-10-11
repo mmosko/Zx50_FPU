@@ -8,8 +8,8 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 
 ## Current Status & Capacity
 
-- **Test Suite Status:** 100% pass rate (**1,275 / 1,275 tests passing**).
-- **Microcode Capacity:** **955 / 1,024 words used** (**69 instruction words of headroom remaining**).
+- **Test Suite Status:** 100% pass rate (**1,303 / 1,303 tests passing**).
+- **Microcode Capacity:** **962 / 1,024 words used** (**62 instruction words of headroom remaining**).
 - **Hardware Call Stack:** 16-deep $\times$ 10-bit return-address stack in distributed LUT RAM (`RAM16X1S`) with 4-bit `CSP` pointer fully implemented and verified.
 - **Datapath Bus Symmetry:** `HA_MUX` and `HB_MUX` widened to full 4-bit symmetry (14:1 32-bit muxing across all 10 registers `AL`..`FH`, `EA`, `EB`, `C`, and `IMM`), allowing any register as `src1` without register shuffling.
 - **Completed 32-Bit Math Operations:**
@@ -25,7 +25,7 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 - **Completed 64-Bit Math Operations:**
   - Standard integer arithmetic: `ADD_I64`, `SUB_I64`, `MUL_I64`, `DIV_I64` (100% complete).
   - Unsigned integer arithmetic: `ADD_U64`, `SUB_U64`, `MUL_U64`, `DIV_U64` (100% complete).
-  - Floating-point arithmetic: `ADD_F64` (100% complete).
+  - Floating-point arithmetic: `ADD_F64`, `SUB_F64` (100% complete).
   - Utilities: `ABS_I64`, `CHS_I64`, `ABS_F64`, `CHS_F64`, `DUP8`.
   - Math Constants: `PUSH_PI_64`, `PUSH_E_64`, `PUSH_LN2_64`, `PUSH_LOG2E_64`, `PUSH_LOG2_10_64`, `PUSH_LOG10_2_64`, `PUSH_SQRT2_64`, `PUSH_INV_SQRT2_64`.
 
@@ -81,7 +81,7 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 
 ### 4. 64-Bit Floating-Point Arithmetic & Transcendentals (Estimated ~650–855 Microcode Instructions)
 - [x] Implement `ADD_F64` (`0x04`): 64-bit IEEE-754 double-precision addition with `align_f64` and `normalize_f64` (100% complete, 30 integration tests passing).
-- [ ] Implement `SUB_F64` (`0x0C`): 64-bit IEEE-754 double-precision subtraction (shares datapath with `ADD_F64`).
+- [x] Implement `SUB_F64` (`0x0C`): 64-bit IEEE-754 double-precision subtraction (reusing `ADD_F64_CORE`, 28 integration tests passing).
 - [ ] Implement `MUL_F64` (`0x13`): 64-bit IEEE-754 double-precision multiplication using cross-terms via hardware Booth multiplier (~45–60 words).
 - [ ] Implement `DIV_F64` (`0x1B`): 64-bit IEEE-754 double-precision division via 54-iteration non-restoring loop (~40–55 words).
 - [ ] Implement `SQRT_F64` (`0x23`): 64-bit IEEE-754 double-precision square root via digit-by-digit binary loop (~50–65 words).

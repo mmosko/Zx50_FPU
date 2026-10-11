@@ -9,6 +9,7 @@
 .include "asm/add_u64.asm"
 
 .include "asm/sub_f32.asm"
+.include "asm/sub_f64.asm"
 .include "asm/sub_i32.asm"
 .include "asm/sub_u32.asm"
 .include "asm/sub_i64.asm"
