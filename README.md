@@ -93,6 +93,7 @@ zx50_fpu/
 ├── SystemAssembler.md      # Microcode assembler specification
 ├── FPU_EMULATOR.md         # Emulator design rules and verification architecture
 ├── TODO.md                 # Roadmap and test verification tracking
+├── ieee754-test-suite/     # Git submodule: IEEE-754 test suite (IBM FPgen test vectors)
 ├── fpu_asm/                # Python microcode assembler (fasm)
 │   ├── assembler.py        # Two-pass assembler & label resolver
 │   ├── ucode.lark          # Lark EBNF microcode grammar
@@ -115,15 +116,29 @@ zx50_fpu/
 
 ---
 
-## Quick Start & Emulator Verification
+## Getting Started
 
 The repository includes a digital twin emulator and a unit test suite that enforces cycle-accurate hardware modeling:
 
 ### 1. Requirements
 * Python 3.10+
+* Git
 * `uv` or standard Python `venv`
 
-### 2. Environment Setup
+### 2. Submodule Initialization
+The repository uses the `ieee754-test-suite` git submodule for IEEE-754 floating-point test vectors.
+
+When cloning for the first time:
+```bash
+git clone --recurse-submodules <repo-url>
+```
+
+Or if the repository has already been cloned without submodules:
+```bash
+git submodule update --init --recursive
+```
+
+### 3. Environment Setup
 ```bash
 # Create and activate virtual environment
 uv venv .venv
@@ -133,13 +148,13 @@ source .venv/bin/activate
 uv pip install -e ".[dev]"
 ```
 
-### 3. Run the Test Suite
+### 4. Run the Test Suite
 ```bash
-# Run all 990+ emulator unit and integration tests
+# Run all emulator unit and integration tests
 pytest
 ```
 
-### 4. Assemble Microcode
+### 5. Assemble Microcode
 To re-assemble the microcode programs from `fpu_emu/asm/` into the runtime emulator image:
 ```bash
 python3 -m fpu_asm -i fpu_emu/ucode.asm -o fpu_emu/ucode.py --no-pad
