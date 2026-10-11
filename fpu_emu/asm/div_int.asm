@@ -70,7 +70,7 @@ DIV_HALT:
 ; ------------------------------------------------------------------------------
 USER_DIV_I64:
     CALL POP_TWO_64             ; AX <- A (NOS), BX <- B (TOS)
-    OR.64 BX, BX                ; Test if divisor B == 0
+    OR BX, BX                   ; Test if divisor B == 0
     JZ ZERO, DIV_64_ZERO        ; Abort on divide-by-zero
 
     ; DL[31] = sign(A) ^ sign(B), DL[0] = 1 (signed mode flag)
@@ -79,37 +79,37 @@ USER_DIV_I64:
     OR DL, 1                    ; DL[0] = 1 (signed mode)
 
     ; Take |A|: if A < 0, AX = 0 - AX
-    OR.64 AX, AX
+    OR AX, AX
     JZ SIGN, DIV_64_ABS_A_DONE
-    XOR.64 FX, FX
-    SUB.64 AX, FX, AX
+    XOR FX, FX
+    SUB AX, FX, AX
 DIV_64_ABS_A_DONE:
 
     ; Take |B|: if B < 0, BX = 0 - BX
-    OR.64 BX, BX
+    OR BX, BX
     JZ SIGN, DIV_64_ABS_B_DONE
-    XOR.64 FX, FX
-    SUB.64 BX, FX, BX
+    XOR FX, FX
+    SUB BX, FX, BX
 DIV_64_ABS_B_DONE:
     JMP DIV_64_CORE
 
 USER_DIV_U64:
     CALL POP_TWO_64             ; AX <- A (NOS), BX <- B (TOS)
-    OR.64 BX, BX                ; Test if divisor B == 0
+    OR BX, BX                   ; Test if divisor B == 0
     JZ ZERO, DIV_64_ZERO        ; Abort on divide-by-zero
     LDI DL, 0                   ; DL[31] = 0 (positive sign), DL[0] = 0 (unsigned mode)
 
 DIV_64_CORE:
-    XOR.64 CX, CX               ; Initialize remainder R = 0 in CX
+    XOR CX, CX                  ; Initialize remainder R = 0 in CX
     LDI C, 64                   ; Set loop counter C = 64 iterations
 
 DIV_64_LOOP:
-    LSL.64 AX, 1                ; Q << 1, CARRY = old Q[63]
+    LSL AX, 1                   ; Q << 1, CARRY = old Q[63]
     JNZ CARRY, DIV_64_Q_CARRY
 
     ; Path 1: Q[63] was 0
-    LSL.64 CX, 1                ; R << 1
-    SUB.64 CX, CX, BX           ; R = R - B
+    LSL CX, 1                   ; R << 1
+    SUB CX, CX, BX              ; R = R - B
     JNZ CARRY, DIV_64_RESTORE
     OR AL, 1                    ; R >= B: set Q[0] = 1
     DJNZ DIV_64_LOOP
@@ -117,16 +117,16 @@ DIV_64_LOOP:
 
 DIV_64_Q_CARRY:
     ; Path 2: Q[63] was 1
-    LSL.64 CX, 1                ; R << 1
+    LSL CX, 1                   ; R << 1
     OR CL, 1                    ; R = (R << 1) | 1
-    SUB.64 CX, CX, BX           ; R = R - B
+    SUB CX, CX, BX              ; R = R - B
     JNZ CARRY, DIV_64_RESTORE
     OR AL, 1                    ; R >= B: set Q[0] = 1
     DJNZ DIV_64_LOOP
     JMP DIV_64_DONE
 
 DIV_64_RESTORE:
-    ADD.64 CX, CX, BX           ; R < B: restore R = R + B
+    ADD CX, CX, BX              ; R < B: restore R = R + B
     DJNZ DIV_64_LOOP
     ; When DJNZ completes (C == 0), falls through directly to DIV_64_DONE!
 
@@ -141,21 +141,21 @@ DIV_64_DONE:
     ; Expected positive result:
     ; Check for signed overflow (-2^63 / -1):
     ; If positive expected but bit 63 is set, overflow occurred!
-    OR.64 AX, AX                ; Check if bit 63 is set
+    OR AX, AX                   ; Check if bit 63 is set
     JZ SIGN, DIV_64_PUSH_POS    ; Valid positive signed result
     PUSH AX                     ; Overflow (-2^63 / -1): push AX then set OVERFLOW
     LDI OVERFLOW, 1
     HALT
 
 DIV_64_PUSH_U64:
-    OR.64 AX, AX                ; Set ZERO and SIGN flags for U64 quotient
+    OR AX, AX                   ; Set ZERO and SIGN flags for U64 quotient
 DIV_64_PUSH_POS:
     PUSH AX                     ; Push 64-bit quotient {AH, AL}
     HALT
 
 DIV_64_NEGATE:
-    XOR.64 FX, FX
-    SUB.64 AX, FX, AX           ; AX = 0 - AX
+    XOR FX, FX
+    SUB AX, FX, AX              ; AX = 0 - AX
     PUSH AX                     ; Push 64-bit quotient {AH, AL}
     HALT
 

@@ -2,6 +2,7 @@
 ; Top-level include of all microcode source
 
 .include "asm/add_f32.asm"
+.include "asm/add_f64.asm"
 .include "asm/add_i32.asm"
 .include "asm/add_u32.asm"
 .include "asm/add_i64.asm"
@@ -53,4 +54,6 @@
 .include "asm/pop_two_32.asm"
 .include "asm/pop_two_64.asm"
 .include "asm/align_f32.asm"
+.include "asm/align_f64.asm"
 .include "asm/normalize_f32.asm"
+.include "asm/normalize_f64.asm"
