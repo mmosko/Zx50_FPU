@@ -9,7 +9,7 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 ## Current Status & Capacity
 
 - **Test Suite Status:** 100% pass rate (**1,245 / 1,245 tests passing**).
-- **Microcode Capacity:** **1,019 / 1,024 words used** (5 instruction words of headroom remaining).
+- **Microcode Capacity:** **992 / 1,024 words used** (32 instruction words of headroom remaining).
 - **Hardware Call Stack:** 16-deep $\times$ 10-bit return-address stack in distributed LUT RAM (`RAM16X1S`) with 4-bit `CSP` pointer fully implemented and verified.
 - **Datapath Bus Symmetry:** `HA_MUX` and `HB_MUX` widened to full 4-bit symmetry (14:1 32-bit muxing across all 10 registers `AL`..`FH`, `EA`, `EB`, `C`, and `IMM`), allowing any register as `src1` without register shuffling.
 - **Completed 32-Bit Math Operations:**
@@ -70,16 +70,32 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 - [x] Implement `CEIL_F32` (`0x69`): Mathematical ceiling toward $+\infty$.
 - [ ] Implement `CEIL_F64` (`0x6B`): Mathematical ceiling toward $+\infty$.
 
-### 4. 64-Bit Floating-Point Arithmetic & Transcendentals
-- [ ] Implement `ADD_F64` (`0x03`): 64-bit IEEE-754 double-precision addition.
-- [ ] Implement `SUB_F64` (`0x0B`): 64-bit IEEE-754 double-precision subtraction.
-- [ ] Implement `MUL_F64` (`0x13`): 64-bit IEEE-754 double-precision multiplication using cascaded Booth multiplier.
-- [ ] Implement `DIV_F64` (`0x1B`): 64-bit IEEE-754 double-precision division.
-- [ ] Implement `SQRT_F64` (`0x23`): 64-bit IEEE-754 double-precision square root.
-- [ ] Implement `POW_F64` (`0x2B`): 64-bit IEEE-754 double-precision power ($x^y$).
-- [ ] Implement `LOG2_F64` (`0x33`): 64-bit base-2 logarithm.
-- [ ] Implement `EXP2_F64` (`0x3B`): 64-bit base-2 exponential ($2^x$).
-- [ ] Implement 64-bit CORDIC trigonometrics: `SIN_F64` (`0x73`), `COS_F64` (`0x7B`), `TAN_F64` (`0x83`).
+### 4. 64-Bit Floating-Point Arithmetic & Transcendentals (Estimated ~650–855 Microcode Instructions)
+- [ ] Implement `ADD_F64` (`0x03`): 64-bit IEEE-754 double-precision addition (~70–85 words with `SUB_F64`, `align_f64`, `normalize_f64`).
+- [ ] Implement `SUB_F64` (`0x0B`): 64-bit IEEE-754 double-precision subtraction (shares datapath with `ADD_F64`).
+- [ ] Implement `MUL_F64` (`0x13`): 64-bit IEEE-754 double-precision multiplication using cross-terms via hardware Booth multiplier (~45–60 words).
+- [ ] Implement `DIV_F64` (`0x1B`): 64-bit IEEE-754 double-precision division via 54-iteration non-restoring loop (~40–55 words).
+- [ ] Implement `SQRT_F64` (`0x23`): 64-bit IEEE-754 double-precision square root via digit-by-digit binary loop (~50–65 words).
+- [ ] Implement `POW_F64` (`0x2B`): 64-bit IEEE-754 double-precision power ($x^y$) via $2^{y \log_2 x}$ dispatch (~35–50 words).
+- [ ] Implement `LOG2_F64` (`0x33`): 64-bit base-2 logarithm via degree 7–8 Chebyshev polynomial (~120–160 words).
+- [ ] Implement `EXP2_F64` (`0x3B`): 64-bit base-2 exponential ($2^x$) via degree 7–8 polynomial (~90–120 words).
+- [ ] Implement 64-bit CORDIC trigonometrics: `SIN_F64` (`0x73`), `COS_F64` (`0x7B`), `TAN_F64` (`0x83`) (~200–260 words).
+
+#### Microcode ROM Capacity & Scaling Analysis for 64-Bit Suite
+| Functional Group | Operations | Estimated Instructions |
+| :--- | :--- | :---: |
+| **Basic 64-Bit Arithmetic** | `ADD_F64`, `SUB_F64`, `MUL_F64`, `DIV_F64` | **~155 – 200** |
+| **Square Root** | `SQRT_F64` | **~50 – 65** |
+| **Transcendentals** | `LOG2_F64`, `EXP2_F64`, `POW_F64` | **~245 – 330** |
+| **CORDIC Trigonometrics** | `SIN_F64`, `COS_F64`, `TAN_F64` | **~200 – 260** |
+| **TOTAL FOR COMPLETE 64-BIT SUITE** | | **~650 – 855** |
+
+> [!NOTE]
+> **Microcode ROM Architecture Requirement:**
+> Current microcode usage is **992 / 1,024 words** (32 words headroom in a single 10-bit UPC address space). Implementing the full 64-bit floating-point and transcendental suite requires expanding microcode capacity:
+> - **Option A (Recommended - 2,048 Words):** Expand `UPC` address width from 10 bits (`0x3FF`) to 11 bits (`0x7FF`) by allocating a 2nd EBR block on the Lattice MachXO2-2000 (which has 8 EBR blocks total, with only 1 currently dedicated to microcode).
+> - **Option B (Microcode Bank Switching / Overlay):** Add a 1-bit bank register switching two 1,024-word pages (Bank 0: 32-bit & integer operations; Bank 1: 64-bit float operations).
+> - **Option C (Staged Implementation):** Implement pure conversions and integer operations within current ROM space via microcode compaction, deferring transcendental/CORDIC 64-bit routines until 2K expansion is enabled.
 
 ### 5. Hardware Simulation & Verilog RTL
 - [ ] **Host Interface Simulation**:
