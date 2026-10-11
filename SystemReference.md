@@ -1,11 +1,13 @@
 # Microcode Instruction Reference Manual
 
-Instructions are of these forms:
+Instruction operand formats are classified by their assembly language view (the number of explicit operands in the
+assembly statement, rather than mathematical function arity):
 
-- Nullary, e.g. `RET`
-- Unary, e.g. `POP AL` such that `AL <- TOS`
-- Binary, e.g. `ADD AL, BL` such that `AL <- AL + BL`
-- Ternary, e.g. `ADD AL, BL, DL` such that `AL <- BL + DL`
+- **Nullary** (0 operands): e.g. `RET`, `NOP`, `HALT`
+- **Unary** (1 operand): e.g. `POP AL` such that `AL <- TOS`, `PUSH BL`, `NOT AL`
+- **Binary** (2 operands): e.g. `ADD AL, BL` such that `AL <- AL + BL` (with implied `src1 = dst`), `CMP AL, BL`,
+  `MOV AL, BL`
+- **Ternary** (3 operands): e.g. `ADD AL, BL, DL` such that `AL <- BL + DL`, `LDC AL, CONST, 0x02`
 
 The physical registers are 32-bits each (unless stated otherwise):
 
@@ -25,19 +27,28 @@ The physical registers are 32-bits each (unless stated otherwise):
   to [ProgrammersGuide.md](ProgrammersGuide.md#2-status-register-status70) for complete bitfield definitions, system vs.
   ALU flag separation, and Z80 polling idioms)
 
-In the assembly, pseudo-registers AX, BX, CX, DX, and FX denote 64-bit operations, e.g `ADD AX, BX`.
+In the assembly, pseudo-registers AX, BX, CX, DX, and FX denote 64-bit operations (e.g., `ADD dst_64, src2_64` such as
+`ADD AX, BX`).
 
 The operation arguments may be any of these. We use `IMM` to mean the immediate value in an
-instruction, which we treat like its own register (it actually -- the machine word is broken into
+instruction, which we treat like its own register (it actually is -- the machine word is broken into
 the instruction register and the immediate register).
 
-- the destination (`dst`) can be any of:
-    - AL, AH, BL, BH, CL, CH, DL, DH, FL, FH, EA, EB, or C.
-- The `src1` corresponds to the `HA_MUX`, which is a 16-input mux:
-    - AL, AH, BL, BH, CL, CH, DL, DH, FL, FH, EA, EB, C, IMM
-    - When used with `LDC`, `src1` uses the mnemonic for a source constant table. See `LDC` below.
-- The `src2` argument corresponds to the `HB_MUX`, which is a 16-input mux:
-    - AL, AH, BL, BH, CL, CH, DL, DH, FL, FH, EA, EB, C, or IMM.
+```text
++---------+----+----+----+----+----+----+----+----+----+----+----+----+----+-----+
+| arg     | AL | AH | BL | BH | CL | CH | DL | DH | FL | FH | EA | EB | C  | IMM | 
++---------+----+----+----+----+----+----+----+----+----+----+----+----+----+-----+
+| dst     | X  | X  | X  | X  | X  | X  | X  | X  | X  | X  | X  | X  | X  |     |
+| src1    | X  | X  | X  | X  | X  | X  | X  | X  | X  | X  | X  | X  | X  | X   |
+| src2    | X  | X  | X  | X  | X  | X  | X  | X  | X  | X  | X  | X  | X  | X   |
++---------+----+----+----+----+----+----+----+----+----+----+----+----+----+-----+
+|         |   AX    |   BX    |    CX   |    DX   |   FX    |    |    |    |     |
++---------+---------+---------+---------+---------+---------+----+----+----+-----+
+| dst_64  |    X    |    X    |     X   |     X   |    X    |    |    |    |     |
+| src1_64 |    X    |    X    |     X   |     X   |    X    |    |    |    |     |
+| src2_64 |    X    |    X    |     X   |     X   |    X    |    |    |    |     |
++---------+---------+---------+---------+---------+---------+----+----+----+-----+
+```
 
 ## 1. Summary of the Microcode Instruction Set
 
@@ -58,98 +69,119 @@ co-located:
 
 ### Instruction Set Summary Table
 
-| Block                            | Mnemonic  | Operands          | W | Clock Cycles |  Opcode (Hex / Bin)  |  BSY  |   ERR   |   S   |   C   |   V   | U | DF | Z | Operation Performed                                             |
-|:---------------------------------|:----------|:------------------|:-:|:------------:|:--------------------:|:-----:|:-------:|:-----:|:-----:|:-----:|:-:|:--:|:-:|:----------------------------------------------------------------|
-| **Math**<br>`0b000`<br>`0b001`   | `ADC`     | `dst, src2`       | 0 |      1       | `0x01` (`0b000_001`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- dst + src2 + C`                                         |
-|                                  | `ADC`     | `dst, src1, src2` | 0 |      1       | `0x01` (`0b000_001`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- src1 + src2 + C`                                        |
-|                                  | `ADC`     | `AX, BX`          | 1 |      2       | `0x01` (`0b000_001`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `AX <- AX + BX + C` (64-bit)                                    |
-|                                  | `ADD`     | `dst, src2`       | 0 |      1       | `0x00` (`0b000_000`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- dst + src2`                                             |
-|                                  | `ADD`     | `dst, src1, src2` | 0 |      1       | `0x00` (`0b000_000`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- src1 + src2`                                            |
-|                                  | `ADD`     | `AX, BX`          | 1 |      2       | `0x00` (`0b000_000`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `AX <- AX + BX` (64-bit)                                        |
-|                                  | `CMP`     | `src1, src2`      | 0 |      1       | `0x04` (`0b000_100`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `src1 - src2` (discards result)                                 |
-|                                  | `CMP`     | `src1, src2`      | 1 |      2       | `0x04` (`0b000_100`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `src1 - src2` (64-bit compare)                                      |
-|                                  | `DIV`     | `dst, src2`       | 0 |      32      | `0x0B` (`0b001_011`) |   •   |    X    |   X   |   0   |   X   | • | •  | X | `dst <- dst / src2, DL <- rem` (ERR & V on div 0)               |
-|                                  | `DIV`     | `dst, src2`       | 1 |      64      | `0x0B` (`0b001_011`) |   •   |    X    |   X   |   0   |   X   | • | •  | X | `dst <- dst / src2, DX <- rem` (64-bit)                             |
-|                                  | `DIVU`    | `dst, src2`       | 0 |      32      | `0x0F` (`0b001_111`) |   •   |    X    |   X   |   0   |   X   | • | •  | X | `dst <- dst / src2, DL <- rem` (unsigned, ERR & V on div 0)     |
-|                                  | `DIVU`    | `AX, BX`          | 1 |      64      | `0x0F` (`0b001_111`) |   •   |    X    |   X   |   0   |   X   | • | •  | X | `AX <- AX / BX, DX <- rem` (64-bit)                             |
-|                                  | `EXP_ADD` | `dst, src2`       | 0 |      1       | `0x05` (`0b000_101`) |   •   |    •    |   X   |   0   |   X   | X | •  | X | `dst <- dst + src2` (12-bit exp; V if > 1023, U if < -1022)     |
-|                                  | `EXP_ADD` | `dst, src1, src2` | 0 |      1       | `0x05` (`0b000_101`) |   •   |    •    |   X   |   0   |   X   | X | •  | X | `dst <- src1 + src2` (12-bit exp)                               |
-|                                  | `EXP_SUB` | `dst, src2`       | 0 |      1       | `0x06` (`0b000_110`) |   •   |    •    |   X   |   0   |   X   | X | •  | X | `dst <- dst - src2` (12-bit exp; V if > 1023, U if < -1022)     |
-|                                  | `EXP_SUB` | `dst, src1, src2` | 0 |      1       | `0x06` (`0b000_110`) |   •   |    •    |   X   |   0   |   X   | X | •  | X | `dst <- src1 - src2` (12-bit exp)                               |
-|                                  | `MUL`     | `dst, src2`       | 0 |      16      | `0x0A` (`0b001_010`) |   •   |    •    |   X   |   0   |   X   | • | •  | X | `dst <- dst * src2` (signed Booth mul)                          |
-|                                  | `MUL`     | `dst, src1, src2` | 0 |      16      | `0x0A` (`0b001_010`) |   •   |    •    |   X   |   0   |   X   | • | •  | X | `dst <- src1 * src2`                                            |
-|                                  | `MUL`     | `AX, BX`          | 1 |      64      | `0x0A` (`0b001_010`) |   •   |    •    |   X   |   0   |   X   | • | •  | X | `AX <- AX * BX` (64-bit)                                        |
-|                                  | `MULU`    | `dst, src2`       | 0 |      16      | `0x0E` (`0b001_110`) |   •   |    •    |   X   |   0   |   X   | • | •  | X | `{AH, AL} <- dst * src2` (unsigned Booth mul, V if AH != 0)     |
-|                                  | `MULU`    | `dst, src1, src2` | 0 |      16      | `0x0E` (`0b001_110`) |   •   |    •    |   X   |   0   |   X   | • | •  | X | `{AH, AL} <- src1 * src2`                                       |
-|                                  | `MULU`    | `AX, BX`          | 1 |      64      | `0x0E` (`0b001_110`) |   •   |    •    |   X   |   0   |   X   | • | •  | X | `{DX, AX} <- AX * BX` (64-bit unsigned, V if DX != 0)           |
-|                                  | `PACK`    | `dst, src1`       | 0 |      1       | `0x08` (`0b001_000`) |   •   |    •    |   X   |   •   |   X   | X | •  | X | `dst <- pack(sign, src1=exp, dst=mantissa)` (IEEE float)        |
-|                                  | `PACK`    | `AX, src1`        | 1 |      2       | `0x08` (`0b001_000`) |   •   |    •    |   X   |   •   |   X   | X | •  | X | `AX <- pack(sign, src1=exp, AX=mantissa)` (IEEE double)         |
-|                                  | `SBB`     | `dst, src2`       | 0 |      1       | `0x03` (`0b000_011`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- dst - src2 - C`                                         |
-|                                  | `SBB`     | `dst, src1, src2` | 0 |      1       | `0x03` (`0b000_011`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- src1 - src2 - C`                                        |
-|                                  | `SBB`     | `AX, BX`          | 1 |      2       | `0x03` (`0b000_011`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `AX <- AX - BX - C` (64-bit)                                    |
-|                                  | `SUB`     | `dst, src2`       | 0 |      1       | `0x02` (`0b000_010`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- dst - src2`                                             |
-|                                  | `SUB`     | `dst, src1, src2` | 0 |      1       | `0x02` (`0b000_010`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- src1 - src2`                                            |
-|                                  | `SUB`     | `AX, BX`          | 1 |      2       | `0x02` (`0b000_010`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `AX <- AX - BX` (64-bit)                                        |
-|                                  | `UNPACK`  | `dst, src1`       | 0 |      1       | `0x09` (`0b001_001`) |   •   |    •    |   X   |   •   |   •   | • | X  | X | `src1 <- dst.exp, dst <- dst.mantissa`; DF=`sA ^ sB`            |
-|                                  | `UNPACK`  | `AX, src1`        | 1 |      2       | `0x09` (`0b001_001`) |   •   |    •    |   X   |   •   |   •   | • | X  | X | `src1 <- AX.exp, AX <- AX.mantissa` (64-bit double)             |
-| **Logic**<br>`0b010`             | `AND`     | `dst, src2`       | 0 |      1       | `0x10` (`0b010_000`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst <- dst & src2` (**clears C and V**)                        |
-|                                  | `AND`     | `dst, src1, src2` | 0 |      1       | `0x10` (`0b010_000`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst <- src1 & src2` (**clears C and V**)                       |
-|                                  | `AND`     | `AX, BX`          | 1 |      2       | `0x10` (`0b010_000`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `AX <- AX & BX` (**clears C and V**)                            |
-|                                  | `FABS`    | `dst`             | 0 |      1       | `0x13` (`0b010_011`) |   •   |    •    |   0   |   •   |   •   | • | •  | X | `dst[31] <- 0` (clears S)                                       |
-|                                  | `FABS`    | `AX`              | 1 |      2       | `0x13` (`0b010_011`) |   •   |    •    |   0   |   •   |   •   | • | •  | X | `AH[31] <- 0` (clears S)                                        |
-|                                  | `FCHS`    | `dst`             | 0 |      1       | `0x14` (`0b010_100`) |   •   |    •    |   X   |   •   |   •   | • | •  | X | `dst[31] <- ~dst[31]` (inverts S)                               |
-|                                  | `FCHS`    | `AX`              | 1 |      2       | `0x14` (`0b010_100`) |   •   |    •    |   X   |   •   |   •   | • | •  | X | `AH[31] <- ~AH[31]` (inverts S)                                 |
-|                                  | `NOT`     | `dst`             | 0 |      1       | `0x15` (`0b010_101`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst <- ~dst` (**clears C and V**)                              |
-|                                  | `NOT`     | `AX`              | 1 |      2       | `0x15` (`0b010_101`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `AX <- ~AX` (**clears C and V**)                                |
-|                                  | `OR`      | `dst, src2`       | 0 |      1       | `0x11` (`0b010_001`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst <- dst \| src2` (**clears C and V**)                       |
-|                                  | `OR`      | `dst, src1, src2` | 0 |      1       | `0x11` (`0b010_001`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst <- src1 \| src2` (**clears C and V**)                      |
-|                                  | `OR`      | `AX, BX`          | 1 |      2       | `0x11` (`0b010_001`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `AX <- AX \| BX` (**clears C and V**)                           |
-|                                  | `XOR`     | `dst, src2`       | 0 |      1       | `0x12` (`0b010_010`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst <- dst ^ src2` (**clears C and V**)                        |
-|                                  | `XOR`     | `dst, src1, src2` | 0 |      1       | `0x12` (`0b010_010`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst <- src1 ^ src2` (**clears C and V**)                       |
-|                                  | `XOR`     | `AX, BX`          | 1 |      2       | `0x12` (`0b010_010`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `AX <- AX ^ BX` (**clears C and V**)                            |
-| **Control**<br>`0b011`           | `CALL`    | `addr`            | 0 |      2       | `0x1C` (`0b011_100`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `CALL_STACK[CSP++] <- UPC + 1; UPC <- addr`                     |
-|                                  | `DJNZ`    | `addr`            | 0 |    2 / 1     | `0x1B` (`0b011_011`) |   •   |    •    |   •   |   •   |   •   | • | •  | X | `C <- C - 1; if (C != 0) UPC <- addr` (sets ZF)                 |
-|                                  | `HALT`    | —                 | 0 |      1       | `0x1F` (`0b011_111`) | **0** |    •    |   •   |   •   |   •   | • | •  | • | `STATUS.BSY <- 0; pulse EXEC_DONE`                              |
-|                                  | `JMP`     | `addr`            | 0 |      2       | `0x18` (`0b011_000`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `UPC <- addr` (unconditional jump)                              |
-|                                  | `JNZ`     | `[flag,] addr`    | 0 |    2 / 1     | `0x19` (`0b011_001`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `if (!cond) UPC <- addr` (default: `!ZF`)                       |
-|                                  | `JZ`      | `[flag,] addr`    | 0 |    2 / 1     | `0x1A` (`0b011_010`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `if (cond) UPC <- addr` (default: `ZF`)                         |
-|                                  | `NOP`     | —                 | 0 |      1       | `0x1E` (`0b011_110`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | No operation (pipeline bubble)                                  |
-|                                  | `RET`     | —                 | 0 |      2       | `0x1D` (`0b011_101`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `UPC <- CALL_STACK[--CSP]`                                      |
-| **Memory**<br>`0b100`<br>`0b101` | `LD`      | `dst, addr`       | 0 |      1       | `0x24` (`0b100_100`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `dst <- DATA_RAM[0x080 \| (addr & 0x3F)]`                       |
-|                                  | `LD`      | `dst, [src1]`     | 0 |      1       | `0x24` (`0b100_100`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `dst <- DATA_RAM[0x080 \| (src1 & 0x3F)]`                       |
-|                                  | `LD`      | `AX, addr`        | 1 |      2       | `0x24` (`0b100_100`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | 64-bit load from scratchpad                                     |
-|                                  | `LDC`     | `dst, tbl, addr`  | 0 |      1       | `0x22` (`0b100_010`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `dst <- DATA_RAM[TBL_BASE \| addr]` (constant/LUT)              |
-|                                  | `LDC`     | `AX, tbl, addr`   | 1 |      2       | `0x22` (`0b100_010`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | 64-bit load from constant/LUT table                             |
-|                                  | `LDI`     | `dst, imm`        | 0 |      1       | `0x23` (`0b100_011`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `dst <- imm` (zero-extended 10-bit imm)                         |
-|                                  | `LDI`     | `AX, imm`         | 1 |      2       | `0x23` (`0b100_011`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `AL <- imm; AH <- 0`                                            |
-|                                  | `LDI`     | `flag, val`       | 0 |      1       | `0x23` (`0b100_011`) |   X   |    X    |   X   |   X   |   X   | X | X  | X | `STATUS[flag] <- val & 1` (updates selected flag)               |
-|                                  | `LDU`     | `dst, addr`       | 0 |      1       | `0x28` (`0b101_000`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `dst <- DATA_RAM[0x0C0 \| (addr & 0x3F)]` (user RAM)            |
-|                                  | `LDU`     | `AX, addr`        | 1 |      2       | `0x28` (`0b101_000`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | 64-bit load from user scratchpad                                |
-|                                  | `MOV`     | `dst, src2`       | 0 |      1       | `0x26` (`0b100_110`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `dst <- src2`                                                   |
-|                                  | `MOV`     | `AX, BX`          | 1 |      2       | `0x26` (`0b100_110`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `AX <- BX` (64-bit copy)                                        |
-|                                  | `POP`     | `dst`             | 0 |      1       | `0x21` (`0b100_001`) |   •   | **X\*** |   •   |   •   |   •   | • | •  | • | `dst <- TOS, SP <- SP - 1` (\*sets ERR on underflow)            |
-|                                  | `POP`     | `AX`              | 1 |      2       | `0x21` (`0b100_001`) |   •   | **X\*** |   •   |   •   |   •   | • | •  | • | `AX <- TOS, SP <- SP - 2` (\*sets ERR on underflow)             |
-|                                  | `PUSH`    | `src2`            | 0 |      1       | `0x20` (`0b100_000`) |   •   | **X\*** |   •   |   •   |   •   | • | •  | • | `TOS <- src2, SP <- SP + 1` (\*sets ERR on overflow)            |
-|                                  | `PUSH`    | `AX`              | 1 |      2       | `0x20` (`0b100_000`) |   •   | **X\*** |   •   |   •   |   •   | • | •  | • | `TOS <- AX, SP <- SP + 2` (\*sets ERR on overflow)              |
-|                                  | `SRES`    | —                 | 0 |      1       | `0x2F` (`0b101_111`) |   •   |    •    |   X   |   X   |   X   | X | X  | X | `STATUS <- SHADOW_STATUS` (restores ALU flags with mask `0x3F`) |
-|                                  | `SSAV`    | —                 | 0 |      1       | `0x2E` (`0b101_110`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `SHADOW_STATUS <- STATUS` (saves flags)                         |
-|                                  | `STO`     | `addr, src2`      | 0 |      1       | `0x25` (`0b100_101`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `DATA_RAM[0x080 \| (addr & 0x3F)] <- src2`                      |
-|                                  | `STO`     | `[src1], src2`    | 0 |      1       | `0x25` (`0b100_101`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `DATA_RAM[0x080 \| (src1 & 0x3F)] <- src2`                      |
-|                                  | `STO`     | `addr, AX`        | 1 |      2       | `0x25` (`0b100_101`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | 64-bit store to scratchpad                                      |
-|                                  | `STU`     | `addr, src2`      | 0 |      1       | `0x29` (`0b101_001`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `DATA_RAM[0x0C0 \| (addr & 0x3F)] <- src2` (user RAM)           |
-|                                  | `STU`     | `addr, AX`        | 1 |      2       | `0x29` (`0b101_001`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | 64-bit store to user scratchpad                                 |
-|                                  | `SWAP`    | `dst, src2`       | 0 |      2       | `0x27` (`0b100_111`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `dst <-> src2` (via staging register `F_`)                      |
-|                                  | `SWAP`    | `AX, BX`          | 1 |      4       | `0x27` (`0b100_111`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | 64-bit exchange `AX <-> BX`                                     |
-| **Shifter**<br>`0b110`           | `ASL`     | `dst[, src1]`     | 0 |      1       | `0x32` (`0b110_010`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- dst << (src1 \| C)` (V set if sign changed)             |
-|                                  | `ASL`     | `AX[, src1]`      | 1 |      2       | `0x32` (`0b110_010`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | 64-bit arithmetic shift left                                    |
-|                                  | `ASR`     | `dst[, src1]`     | 0 |      1       | `0x33` (`0b110_011`) |   •   |    •    |   X   |   X   |   •   | • | •  | X | `dst <- dst >> (src1 \| C)` (sign-extended)                     |
-|                                  | `ASR`     | `AX[, src1]`      | 1 |      2       | `0x33` (`0b110_011`) |   •   |    •    |   X   |   X   |   •   | • | •  | X | 64-bit arithmetic shift right                                   |
-|                                  | `LSL`     | `dst[, src1]`     | 0 |      1       | `0x30` (`0b110_000`) |   •   |    •    |   X   |   X   |   •   | • | •  | X | `dst <- dst << (src1 \| C)` (C = last bit out)                  |
-|                                  | `LSL`     | `AX[, src1]`      | 1 |      2       | `0x30` (`0b110_000`) |   •   |    •    |   X   |   X   |   •   | • | •  | X | 64-bit logical shift left                                       |
-|                                  | `LSR`     | `dst[, src1]`     | 0 |      1       | `0x31` (`0b110_001`) |   •   |    •    | **0** |   X   |   •   | • | •  | X | `dst <- dst >> (src1 \| C)` (clears S)                          |
-|                                  | `LSR`     | `AX[, src1]`      | 1 |      2       | `0x31` (`0b110_001`) |   •   |    •    | **0** |   X   |   •   | • | •  | X | 64-bit logical shift right                                      |
-|                                  | `LZC`     | `dst, src2`       | 0 |      1       | `0x36` (`0b110_110`) |   •   |    •    |   •   |   •   |   •   | • | •  | X | `dst <- count_leading_zeros(src2)` (ZF if 0)                    |
-|                                  | `LZC`     | `AX, BX`          | 1 |      2       | `0x36` (`0b110_110`) |   •   |    •    |   •   |   •   |   •   | • | •  | X | 64-bit leading zero count                                       |
+| Block                            | Mnemonic  | Operands                   | W | Clock Cycles |  Opcode (Hex / Bin)  |  BSY  |   ERR   |   S   |   C   |   V   | U | DF | Z | Operation Performed                                                 |
+|:---------------------------------|:----------|:---------------------------|:-:|:------------:|:--------------------:|:-----:|:-------:|:-----:|:-----:|:-----:|:-:|:--:|:-:|:--------------------------------------------------------------------|
+| **Math**<br>`0b000`<br>`0b001`   | `ADC`     | `dst, src2`                | 0 |      1       | `0x01` (`0b000_001`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- dst + src2 + C`                                             |
+|                                  | `ADC`     | `dst, src1, src2`          | 0 |      1       | `0x01` (`0b000_001`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- src1 + src2 + C`                                            |
+|                                  | `ADC`     | `dst_64, src2_64`          | 1 |      2       | `0x01` (`0b000_001`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst_64 <- dst_64 + src2_64 + C` (64-bit)                           |
+|                                  | `ADC`     | `dst_64, src1_64, src2_64` | 1 |      2       | `0x01` (`0b000_001`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst_64 <- src1_64 + src2_64 + C` (64-bit)                          |
+|                                  | `ADD`     | `dst, src2`                | 0 |      1       | `0x00` (`0b000_000`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- dst + src2`                                                 |
+|                                  | `ADD`     | `dst, src1, src2`          | 0 |      1       | `0x00` (`0b000_000`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- src1 + src2`                                                |
+|                                  | `ADD`     | `dst_64, src2_64`          | 1 |      2       | `0x00` (`0b000_000`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst_64 <- dst_64 + src2_64` (64-bit)                               |
+|                                  | `ADD`     | `dst_64, src1_64, src2_64` | 1 |      2       | `0x00` (`0b000_000`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst_64 <- src1_64 + src2_64` (64-bit)                              |
+|                                  | `CMP`     | `src1, src2`               | 0 |      1       | `0x04` (`0b000_100`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `src1 - src2` (discards result)                                     |
+|                                  | `CMP`     | `src1_64, src2_64`         | 1 |      2       | `0x04` (`0b000_100`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `src1_64 - src2_64` (64-bit compare)                                |
+|                                  | `DIV`     | `dst, src2`                | 0 |      32      | `0x0B` (`0b001_011`) |   •   |    X    |   X   |   0   |   X   | • | •  | X | `dst <- dst / src2, DL <- rem` (ERR & V on div 0)                   |
+|                                  | `DIV`     | `dst, src1, src2`          | 0 |      32      | `0x0B` (`0b001_011`) |   •   |    X    |   X   |   0   |   X   | • | •  | X | `dst <- src1 / src2, DL <- rem` (ERR & V on div 0)                  |
+|                                  | `DIV`     | `dst_64, src2_64`          | 1 |      64      | `0x0B` (`0b001_011`) |   •   |    X    |   X   |   0   |   X   | • | •  | X | `dst_64 <- dst_64 / src2_64, DX <- rem` (64-bit)                    |
+|                                  | `DIV`     | `dst_64, src1_64, src2_64` | 1 |      64      | `0x0B` (`0b001_011`) |   •   |    X    |   X   |   0   |   X   | • | •  | X | `dst_64 <- src1_64 / src2_64, DX <- rem` (64-bit)                   |
+|                                  | `DIVU`    | `dst, src2`                | 0 |      32      | `0x0F` (`0b001_111`) |   •   |    X    |   X   |   0   |   X   | • | •  | X | `dst <- dst / src2, DL <- rem` (unsigned, ERR & V on div 0)         |
+|                                  | `DIVU`    | `dst, src1, src2`          | 0 |      32      | `0x0F` (`0b001_111`) |   •   |    X    |   X   |   0   |   X   | • | •  | X | `dst <- src1 / src2, DL <- rem` (unsigned, ERR & V on div 0)        |
+|                                  | `DIVU`    | `dst_64, src2_64`          | 1 |      64      | `0x0F` (`0b001_111`) |   •   |    X    |   X   |   0   |   X   | • | •  | X | `dst_64 <- dst_64 / src2_64, DX <- rem` (64-bit)                    |
+|                                  | `DIVU`    | `dst_64, src1_64, src2_64` | 1 |      64      | `0x0F` (`0b001_111`) |   •   |    X    |   X   |   0   |   X   | • | •  | X | `dst_64 <- src1_64 / src2_64, DX <- rem` (64-bit)                   |
+|                                  | `EXP_ADD` | `dst, src2`                | 0 |      1       | `0x05` (`0b000_101`) |   •   |    •    |   X   |   0   |   X   | X | •  | X | `dst <- dst + src2` (12-bit exp; V if > 1023, U if < -1022)         |
+|                                  | `EXP_SUB` | `dst, src2`                | 0 |      1       | `0x06` (`0b000_110`) |   •   |    •    |   X   |   0   |   X   | X | •  | X | `dst <- dst - src2` (12-bit exp; V if > 1023, U if < -1022)         |
+|                                  | `MUL`     | `dst, src2`                | 0 |      16      | `0x0A` (`0b001_010`) |   •   |    •    |   X   |   0   |   X   | • | •  | X | `dst <- dst * src2` (signed Booth mul)                              |
+|                                  | `MUL`     | `dst, src1, src2`          | 0 |      16      | `0x0A` (`0b001_010`) |   •   |    •    |   X   |   0   |   X   | • | •  | X | `dst <- src1 * src2`                                                |
+|                                  | `MUL`     | `dst_64, src2_64`          | 1 |      64      | `0x0A` (`0b001_010`) |   •   |    •    |   X   |   0   |   X   | • | •  | X | `dst_64 <- dst_64 * src2_64` (64-bit)                               |
+|                                  | `MUL`     | `dst_64, src1_64, src2_64` | 1 |      64      | `0x0A` (`0b001_010`) |   •   |    •    |   X   |   0   |   X   | • | •  | X | `dst_64 <- src1_64 * src2_64` (64-bit)                              |
+|                                  | `MULU`    | `dst, src2`                | 0 |      16      | `0x0E` (`0b001_110`) |   •   |    •    |   X   |   0   |   X   | • | •  | X | `{AH, AL} <- dst * src2` (unsigned Booth mul, V if AH != 0)         |
+|                                  | `MULU`    | `dst, src1, src2`          | 0 |      16      | `0x0E` (`0b001_110`) |   •   |    •    |   X   |   0   |   X   | • | •  | X | `{AH, AL} <- src1 * src2`                                           |
+|                                  | `MULU`    | `dst_64, src2_64`          | 1 |      64      | `0x0E` (`0b001_110`) |   •   |    •    |   X   |   0   |   X   | • | •  | X | `{DX, dst_64} <- dst_64 * src2_64` (64-bit unsigned, V if DX != 0)  |
+|                                  | `MULU`    | `dst_64, src1_64, src2_64` | 1 |      64      | `0x0E` (`0b001_110`) |   •   |    •    |   X   |   0   |   X   | • | •  | X | `{DX, dst_64} <- src1_64 * src2_64` (64-bit unsigned, V if DX != 0) |
+|                                  | `PACK`    | `dst, src1`                | 0 |      1       | `0x08` (`0b001_000`) |   •   |    •    |   X   |   •   |   X   | X | •  | X | `dst <- pack(sign, exp=src1, mantissa=dst)` (IEEE float)            |
+|                                  | `PACK`    | `dst, src1, src2`          | 0 |      1       | `0x08` (`0b001_000`) |   •   |    •    |   X   |   •   |   X   | X | •  | X | `dst <- pack(sign, exp=src1, mantissa=src2)` (IEEE float)           |
+|                                  | `PACK`    | `dst_64, src1`             | 1 |      2       | `0x08` (`0b001_000`) |   •   |    •    |   X   |   •   |   X   | X | •  | X | `dst_64 <- pack(sign, exp=src1, mantissa=dst_64)` (IEEE double)     |
+|                                  | `PACK`    | `dst_64, src1, src2_64`    | 1 |      2       | `0x08` (`0b001_000`) |   •   |    •    |   X   |   •   |   X   | X | •  | X | `dst_64 <- pack(sign, exp=src1, mantissa=src2_64)` (IEEE double)    |
+|                                  | `SBB`     | `dst, src2`                | 0 |      1       | `0x03` (`0b000_011`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- dst - src2 - C`                                             |
+|                                  | `SBB`     | `dst, src1, src2`          | 0 |      1       | `0x03` (`0b000_011`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- src1 - src2 - C`                                            |
+|                                  | `SBB`     | `dst_64, src2_64`          | 1 |      2       | `0x03` (`0b000_011`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst_64 <- dst_64 - src2_64 - C` (64-bit)                           |
+|                                  | `SBB`     | `dst_64, src1_64, src2_64` | 1 |      2       | `0x03` (`0b000_011`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst_64 <- src1_64 - src2_64 - C` (64-bit)                          |
+|                                  | `SUB`     | `dst, src2`                | 0 |      1       | `0x02` (`0b000_010`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- dst - src2`                                                 |
+|                                  | `SUB`     | `dst, src1, src2`          | 0 |      1       | `0x02` (`0b000_010`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- src1 - src2`                                                |
+|                                  | `SUB`     | `dst_64, src2_64`          | 1 |      2       | `0x02` (`0b000_010`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst_64 <- dst_64 - src2_64` (64-bit)                               |
+|                                  | `SUB`     | `dst_64, src1_64, src2_64` | 1 |      2       | `0x02` (`0b000_010`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst_64 <- src1_64 - src2_64` (64-bit)                              |
+|                                  | `UNPACK`  | `dst, src1`                | 0 |      1       | `0x09` (`0b001_001`) |   •   |    •    |   X   |   •   |   •   | • | X  | X | `src1 <- dst.exp, dst <- dst.mantissa`; DF=`sA ^ sB`                |
+|                                  | `UNPACK`  | `dst, src1, src2`          | 0 |      1       | `0x09` (`0b001_001`) |   •   |    •    |   X   |   •   |   •   | • | X  | X | `src1 <- src2.exp, dst <- src2.mantissa`; DF=`sA ^ sB`              |
+|                                  | `UNPACK`  | `dst_64, src1`             | 1 |      2       | `0x09` (`0b001_001`) |   •   |    •    |   X   |   •   |   •   | • | X  | X | `src1 <- dst_64.exp, dst_64 <- dst_64.mantissa` (64-bit double)     |
+|                                  | `UNPACK`  | `dst_64, src1, src2_64`    | 1 |      2       | `0x09` (`0b001_001`) |   •   |    •    |   X   |   •   |   •   | • | X  | X | `src1 <- src2_64.exp, dst_64 <- src2_64.mantissa` (64-bit double)   |
+| **Logic**<br>`0b010`             | `AND`     | `dst, src2`                | 0 |      1       | `0x10` (`0b010_000`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst <- dst & src2` (**clears C and V**)                            |
+|                                  | `AND`     | `dst, src1, src2`          | 0 |      1       | `0x10` (`0b010_000`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst <- src1 & src2` (**clears C and V**)                           |
+|                                  | `AND`     | `dst_64, src2_64`          | 1 |      2       | `0x10` (`0b010_000`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst_64 <- dst_64 & src2_64` (**clears C and V**)                   |
+|                                  | `AND`     | `dst_64, src1_64, src2_64` | 1 |      2       | `0x10` (`0b010_000`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst_64 <- src1_64 & src2_64` (**clears C and V**)                  |
+|                                  | `FABS`    | `dst`                      | 0 |      1       | `0x13` (`0b010_011`) |   •   |    •    |   0   |   •   |   •   | • | •  | X | `dst[31] <- 0` (clears S)                                           |
+|                                  | `FABS`    | `dst, src1`                | 0 |      1       | `0x13` (`0b010_011`) |   •   |    •    |   0   |   •   |   •   | • | •  | X | `dst <- abs(src1)` (clears S, src1 unmodified)                     |
+|                                  | `FABS`    | `dst_64`                   | 1 |      2       | `0x13` (`0b010_011`) |   •   |    •    |   0   |   •   |   •   | • | •  | X | `dst_64_H[31] <- 0` (clears S)                                      |
+|                                  | `FABS`    | `dst_64, src1_64`          | 1 |      2       | `0x13` (`0b010_011`) |   •   |    •    |   0   |   •   |   •   | • | •  | X | `dst_64 <- abs(src1_64)` (clears S, src1_64 unmodified)            |
+|                                  | `FCHS`    | `dst`                      | 0 |      1       | `0x14` (`0b010_100`) |   •   |    •    |   X   |   •   |   •   | • | •  | X | `dst[31] <- ~dst[31]` (inverts S)                                   |
+|                                  | `FCHS`    | `dst, src1`                | 0 |      1       | `0x14` (`0b010_100`) |   •   |    •    |   X   |   •   |   •   | • | •  | X | `dst <- neg(src1)` (inverts S, src1 unmodified)                     |
+|                                  | `FCHS`    | `dst_64`                   | 1 |      2       | `0x14` (`0b010_100`) |   •   |    •    |   X   |   •   |   •   | • | •  | X | `dst_64_H[31] <- ~dst_64_H[31]` (inverts S)                         |
+|                                  | `FCHS`    | `dst_64, src1_64`          | 1 |      2       | `0x14` (`0b010_100`) |   •   |    •    |   X   |   •   |   •   | • | •  | X | `dst_64 <- neg(src1_64)` (inverts S, src1_64 unmodified)            |
+|                                  | `NOT`     | `dst`                      | 0 |      1       | `0x15` (`0b010_101`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst <- ~dst` (**clears C and V**)                                  |
+|                                  | `NOT`     | `dst, src1`                | 0 |      1       | `0x15` (`0b010_101`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst <- ~src1` (**clears C and V**, src1 unmodified)                |
+|                                  | `NOT`     | `dst_64`                   | 1 |      2       | `0x15` (`0b010_101`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst_64 <- ~dst_64` (**clears C and V**)                            |
+|                                  | `NOT`     | `dst_64, src1_64`          | 1 |      2       | `0x15` (`0b010_101`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst_64 <- ~src1_64` (**clears C and V**, src1_64 unmodified)       |
+|                                  | `OR`      | `dst, src2`                | 0 |      1       | `0x11` (`0b010_001`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst <- dst \| src2` (**clears C and V**)                           |
+|                                  | `OR`      | `dst, src1, src2`          | 0 |      1       | `0x11` (`0b010_001`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst <- src1 \| src2` (**clears C and V**)                          |
+|                                  | `OR`      | `dst_64, src2_64`          | 1 |      2       | `0x11` (`0b010_001`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst_64 <- dst_64 \| src2_64` (**clears C and V**)                  |
+|                                  | `OR`      | `dst_64, src1_64, src2_64` | 1 |      2       | `0x11` (`0b010_001`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst_64 <- src1_64 \| src2_64` (**clears C and V**)                 |
+|                                  | `XOR`     | `dst, src2`                | 0 |      1       | `0x12` (`0b010_010`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst <- dst ^ src2` (**clears C and V**)                            |
+|                                  | `XOR`     | `dst, src1, src2`          | 0 |      1       | `0x12` (`0b010_010`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst <- src1 ^ src2` (**clears C and V**)                           |
+|                                  | `XOR`     | `dst_64, src2_64`          | 1 |      2       | `0x12` (`0b010_010`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst_64 <- dst_64 ^ src2_64` (**clears C and V**)                   |
+|                                  | `XOR`     | `dst_64, src1_64, src2_64` | 1 |      2       | `0x12` (`0b010_010`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst_64 <- src1_64 ^ src2_64` (**clears C and V**)                  |
+| **Control**<br>`0b011`           | `CALL`    | `addr`                     | 0 |      2       | `0x1C` (`0b011_100`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `CALL_STACK[CSP++] <- UPC + 1; UPC <- addr`                         |
+|                                  | `DJNZ`    | `addr`                     | 0 |    2 / 1     | `0x1B` (`0b011_011`) |   •   |    •    |   •   |   •   |   •   | • | •  | X | `C <- C - 1; if (C != 0) UPC <- addr` (sets ZF)                     |
+|                                  | `HALT`    | —                          | 0 |      1       | `0x1F` (`0b011_111`) | **0** |    •    |   •   |   •   |   •   | • | •  | • | `STATUS.BSY <- 0; pulse EXEC_DONE`                                  |
+|                                  | `JMP`     | `addr`                     | 0 |      2       | `0x18` (`0b011_000`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `UPC <- addr` (unconditional jump)                                  |
+|                                  | `JNZ`     | `[flag,] addr`             | 0 |    2 / 1     | `0x19` (`0b011_001`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `if (!cond) UPC <- addr` (default: `!ZF`)                           |
+|                                  | `JZ`      | `[flag,] addr`             | 0 |    2 / 1     | `0x1A` (`0b011_010`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `if (cond) UPC <- addr` (default: `ZF`)                             |
+|                                  | `NOP`     | —                          | 0 |      1       | `0x1E` (`0b011_110`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | No operation (pipeline bubble)                                      |
+|                                  | `RET`     | —                          | 0 |      2       | `0x1D` (`0b011_101`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `UPC <- CALL_STACK[--CSP]`                                          |
+| **Memory**<br>`0b100`<br>`0b101` | `LD`      | `dst, addr`                | 0 |      1       | `0x24` (`0b100_100`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `dst <- DATA_RAM[0x080 \| (addr & 0x3F)]`                           |
+|                                  | `LD`      | `dst, [src1]`              | 0 |      1       | `0x24` (`0b100_100`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `dst <- DATA_RAM[0x080 \| (src1 & 0x3F)]`                           |
+|                                  | `LD`      | `dst_64, addr`             | 1 |      2       | `0x24` (`0b100_100`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | 64-bit load from scratchpad                                         |
+|                                  | `LDC`     | `dst, tbl, addr`           | 0 |      1       | `0x22` (`0b100_010`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `dst <- DATA_RAM[TBL_BASE \| addr]` (constant/LUT)                  |
+|                                  | `LDC`     | `dst_64, tbl, addr`        | 1 |      2       | `0x22` (`0b100_010`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | 64-bit load from constant/LUT table                                 |
+|                                  | `LDI`     | `dst, imm`                 | 0 |      1       | `0x23` (`0b100_011`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `dst <- imm` (zero-extended 10-bit imm)                             |
+|                                  | `LDI`     | `dst_64, imm`              | 1 |      2       | `0x23` (`0b100_011`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `dst_64_L <- imm; dst_64_H <- 0`                                    |
+|                                  | `LDI`     | `flag, val`                | 0 |      1       | `0x23` (`0b100_011`) |   X   |    X    |   X   |   X   |   X   | X | X  | X | `STATUS[flag] <- val & 1` (updates selected flag)                   |
+|                                  | `LDU`     | `dst, addr`                | 0 |      1       | `0x28` (`0b101_000`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `dst <- DATA_RAM[0x0C0 \| (addr & 0x3F)]` (user RAM)                |
+|                                  | `LDU`     | `dst_64, addr`             | 1 |      2       | `0x28` (`0b101_000`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | 64-bit load from user scratchpad                                    |
+|                                  | `MOV`     | `dst, src2`                | 0 |      1       | `0x26` (`0b100_110`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `dst <- src2`                                                       |
+|                                  | `MOV`     | `dst_64, src2_64`          | 1 |      2       | `0x26` (`0b100_110`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `dst_64 <- src2_64` (64-bit copy)                                   |
+|                                  | `POP`     | `dst`                      | 0 |      1       | `0x21` (`0b100_001`) |   •   | **X\*** |   •   |   •   |   •   | • | •  | • | `dst <- TOS, SP <- SP - 1` (\*sets ERR on underflow)                |
+|                                  | `POP`     | `dst_64`                   | 1 |      2       | `0x21` (`0b100_001`) |   •   | **X\*** |   •   |   •   |   •   | • | •  | • | `dst_64 <- TOS, SP <- SP - 2` (\*sets ERR on underflow)             |
+|                                  | `PUSH`    | `src2`                     | 0 |      1       | `0x20` (`0b100_000`) |   •   | **X\*** |   •   |   •   |   •   | • | •  | • | `TOS <- src2, SP <- SP + 1` (\*sets ERR on overflow)                |
+|                                  | `PUSH`    | `src2_64`                  | 1 |      2       | `0x20` (`0b100_000`) |   •   | **X\*** |   •   |   •   |   •   | • | •  | • | `TOS <- src2_64, SP <- SP + 2` (\*sets ERR on overflow)             |
+|                                  | `SRES`    | —                          | 0 |      1       | `0x2F` (`0b101_111`) |   •   |    •    |   X   |   X   |   X   | X | X  | X | `STATUS <- SHADOW_STATUS` (restores ALU flags with mask `0x3F`)     |
+|                                  | `SSAV`    | —                          | 0 |      1       | `0x2E` (`0b101_110`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `SHADOW_STATUS <- STATUS` (saves flags)                             |
+|                                  | `STO`     | `addr, src2`               | 0 |      1       | `0x25` (`0b100_101`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `DATA_RAM[0x080 \| (addr & 0x3F)] <- src2`                          |
+|                                  | `STO`     | `[src1], src2`             | 0 |      1       | `0x25` (`0b100_101`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `DATA_RAM[0x080 \| (src1 & 0x3F)] <- src2`                          |
+|                                  | `STO`     | `addr, src2_64`            | 1 |      2       | `0x25` (`0b100_101`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | 64-bit store to scratchpad                                          |
+|                                  | `STU`     | `addr, src2`               | 0 |      1       | `0x29` (`0b101_001`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `DATA_RAM[0x0C0 \| (addr & 0x3F)] <- src2` (user RAM)               |
+|                                  | `STU`     | `addr, src2_64`            | 1 |      2       | `0x29` (`0b101_001`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | 64-bit store to user scratchpad                                     |
+|                                  | `SWAP`    | `dst, src2`                | 0 |      2       | `0x27` (`0b100_111`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `dst <-> src2` (via staging register `F_`)                          |
+|                                  | `SWAP`    | `dst_64, src2_64`          | 1 |      4       | `0x27` (`0b100_111`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | 64-bit exchange `dst_64 <-> src2_64`                                |
+| **Shifter**<br>`0b110`           | `ASL`     | `dst[, src1]`              | 0 |      1       | `0x32` (`0b110_010`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | `dst <- dst << (src1 \| C)` (V set if sign changed)                 |
+|                                  | `ASL`     | `dst_64[, src1]`           | 1 |      2       | `0x32` (`0b110_010`) |   •   |    •    |   X   |   X   |   X   | • | •  | X | 64-bit arithmetic shift left                                        |
+|                                  | `ASR`     | `dst[, src1]`              | 0 |      1       | `0x33` (`0b110_011`) |   •   |    •    |   X   |   X   |   •   | • | •  | X | `dst <- dst >> (src1 \| C)` (sign-extended)                         |
+|                                  | `ASR`     | `dst_64[, src1]`           | 1 |      2       | `0x33` (`0b110_011`) |   •   |    •    |   X   |   X   |   •   | • | •  | X | 64-bit arithmetic shift right                                       |
+|                                  | `LSL`     | `dst[, src1]`              | 0 |      1       | `0x30` (`0b110_000`) |   •   |    •    |   X   |   X   |   •   | • | •  | X | `dst <- dst << (src1 \| C)` (C = last bit out)                      |
+|                                  | `LSL`     | `dst_64[, src1]`           | 1 |      2       | `0x30` (`0b110_000`) |   •   |    •    |   X   |   X   |   •   | • | •  | X | 64-bit logical shift left                                           |
+|                                  | `LSR`     | `dst[, src1]`              | 0 |      1       | `0x31` (`0b110_001`) |   •   |    •    | **0** |   X   |   •   | • | •  | X | `dst <- dst >> (src1 \| C)` (clears S)                              |
+|                                  | `LSR`     | `dst_64[, src1]`           | 1 |      2       | `0x31` (`0b110_001`) |   •   |    •    | **0** |   X   |   •   | • | •  | X | 64-bit logical shift right                                          |
+|                                  | `LZC`     | `dst, src2`                | 0 |      1       | `0x36` (`0b110_110`) |   •   |    •    |   •   |   •   |   •   | • | •  | X | `dst <- count_leading_zeros(src2)` (ZF if 0)                        |
+|                                  | `LZC`     | `dst_64, src2_64`          | 1 |      2       | `0x36` (`0b110_110`) |   •   |    •    |   •   |   •   |   •   | • | •  | X | 64-bit leading zero count                                           |
 
 ---
 
@@ -159,8 +191,8 @@ co-located:
 
 ```
 ================================================================================
-ADD dst, src2 / ADD AX, src2 — ADD REGISTER TO ACCUMULATOR
-ADD dst, src1, src2 — ADD REGISTER TO REGISTER
+ADD dst, src2 / ADD dst_64, src2_64 — ADD REGISTER TO ACCUMULATOR (BINARY)
+ADD dst, src1, src2 / ADD dst_64, src1_64, src2_64 — ADD REGISTER TO REGISTER (TERNARY)
 ================================================================================
 ```
 
@@ -186,8 +218,8 @@ if W == 0:
     dst [31:0] <- (src1 or dst) [31:0] + src2 [31:0]
     UPC        <- UPC + 1
 else:
-    Cycle 1: dst_L [31:0] <- (src1_L or dst_L) [31:0] + src2_L [31:0], latch Carry_out
-    Cycle 2: dst_H [31:0] <- (src1_H or dst_H) [31:0] + src2_H [31:0] + Carry_in
+    Cycle 1: dst_64_L [31:0] <- (src1_64_L or dst_64_L) [31:0] + src2_64_L [31:0], latch Carry_out
+    Cycle 2: dst_64_H [31:0] <- (src1_64_H or dst_64_H) [31:0] + src2_64_H [31:0] + Carry_in
     UPC       <- UPC + 1
 ```
 
@@ -198,8 +230,9 @@ in 3-operand form), `HB_MUX = src2`.
 
 #### Description
 
-Adds the contents of `src2` to accumulator `dst` (`AL` or `AX`), or adds `src1` and `src2` writing to `dst` in ternary
-form (`ADD dst, src1, src2`), using `alu_adder32` with carry chain. When `W = 1`, the operation executes across two
+Adds the contents of `src2` to accumulator `dst` (or `dst_64`), or adds `src1` and `src2` writing to `dst` in ternary
+form (`ADD dst, src1, src2` / `ADD dst_64, src1_64, src2_64`), using `alu_adder32` with carry chain. When `W = 1`, the
+operation executes across two
 consecutive cycles, adding the low halves in cycle 1 and the high halves with carry in cycle 2.
 
 #### Concrete Numeric Example
@@ -218,8 +251,8 @@ After execution of ADD AL, BL:
 
 ```
 ================================================================================
-ADC dst, src2 / ADC AX, src2 — ADD WITH CARRY TO ACCUMULATOR
-ADC dst, src1, src2 — ADD WITH CARRY REGISTER TO REGISTER
+ADC dst, src2 / ADC dst_64, src2_64 — ADD WITH CARRY TO ACCUMULATOR (BINARY)
+ADC dst, src1, src2 / ADC dst_64, src1_64, src2_64 — ADD WITH CARRY REGISTER TO REGISTER (TERNARY)
 ================================================================================
 ```
 
@@ -245,8 +278,8 @@ if W == 0:
     dst [31:0] <- (src1 or dst) [31:0] + src2 [31:0] + STATUS.C
     UPC        <- UPC + 1
 else:
-    Cycle 1: dst_L [31:0] <- (src1_L or dst_L) [31:0] + src2_L [31:0] + STATUS.C, latch Carry_out
-    Cycle 2: dst_H [31:0] <- (src1_H or dst_H) [31:0] + src2_H [31:0] + Carry_in
+    Cycle 1: dst_64_L [31:0] <- (src1_64_L or dst_64_L) [31:0] + src2_64_L [31:0] + STATUS.C, latch Carry_out
+    Cycle 2: dst_64_H [31:0] <- (src1_64_H or dst_64_H) [31:0] + src2_64_H [31:0] + Carry_in
     UPC       <- UPC + 1
 ```
 
@@ -257,8 +290,10 @@ else:
 
 #### Description
 
-Adds the contents of `src2` and the carry flag `C` to accumulator `dst`, or adds `src1 + src2 + C` writing to `dst` in
-ternary form. Used primarily for multi-word synthesis beyond 64 bits.
+Adds the contents of `src2` and the carry flag `C` to accumulator `dst` (or `dst_64`), or adds `src1 + src2 + C` writing
+to `dst` in
+ternary form (`ADC dst, src1, src2` / `ADC dst_64, src1_64, src2_64`). Used primarily for multi-word synthesis beyond 64
+bits.
 
 #### Concrete Numeric Example
 
@@ -276,8 +311,8 @@ After execution of ADC AL, BL:
 
 ```
 ================================================================================
-SUB dst, src2 / SUB AX, src2 — SUBTRACT REGISTER FROM ACCUMULATOR
-SUB dst, src1, src2 — SUBTRACT REGISTER FROM REGISTER
+SUB dst, src2 / SUB dst_64, src2_64 — SUBTRACT REGISTER FROM ACCUMULATOR (BINARY)
+SUB dst, src1, src2 / SUB dst_64, src1_64, src2_64 — SUBTRACT REGISTER FROM REGISTER (TERNARY)
 ================================================================================
 ```
 
@@ -303,8 +338,8 @@ if W == 0:
     dst [31:0] <- (src1 or dst) [31:0] - src2 [31:0]
     UPC        <- UPC + 1
 else:
-    Cycle 1: dst_L [31:0] <- (src1_L or dst_L) [31:0] - src2_L [31:0], latch Borrow_out
-    Cycle 2: dst_H [31:0] <- (src1_H or dst_H) [31:0] - src2_H [31:0] - Borrow_in
+    Cycle 1: dst_64_L [31:0] <- (src1_64_L or dst_64_L) [31:0] - src2_64_L [31:0], latch Borrow_out
+    Cycle 2: dst_64_H [31:0] <- (src1_64_H or dst_64_H) [31:0] - src2_64_H [31:0] - Borrow_in
     UPC       <- UPC + 1
 ```
 
@@ -315,7 +350,8 @@ else:
 
 #### Description
 
-Subtracts `src2` from `dst` (or computes $src1 - src2$ into `dst` in ternary form). Evaluated
+Subtracts `src2` from `dst` (or computes $src1 - src2$ into `dst` in ternary form `SUB dst, src1, src2` /
+`SUB dst_64, src1_64, src2_64`). Evaluated
 as $(src1\text{ or }dst) + \overline{src2} + 1$ using `alu_adder32` with subtract control asserted. In 64-bit mode
 (`W = 1`), subtraction proceeds across 2 cycles.
 
@@ -335,8 +371,8 @@ After execution of SUB AL, BL:
 
 ```
 ================================================================================
-SBB dst, src2 / SBB AX, src2 — SUBTRACT WITH BORROW FROM ACCUMULATOR
-SBB dst, src1, src2 — SUBTRACT WITH BORROW REGISTER FROM REGISTER
+SBB dst, src2 / SBB dst_64, src2_64 — SUBTRACT WITH BORROW FROM ACCUMULATOR (BINARY)
+SBB dst, src1, src2 / SBB dst_64, src1_64, src2_64 — SUBTRACT WITH BORROW REGISTER FROM REGISTER (TERNARY)
 ================================================================================
 ```
 
@@ -362,8 +398,8 @@ if W == 0:
     dst [31:0] <- (src1 or dst) [31:0] - src2 [31:0] - STATUS.C
     UPC        <- UPC + 1
 else:
-    Cycle 1: dst_L [31:0] <- (src1_L or dst_L) [31:0] - src2_L [31:0] - STATUS.C, latch Borrow_out
-    Cycle 2: dst_H [31:0] <- (src1_H or dst_H) [31:0] - src2_H [31:0] - Borrow_in
+    Cycle 1: dst_64_L [31:0] <- (src1_64_L or dst_64_L) [31:0] - src2_64_L [31:0] - STATUS.C, latch Borrow_out
+    Cycle 2: dst_64_H [31:0] <- (src1_64_H or dst_64_H) [31:0] - src2_64_H [31:0] - Borrow_in
     UPC       <- UPC + 1
 ```
 
@@ -375,7 +411,7 @@ else:
 #### Description
 
 Subtracts `src2` and incoming borrow `C` from accumulator `dst` (or computes $src1 - src2 - C$ into `dst` in ternary
-form).
+form `SBB dst, src1, src2` / `SBB dst_64, src1_64, src2_64`).
 
 #### Concrete Numeric Example
 
@@ -393,7 +429,7 @@ After execution of SBB AL, BL:
 
 ```
 ================================================================================
-CMP src1, src2 — COMPARE TWO REGISTERS
+CMP src1, src2 / CMP src1_64, src2_64 — COMPARE TWO REGISTERS
 ================================================================================
 ```
 
@@ -415,9 +451,15 @@ CMP src1, src2 — COMPARE TWO REGISTERS
 #### Register Transfer & Datapath Flow
 
 ```text
-Discard (src1 - src2) -> RES_SEL = NONE (no register write)
-Update STATUS flags: sets ZF and SF (and CF, VF)
-UPC <- UPC + 1
+if W == 0:
+    Discard (src1 - src2) -> RES_SEL = NONE (no register write)
+    Update STATUS flags: sets ZF and SF (and CF, VF)
+    UPC <- UPC + 1
+else:
+    Cycle 1: Discard (src1_L - src2_L), latch Borrow_out
+    Cycle 2: Discard (src1_H - src2_H - Borrow_in)
+    Update STATUS flags for 64-bit comparison
+    UPC <- UPC + 1
 ```
 
 #### Instruction Word Format
@@ -447,8 +489,7 @@ After execution of CMP AL, BL:
 
 ```
 ================================================================================
-EXP_ADD dst, src2 / EXP_ADD EA, src2 — EXPONENT 12-BIT ADDITION
-EXP_ADD dst, src1, src2 — EXPONENT 12-BIT ADDITION (REGISTER TO REGISTER/IMMEDIATE)
+EXP_ADD dst, src2 / EXP_ADD EA, src2 — EXPONENT 12-BIT ADDITION (BINARY)
 ================================================================================
 ```
 
@@ -471,14 +512,13 @@ EXP_ADD dst, src1, src2 — EXPONENT 12-BIT ADDITION (REGISTER TO REGISTER/IMMED
 #### Register Transfer & Datapath Flow
 
 ```text
-dst [11:0] <- ((src1 or dst) [11:0] + src2 [11:0]) & 0x0FFF
+dst [11:0] <- (dst [11:0] + src2 [11:0]) & 0x0FFF
 UPC        <- UPC + 1
 ```
 
 #### Instruction Word Format
 
-`OPCODE = 000101`. `W = 0` (always 1 cycle). `RES_SEL = dst`, `HA_MUX = dst` (or `src1`), `HB_MUX = src2` (`EB` or
-`IMM`).
+`OPCODE = 000101`. `W = 0` (always 1 cycle). `RES_SEL = dst`, `HA_MUX = dst`, `HB_MUX = src2` (`EB` or `IMM`).
 
 #### Description
 
@@ -501,8 +541,7 @@ After execution of EXP_ADD EA, EB:
 
 ```
 ================================================================================
-EXP_SUB dst, src2 / EXP_SUB EA, src2 — EXPONENT 12-BIT SUBTRACTION
-EXP_SUB dst, src1, src2 — EXPONENT 12-BIT SUBTRACTION (REGISTER TO REGISTER/IMMEDIATE)
+EXP_SUB dst, src2 / EXP_SUB EA, src2 — EXPONENT 12-BIT SUBTRACTION (BINARY)
 ================================================================================
 ```
 
@@ -525,14 +564,13 @@ EXP_SUB dst, src1, src2 — EXPONENT 12-BIT SUBTRACTION (REGISTER TO REGISTER/IM
 #### Register Transfer & Datapath Flow
 
 ```text
-dst [11:0] <- ((src1 or dst) [11:0] - src2 [11:0]) & 0x0FFF
+dst [11:0] <- (dst [11:0] - src2 [11:0]) & 0x0FFF
 UPC        <- UPC + 1
 ```
 
 #### Instruction Word Format
 
-`OPCODE = 000110`. `W = 0` (always 1 cycle). `RES_SEL = dst`, `HA_MUX = dst` (or `src1`), `HB_MUX = src2` (`EB` or
-`IMM`).
+`OPCODE = 000110`. `W = 0` (always 1 cycle). `RES_SEL = dst`, `HA_MUX = dst`, `HB_MUX = src2` (`EB` or `IMM`).
 
 #### Description
 
@@ -555,8 +593,9 @@ After execution of EXP_SUB EA, EB:
 ### Block 1 (0b001): Hardware Multiply / Divide / Math Block
 
 ```
-===============================================================================
-PACK dst, src1 — PACK IEEE-754 FLOATING-POINT NUMBER
+================================================================================
+PACK dst, src1 / PACK dst_64, src1 — PACK IEEE-754 FLOATING-POINT NUMBER (BINARY)
+PACK dst, src1, src2 / PACK dst_64, src1, src2_64 — PACK IEEE-754 FLOATING-POINT NUMBER (TERNARY)
 ================================================================================
 ```
 
@@ -580,40 +619,47 @@ PACK dst, src1 — PACK IEEE-754 FLOATING-POINT NUMBER
 
 ```text
 if W == 0:  # Float32
-    dst [31:0] <- { STATUS.S, src1 [7:0], dst [22:0] }
+    dst [31:0] <- { STATUS.S, src1 [7:0], (src2 or dst) [22:0] }
     UPC        <- UPC + 1
 else:       # Float64
-    {dst_H [31:0], dst_L [31:0]} <- { STATUS.S, src1 [10:0], dst_H [19:0], dst_L [31:0] }
-    UPC        <- UPC + 1
+    {dst_64_H [31:0], dst_64_L [31:0]} <- { STATUS.S, src1 [10:0], (src2_64_H or dst_64_H) [19:0], (src2_64_L or dst_64_L) [31:0] }
+    UPC                                <- UPC + 1
 ```
 
 #### Instruction Word Format
 
 `OPCODE = 001000`. `W = 0` (Float32, 1 cycle) or `W = 1` (Float64, 2 cycles). `RES_SEL = dst`, `HA_MUX = src1` (exponent
-register `EA` or `EB`), `HB_MUX = dst`.
+register `EA` or `EB`), `HB_MUX = dst` (binary form) or `src2` / `src2_64` (ternary form for mantissa).
 
 #### Description
 
 Assembles an IEEE-754 floating-point value from its components: sign bit from `STATUS.S`, biased exponent from `src1`
-(`EA` or `EB`), and normalized mantissa from `dst` (`AL` or `AX`), stripping the implicit hidden bit. Asserts `VF` on
+(`EA` or `EB`), and normalized mantissa from `src2` / `src2_64` (in ternary form) or `dst` / `dst_64` (in binary form,
+e.g. `AL` or `dst_64`), stripping the implicit hidden bit. Asserts `VF` on
 exponent overflow (saturating to infinity) or `UF` on exponent underflow (flushing to signed zero).
 
 #### Concrete Numeric Example
 
 ```text
 Suppose STATUS.S = 0, EA = 127 (0x7F, unbiased 0), AL mantissa = 0x00000000 (representing 1.0).
-After execution of PACK AL, EA (W = 0):
+After execution of PACK AL, EA (W = 0, binary form):
   AL = {0, 0x7F, 23'd0} = 0x3F800000 (+1.0f)
   Sign = 0: sets SIGN (S) to 0
   Non-zero float: sets ZERO (Z) to 0
   Valid exponent range: sets OVERFLOW (V) to 0, UNDERFLOW (U) to 0
+
+Suppose STATUS.S = 0, EA = 127, BL mantissa = 0x00000000.
+After execution of PACK AL, EA, BL (W = 0, ternary form):
+  AL = {0, 0x7F, 23'd0} = 0x3F800000 (+1.0f)
+  BL remains unchanged.
 ```
 
 ---
 
 ```
 ================================================================================
-UNPACK dst, src1 — UNPACK IEEE-754 FLOATING-POINT NUMBER
+UNPACK dst, src1 / UNPACK dst_64, src1 — UNPACK IEEE-754 FLOATING-POINT NUMBER (BINARY)
+UNPACK dst, src1, src2 / UNPACK dst_64, src1, src2_64 — UNPACK IEEE-754 FLOATING-POINT NUMBER (TERNARY)
 ================================================================================
 ```
 
@@ -628,47 +674,61 @@ UNPACK dst, src1 — UNPACK IEEE-754 FLOATING-POINT NUMBER
 
 * **`Z`**: Set to 1 if input float is zero; reset to 0 otherwise.
 * **`S`**: Set to 1 if float sign bit is 1; reset to 0 otherwise.
-* **`DF`**: Set to `STATUS.S ^ dst.sign` (computes operand sign difference for add/sub alignment).
+* **`DF`**: Set to `STATUS.S ^ input.sign` (computes operand sign difference for add/sub alignment).
 * **`C`, `V`, `U`, `ERR`**: Unaffected.
 
 #### Register Transfer & Datapath Flow
 
 ```text
 if W == 0:  # Float32
-    src1 [11:0] <- zero_extend(dst [30:23])
-    dst [31:0]  <- { 8'b0, 1'b1, dst [22:0] }  # restore hidden bit
-    STATUS.D    <- STATUS.S ^ dst [31]
-    STATUS.S    <- dst [31]
+    src1 [11:0] <- zero_extend((src2 or dst) [30:23])
+    dst [31:0]  <- { 8'b0, 1'b1, (src2 or dst) [22:0] }  # restore hidden bit
+    STATUS.D    <- STATUS.S ^ (src2 or dst) [31]
+    STATUS.S    <- (src2 or dst) [31]
     UPC         <- UPC + 1
 else:       # Float64
-    src1 [11:0]  <- zero_extend(dst_H [30:20])
-    dst_H [31:0] <- { 11'b0, 1'b1, dst_H [19:0] }
-    # dst_L remains unchanged
-    STATUS.D     <- STATUS.S ^ dst_H [31]
-    STATUS.S     <- dst_H [31]
-    UPC          <- UPC + 1
+    src1 [11:0]     <- zero_extend((src2_64_H or dst_64_H) [30:20])
+    dst_64_H [31:0] <- { 11'b0, 1'b1, (src2_64_H or dst_64_H) [19:0] }
+    dst_64_L [31:0] <- (src2_64_L or dst_64_L) [31:0]
+    STATUS.D        <- STATUS.S ^ (src2_64_H or dst_64_H) [31]
+    STATUS.S        <- (src2_64_H or dst_64_H) [31]
+    UPC             <- UPC + 1
 ```
 
 #### Instruction Word Format
 
 `OPCODE = 001001`. `W = 0` (Float32) or `W = 1` (Float64). `RES_SEL = dst`, `HA_MUX = src1` (exponent register `EA` or
-`EB`), `HB_MUX = dst`.
+`EB`), `HB_MUX = dst` (binary form) or `src2` / `src2_64` (ternary form for input float).
 
 #### Description
 
 Splits an IEEE-754 floating-point number into its constituent fields: extracts biased exponent into `src1` (`EA` or
-`EB`), inserts the hidden bit into `dst` mantissa, updates `STATUS.S` with operand sign, and calculates `DIFF_SIGN`
+`EB`), inserts the hidden bit into `dst` (or `dst_64`) mantissa, updates `STATUS.S` with operand sign, and calculates
+`DIFF_SIGN`
 (`STATUS.D = sign_A ^ sign_B`) to steer downstream addition/subtraction.
+
+In binary form (`dst, src1` / `dst_64, src1`), the input float is read from `dst` and overwritten in place by the
+normalized mantissa. In ternary form (`dst, src1, src2` / `dst_64, src1, src2_64`), the input float is read from `src2`
+(or `src2_64`), leaving `src2` unchanged while writing the mantissa to `dst` and the exponent to `src1`.
 
 #### Concrete Numeric Example
 
 ```text
 Suppose AL = 0x3F800000 (+1.0f), STATUS.S = 1 (previous operand was negative).
-After execution of UNPACK AL, EA (W = 0):
+After execution of UNPACK AL, EA (W = 0, binary form):
   EA <- 0x007F (127)
   AL <- 0x00800000 (normalized mantissa with hidden bit 23 set)
   Sign bit of AL is 0: sets SIGN (S) to 0
   DIFF_SIGN: 1 ^ 0 = 1: sets DIFF_SIGN (D) to 1 (different signs)
+  Non-zero float: sets ZERO (Z) to 0
+
+Suppose BL = 0x3F800000 (+1.0f), STATUS.S = 1.
+After execution of UNPACK AL, EA, BL (W = 0, ternary form):
+  EA <- 0x007F (127)
+  AL <- 0x00800000 (normalized mantissa with hidden bit 23 set)
+  BL remains 0x3F800000 (unchanged)
+  Sign bit of BL is 0: sets SIGN (S) to 0
+  DIFF_SIGN: 1 ^ 0 = 1: sets DIFF_SIGN (D) to 1
   Non-zero float: sets ZERO (Z) to 0
 ```
 
@@ -676,7 +736,8 @@ After execution of UNPACK AL, EA (W = 0):
 
 ```
 ================================================================================
-MUL dst, src2 / MUL AX, src2 — SIGNED MULTIPLY (RADIX-4 BOOTH MULTIPLIER)
+MUL dst, src2 / MUL dst_64, src2_64 — SIGNED MULTIPLY (BINARY)
+MUL dst, src1, src2 / MUL dst_64, src1_64, src2_64 — SIGNED MULTIPLY (TERNARY)
 ================================================================================
 ```
 
@@ -699,23 +760,30 @@ MUL dst, src2 / MUL AX, src2 — SIGNED MULTIPLY (RADIX-4 BOOTH MULTIPLIER)
 #### Register Transfer & Datapath Flow
 
 ```text
-# Hardware Booth Multiplier Core (W = 0, 16 cycles):
-{AH [31:0], AL [31:0]} <- AL [31:0] * src2 [31:0]  (signed)
-UPC                    <- UPC + 1
+if W == 0:  # Hardware Booth Multiplier Core (16 cycles)
+    {AH [31:0], AL [31:0]} <- (src1 or dst) [31:0] * src2 [31:0]  (signed)
+    UPC                    <- UPC + 1
+else:       # 64-bit multiply (64 cycles via microcode)
+    dst_64 [63:0]          <- (src1_64 or dst_64) [63:0] * src2_64 [63:0]  (signed)
+    UPC                    <- UPC + 1
 ```
 
 #### Instruction Word Format
 
-`OPCODE = 001010`. `W = 0` (32-bit $\times$ 32-bit $\to$ 64-bit product, 16 cycles). `RES_SEL = dst` (must be `AL`),
-`HA_MUX = dst`, `HB_MUX = src2`.
+`OPCODE = 001010`. `W = 0` (32-bit $\times$ 32-bit $\to$ 64-bit product, 16 cycles) or `W = 1` (64-bit $\times$
+64-bit $\to$ 64-bit product, 64 cycles). `RES_SEL = dst`,
+`HA_MUX = dst` (or `src1` in 3-operand form), `HB_MUX = src2`.
 
 #### Description
 
-Performs signed Radix-4 Booth multiplication using the shared multiplier core co-located with the arithmetic block. The
-engine computes 2 bits per cycle over 16 clock cycles, placing the full 64-bit product into `{AH, AL}`.
+Performs signed Radix-4 Booth multiplication using the shared multiplier core co-located with the arithmetic block.
+Supports
+binary (`dst, src2` / `dst_64, src2_64`) and ternary (`dst, src1, src2` / `dst_64, src1_64, src2_64`) forms. The
+engine computes 2 bits per cycle over 16 clock cycles, placing the full 64-bit product into `{AH, AL}` (or `dst_64` for
+64-bit).
 
-- Cycle 15: Writes low word to `AL`.
-- Cycle 16: Writes high word to `AH` and commits status flags `Z, S, C=0, V`.
+- Cycle 15: Writes low word to `AL` (or low half of `dst_64`).
+- Cycle 16: Writes high word to `AH` (or high half of `dst_64`) and commits status flags `Z, S, C=0, V`.
 
 #### Concrete Numeric Example
 
@@ -734,7 +802,8 @@ After execution of MUL AL, BL (16 cycles):
 
 ```
 ================================================================================
-DIV dst, src2 / DIV AX, src2 — SIGNED INTEGER DIVISION
+DIV dst, src2 / DIV dst_64, src2_64 — SIGNED INTEGER DIVISION (BINARY)
+DIV dst, src1, src2 / DIV dst_64, src1_64, src2_64 — SIGNED INTEGER DIVISION (TERNARY)
 ================================================================================
 ```
 
@@ -761,28 +830,31 @@ if src2 == 0:
     STATUS.V   <- 1
     UPC        <- UPC + 1
 elif W == 0:  # 32-bit divide (32 cycles)
-    AL [31:0] <- AL [31:0] / src2 [31:0]  (signed quotient)
-    DL [31:0] <- AL [31:0] % src2 [31:0]  (remainder)
-    UPC       <- UPC + 1
+    dst [31:0] <- (src1 or dst) [31:0] / src2 [31:0]  (signed quotient)
+    DL [31:0]  <- (src1 or dst) [31:0] % src2 [31:0]  (remainder)
+    UPC        <- UPC + 1
 else:         # 64-bit divide (64 cycles via microcode)
-    AX [63:0] <- AX [63:0] / src2 [63:0]  (signed quotient)
-    DX [63:0] <- AX [63:0] % src2 [63:0]  (remainder)
-    UPC       <- UPC + 1
+    dst_64 [63:0] <- (src1_64 or dst_64) [63:0] / src2_64 [63:0]  (signed quotient)
+    DX [63:0]     <- (src1_64 or dst_64) [63:0] % src2_64 [63:0]  (remainder)
+    UPC           <- UPC + 1
 ```
 
 #### Instruction Word Format
 
-`OPCODE = 001011`. `W = 0` (32-bit, 32 cycles) or `W = 1` (64-bit). `RES_SEL = dst` (must be `AL`), `HA_MUX = dst`,
+`OPCODE = 001011`. `W = 0` (32-bit, 32 cycles) or `W = 1` (64-bit, 64 cycles). `RES_SEL = dst`, `HA_MUX = dst` (or
+`src1` in 3-operand form),
 `HB_MUX = src2`.
 
 #### Description
 
-Performs signed integer division of `dst` by `src2` using a multi-cycle non-restoring divider engine co-located in the
-arithmetic block. Produces both signed quotient (written to `dst`, `AL`) and signed remainder (latched into `DL`). If
-`src2 == 0`, the operation aborts without modifying `dst` or `DL`, asserting `ERR = 1` and `V = 1`.
+Performs signed integer division of `dst` (or `src1` in ternary form) by `src2` using a multi-cycle non-restoring
+divider engine co-located in the
+arithmetic block. Supports binary and ternary forms for both 32-bit and 64-bit operands. Produces both signed quotient
+(written to `dst`) and signed remainder (latched into `DL` or `DX`). If
+`src2 == 0`, the operation aborts without modifying `dst` or `DL`/`DX`, asserting `ERR = 1` and `V = 1`.
 
-- Cycle 31: Writes quotient to `AL`.
-- Cycle 32: Writes remainder to `DL` and commits status flags.
+- Cycle 31: Writes quotient to `dst`.
+- Cycle 32: Writes remainder to `DL` (or `DX`) and commits status flags.
 
 #### Concrete Numeric Example
 
@@ -800,7 +872,8 @@ After execution of DIV AL, BL (32 cycles):
 
 ```
 ================================================================================
-MULU dst, src2 / MULU AX, src2 — UNSIGNED MULTIPLY (RADIX-4 BOOTH MULTIPLIER)
+MULU dst, src2 / MULU dst_64, src2_64 — UNSIGNED MULTIPLY (BINARY)
+MULU dst, src1, src2 / MULU dst_64, src1_64, src2_64 — UNSIGNED MULTIPLY (TERNARY)
 ================================================================================
 ```
 
@@ -816,27 +889,33 @@ MULU dst, src2 / MULU AX, src2 — UNSIGNED MULTIPLY (RADIX-4 BOOTH MULTIPLIER)
 * **`Z`**: Set to 1 if entire 64-bit product is zero; reset to 0 otherwise.
 * **`S`**: Set to 1 if MSB of product (bit 63) is 1; reset to 0 otherwise.
 * **`C`**: Always cleared to 0.
-* **`V`**: Set to 1 if product exceeds single-word capacity ($AH \neq 0$); reset to 0 otherwise.
+* **`V`**: Set to 1 if product exceeds single-word capacity ($AH \neq 0$ for 32-bit, or $DX \neq 0$ for 64-bit); reset
+  to 0 otherwise.
 * **`U`, `ERR`, `D`**: Unaffected.
 
 #### Register Transfer & Datapath Flow
 
 ```text
-# Hardware Booth Multiplier Core (W = 0, 16 cycles):
-{AH [31:0], AL [31:0]} <- AL [31:0] * src2 [31:0]  (unsigned)
-UPC                    <- UPC + 1
+if W == 0:  # Hardware Booth Multiplier Core (16 cycles)
+    {AH [31:0], AL [31:0]}     <- (src1 or dst) [31:0] * src2 [31:0]  (unsigned)
+    UPC                        <- UPC + 1
+else:       # 64-bit unsigned multiply (64 cycles via microcode)
+    {DX [63:0], dst_64 [63:0]} <- (src1_64 or dst_64) [63:0] * src2_64 [63:0]  (unsigned)
+    UPC                        <- UPC + 1
 ```
 
 #### Instruction Word Format
 
-`OPCODE = 001110`. `W = 0` (32-bit $\times$ 32-bit $\to$ 64-bit product, 16 cycles). `RES_SEL = dst` (must be `AL`),
-`HA_MUX = dst`, `HB_MUX = src2`.
+`OPCODE = 001110`. `W = 0` (32-bit $\times$ 32-bit $\to$ 64-bit product, 16 cycles) or `W = 1` (64-bit $\times$
+64-bit $\to$ 128-bit product, 64 cycles). `RES_SEL = dst`,
+`HA_MUX = dst` (or `src1` in 3-operand form), `HB_MUX = src2`.
 
 #### Description
 
-Performs unsigned Radix-4 Booth multiplication using the shared multiplier core. Operates across 16 cycles, writing low
-word product to `AL` in cycle 15, high word to `AH` in cycle 16, and committing status flags. `VF` is asserted if
-`AH != 0`.
+Performs unsigned Radix-4 Booth multiplication using the shared multiplier core. Supports binary and ternary forms for
+both 32-bit and 64-bit operands. Operates across 16 cycles (or 64 cycles for 64-bit), writing low
+word product to `dst` in cycle 15, high word to `AH`/`DX` in cycle 16, and committing status flags. `VF` is asserted if
+high half is non-zero.
 
 #### Concrete Numeric Example
 
@@ -855,7 +934,8 @@ After execution of MULU AL, BL (16 cycles):
 
 ```
 ================================================================================
-DIVU dst, src2 / DIVU AX, src2 — UNSIGNED INTEGER DIVISION
+DIVU dst, src2 / DIVU dst_64, src2_64 — UNSIGNED INTEGER DIVISION (BINARY)
+DIVU dst, src1, src2 / DIVU dst_64, src1_64, src2_64 — UNSIGNED INTEGER DIVISION (TERNARY)
 ================================================================================
 ```
 
@@ -882,28 +962,31 @@ if src2 == 0:
     STATUS.V   <- 1
     UPC        <- UPC + 1
 elif W == 0:  # 32-bit divide (32 cycles)
-    AL [31:0] <- AL [31:0] / src2 [31:0]  (unsigned quotient)
-    DL [31:0] <- AL [31:0] % src2 [31:0]  (unsigned remainder)
-    UPC       <- UPC + 1
+    dst [31:0] <- (src1 or dst) [31:0] / src2 [31:0]  (unsigned quotient)
+    DL [31:0]  <- (src1 or dst) [31:0] % src2 [31:0]  (unsigned remainder)
+    UPC        <- UPC + 1
 else:         # 64-bit divide (64 cycles via microcode)
-    AX [63:0] <- AX [63:0] / src2 [63:0]  (unsigned quotient)
-    DX [63:0] <- AX [63:0] % src2 [63:0]  (unsigned remainder)
-    UPC       <- UPC + 1
+    dst_64 [63:0] <- (src1_64 or dst_64) [63:0] / src2_64 [63:0]  (unsigned quotient)
+    DX [63:0]     <- (src1_64 or dst_64) [63:0] % src2_64 [63:0]  (unsigned remainder)
+    UPC           <- UPC + 1
 ```
 
 #### Instruction Word Format
 
-`OPCODE = 001111`. `W = 0` (32-bit, 32 cycles) or `W = 1` (64-bit). `RES_SEL = dst` (must be `AL`), `HA_MUX = dst`,
+`OPCODE = 001111`. `W = 0` (32-bit, 32 cycles) or `W = 1` (64-bit, 64 cycles). `RES_SEL = dst`, `HA_MUX = dst` (or
+`src1` in 3-operand form),
 `HB_MUX = src2`.
 
 #### Description
 
-Performs unsigned integer division of `dst` by `src2` using the non-restoring divider engine. Produces unsigned quotient
-in `dst` (`AL`) and unsigned remainder in `DL`. If `src2 == 0`, aborts without modifying `AL` or `DL`, setting `ERR = 1`
+Performs unsigned integer division of `dst` (or `src1` in ternary form) by `src2` using the non-restoring divider
+engine. Supports binary and ternary forms for both 32-bit and 64-bit operands. Produces unsigned quotient
+in `dst` and unsigned remainder in `DL` (or `DX` when `W=1`). If `src2 == 0`, aborts without modifying `dst` or `DL`/
+`DX`, setting `ERR = 1`
 and `V = 1`.
 
-- Cycle 31: Writes quotient to `AL`.
-- Cycle 32: Writes remainder to `DL` and commits status flags.
+- Cycle 31: Writes quotient to `dst`.
+- Cycle 32: Writes remainder to `DL` (or `DX`) and commits status flags.
 
 #### Concrete Numeric Example
 
@@ -923,8 +1006,8 @@ After execution of DIVU AL, BL (32 cycles):
 
 ```
 ================================================================================
-AND dst, src2 / AND AX, src2 — BITWISE LOGICAL AND
-AND dst, src1, src2  — BITWISE LOGICAL AND (dst <- src1 & src2)
+AND dst, src2 / AND dst_64, src2_64 — BITWISE LOGICAL AND (BINARY)
+AND dst, src1, src2 / AND dst_64, src1_64, src2_64 — BITWISE LOGICAL AND (TERNARY)
 ================================================================================
 ```
 
@@ -950,19 +1033,21 @@ if W == 0:
     dst [31:0] <- (src1 or dst) [31:0] & src2 [31:0]
     UPC        <- UPC + 1
 else:
-    Cycle 1: dst_L [31:0] <- (src1 or dst)_L [31:0] & src2_L [31:0]
-    Cycle 2: dst_H [31:0] <- (src1 or dst)_H [31:0] & src2_H [31:0]
-    UPC                   <- UPC + 1
+    Cycle 1: dst_64_L [31:0] <- (src1_64_L or dst_64_L) [31:0] & src2_64_L [31:0]
+    Cycle 2: dst_64_H [31:0] <- (src1_64_H or dst_64_H) [31:0] & src2_64_H [31:0]
+    UPC                      <- UPC + 1
 ```
 
 #### Instruction Word Format
 
-`OPCODE = 010000`. `W = 0` (32-bit, 1 cycle) or `W = 1` (64-bit, 2 cycles). `RES_SEL = dst`, `HA_MUX = dst` (or `src1`),
+`OPCODE = 010000`. `W = 0` (32-bit, 1 cycle) or `W = 1` (64-bit, 2 cycles). `RES_SEL = dst`, `HA_MUX = dst` (or `src1`
+in 3-operand form),
 `HB_MUX = src2`.
 
 #### Description
 
-Performs bitwise logical AND between `(src1 or dst)` and `src2`. Always resets `C` and `V` to 0.
+Performs bitwise logical AND between `(src1 or dst)` and `src2` (or `(src1_64 or dst_64)` and `src2_64` in 64-bit mode).
+Supports binary and ternary forms. Always resets `C` and `V` to 0.
 
 #### Concrete Numeric Example
 
@@ -979,8 +1064,8 @@ After execution of AND AL, BL:
 
 ```
 ================================================================================
-OR dst, src2 / OR AX, src2 — BITWISE LOGICAL OR
-OR dst, src1, src2  — BITWISE LOGICAL OR (dst <- src1 | src2)
+OR dst, src2 / OR dst_64, src2_64 — BITWISE LOGICAL OR (BINARY)
+OR dst, src1, src2 / OR dst_64, src1_64, src2_64 — BITWISE LOGICAL OR (TERNARY)
 ================================================================================
 ```
 
@@ -1006,19 +1091,21 @@ if W == 0:
     dst [31:0] <- (src1 or dst) [31:0] | src2 [31:0]
     UPC        <- UPC + 1
 else:
-    Cycle 1: dst_L [31:0] <- (src1 or dst)_L [31:0] | src2_L [31:0]
-    Cycle 2: dst_H [31:0] <- (src1 or dst)_H [31:0] | src2_H [31:0]
-    UPC                   <- UPC + 1
+    Cycle 1: dst_64_L [31:0] <- (src1_64_L or dst_64_L) [31:0] | src2_64_L [31:0]
+    Cycle 2: dst_64_H [31:0] <- (src1_64_H or dst_64_H) [31:0] | src2_64_H [31:0]
+    UPC                      <- UPC + 1
 ```
 
 #### Instruction Word Format
 
-`OPCODE = 010001`. `W = 0` (32-bit, 1 cycle) or `W = 1` (64-bit, 2 cycles). `RES_SEL = dst`, `HA_MUX = dst` (or `src1`),
+`OPCODE = 010001`. `W = 0` (32-bit, 1 cycle) or `W = 1` (64-bit, 2 cycles). `RES_SEL = dst`, `HA_MUX = dst` (or `src1`
+in 3-operand form),
 `HB_MUX = src2`.
 
 #### Description
 
-Performs bitwise logical OR between `(src1 or dst)` and `src2`. Resets `C` and `V` to 0.
+Performs bitwise logical OR between `(src1 or dst)` and `src2` (or `(src1_64 or dst_64)` and `src2_64` in 64-bit mode).
+Supports binary and ternary forms. Resets `C` and `V` to 0.
 
 #### Concrete Numeric Example
 
@@ -1035,8 +1122,8 @@ After execution of OR AL, BL:
 
 ```
 ================================================================================
-XOR dst, src2 / XOR AX, src2 — BITWISE LOGICAL EXCLUSIVE OR
-XOR dst, src1, src2  — BITWISE LOGICAL XOR (dst <- src1 ^ src2)
+XOR dst, src2 / XOR dst_64, src2_64 — BITWISE LOGICAL EXCLUSIVE OR (BINARY)
+XOR dst, src1, src2 / XOR dst_64, src1_64, src2_64 — BITWISE LOGICAL EXCLUSIVE OR (TERNARY)
 ================================================================================
 ```
 
@@ -1062,19 +1149,21 @@ if W == 0:
     dst [31:0] <- (src1 or dst) [31:0] ^ src2 [31:0]
     UPC        <- UPC + 1
 else:
-    Cycle 1: dst_L [31:0] <- (src1 or dst)_L [31:0] ^ src2_L [31:0]
-    Cycle 2: dst_H [31:0] <- (src1 or dst)_H [31:0] ^ src2_H [31:0]
-    UPC                   <- UPC + 1
+    Cycle 1: dst_64_L [31:0] <- (src1_64_L or dst_64_L) [31:0] ^ src2_64_L [31:0]
+    Cycle 2: dst_64_H [31:0] <- (src1_64_H or dst_64_H) [31:0] ^ src2_64_H [31:0]
+    UPC                      <- UPC + 1
 ```
 
 #### Instruction Word Format
 
-`OPCODE = 010010`. `W = 0` (32-bit, 1 cycle) or `W = 1` (64-bit, 2 cycles). `RES_SEL = dst`, `HA_MUX = dst` (or `src1`),
+`OPCODE = 010010`. `W = 0` (32-bit, 1 cycle) or `W = 1` (64-bit, 2 cycles). `RES_SEL = dst`, `HA_MUX = dst` (or `src1`
+in 3-operand form),
 `HB_MUX = src2`.
 
 #### Description
 
-Performs bitwise logical XOR between `(src1 or dst)` and `src2`. Clearing a register (`XOR AL, AL`) produces zero and
+Performs bitwise logical XOR between `(src1 or dst)` and `src2` (or `(src1_64 or dst_64)` and `src2_64` in 64-bit mode).
+Supports binary and ternary forms. Clearing a register (`XOR AL, AL`) produces zero and
 asserts `ZF = 1`. Resets `C` and `V` to 0.
 
 #### Concrete Numeric Example
@@ -1092,7 +1181,8 @@ After execution of XOR AL, BL:
 
 ```
 ================================================================================
-FABS dst — FLOATING-POINT ABSOLUTE VALUE
+FABS dst / FABS dst_64 — FLOATING-POINT ABSOLUTE VALUE (UNARY)
+FABS dst, src1 / FABS dst_64, src1_64 — FLOATING-POINT ABSOLUTE VALUE (BINARY)
 ================================================================================
 ```
 
@@ -1112,30 +1202,42 @@ FABS dst — FLOATING-POINT ABSOLUTE VALUE
 #### Register Transfer & Datapath Flow
 
 ```text
-if W == 0:
-    AL [31]   <- 1'b0  # Clear float32 sign bit
-    UPC       <- UPC + 1
-else:
-    AH [31]   <- 1'b0  # Clear float64 sign bit
-    UPC       <- UPC + 1
+if W == 0:  # Float32
+    dst [30:0]    <- (src1 or dst) [30:0]
+    dst [31]      <- 1'b0  # Clear float32 sign bit
+    UPC           <- UPC + 1
+else:       # Float64
+    Cycle 1: dst_64_L [31:0] <- (src1_64_L or dst_64_L) [31:0]
+    Cycle 2: dst_64_H [30:0] <- (src1_64_H or dst_64_H) [30:0]
+             dst_64_H [31]   <- 1'b0  # Clear float64 sign bit
+    UPC                      <- UPC + 1
 ```
 
 #### Instruction Word Format
 
-`OPCODE = 010011`. `W = 0` (Float32, 1 cycle) or `W = 1` (Float64, 1 cycle). `RES_SEL = dst`, `HA_MUX = n/a`,
-`HB_MUX = dst`.
+`OPCODE = 010011`. `W = 0` (Float32, 1 cycle) or `W = 1` (Float64, 2 cycles). `RES_SEL = dst`, `HA_MUX = dst` (unary) or `src1` (binary),
+`HB_MUX = n/a`.
 
 #### Description
 
-Clears the sign bit (bit 31 of `AL` for 32-bit, or bit 31 of `AH` for 64-bit), producing the positive absolute value of
-the floating-point operand. Always clears `STATUS.S` to 0.
+Clears the sign bit (bit 31 of `dst` for 32-bit, or bit 31 of `dst_64_H` for 64-bit), producing the positive absolute
+value of the floating-point operand. Always clears `STATUS.S` to 0.
+
+Supports unary (`FABS dst` / `FABS dst_64`) where the sign is cleared in place, and binary (`FABS dst, src1` / `FABS dst_64, src1_64`) where the absolute value of `src1` (or `src1_64`) is stored into `dst` (or `dst_64`), leaving `src1` (or `src1_64`) unmodified.
 
 #### Concrete Numeric Example
 
 ```text
 Suppose AL = 0xBF800000 (-1.0f).
-After execution of FABS AL:
+After execution of FABS AL (unary form):
   AL becomes 0x3F800000 (+1.0f)
+  Sign cleared: sets SIGN (S) to 0
+  Non-zero magnitude: sets ZERO (Z) to 0
+
+Suppose BL = 0xBF800000 (-1.0f).
+After execution of FABS AL, BL (binary form):
+  AL <- 0x3F800000 (+1.0f)
+  BL remains 0xBF800000 (unmodified)
   Sign cleared: sets SIGN (S) to 0
   Non-zero magnitude: sets ZERO (Z) to 0
 ```
@@ -1144,7 +1246,8 @@ After execution of FABS AL:
 
 ```
 ================================================================================
-FCHS dst — FLOATING-POINT CHANGE SIGN (NEGATE)
+FCHS dst / FCHS dst_64 — FLOATING-POINT CHANGE SIGN (NEGATE) (UNARY)
+FCHS dst, src1 / FCHS dst_64, src1_64 — FLOATING-POINT CHANGE SIGN (NEGATE) (BINARY)
 ================================================================================
 ```
 
@@ -1157,37 +1260,48 @@ FCHS dst — FLOATING-POINT CHANGE SIGN (NEGATE)
 +-----+-----+-----+-----+-----+-----+-----+-----+
 ```
 
-* **`S`**: Inverted: `STATUS.S <- ~STATUS.S`.
+* **`S`**: Inverted: `STATUS.S <- ~((src1 or dst)[31])`.
 * **`Z`, `C`, `V`, `U`, `ERR`, `D`**: Unaffected.
 
 #### Register Transfer & Datapath Flow
 
 ```text
-if W == 0:
-    AL [31]   <- ~AL [31]  # Invert float32 sign bit
-    STATUS.S  <- AL [31]
-    UPC       <- UPC + 1
-else:
-    AH [31]   <- ~AH [31]  # Invert float64 sign bit
-    STATUS.S  <- AH [31]
-    UPC       <- UPC + 1
+if W == 0:  # Float32
+    dst [30:0]    <- (src1 or dst) [30:0]
+    dst [31]      <- ~(src1 or dst) [31]  # Invert float32 sign bit
+    STATUS.S      <- dst [31]
+    UPC           <- UPC + 1
+else:       # Float64
+    Cycle 1: dst_64_L [31:0] <- (src1_64_L or dst_64_L) [31:0]
+    Cycle 2: dst_64_H [30:0] <- (src1_64_H or dst_64_H) [30:0]
+             dst_64_H [31]   <- ~(src1_64_H or dst_64_H) [31]  # Invert float64 sign bit
+    STATUS.S                 <- dst_64_H [31]
+    UPC                      <- UPC + 1
 ```
 
 #### Instruction Word Format
 
-`OPCODE = 010100`. `W = 0` (Float32, 1 cycle) or `W = 1` (Float64, 1 cycle). `RES_SEL = dst`, `HA_MUX = n/a`,
-`HB_MUX = dst`.
+`OPCODE = 010100`. `W = 0` (Float32, 1 cycle) or `W = 1` (Float64, 2 cycles). `RES_SEL = dst`, `HA_MUX = dst` (unary) or `src1` (binary),
+`HB_MUX = n/a`.
 
 #### Description
 
-Inverts the sign bit of a floating-point operand in place and updates the sign flag `STATUS.S`.
+Inverts the sign bit of a floating-point operand and updates the sign flag `STATUS.S`.
+
+Supports unary (`FCHS dst` / `FCHS dst_64`) where the sign is inverted in place, and binary (`FCHS dst, src1` / `FCHS dst_64, src1_64`) where the negated value of `src1` (or `src1_64`) is stored into `dst` (or `dst_64`), leaving `src1` (or `src1_64`) unmodified.
 
 #### Concrete Numeric Example
 
 ```text
 Suppose AL = 0x3F800000 (+1.0f).
-After execution of FCHS AL:
+After execution of FCHS AL (unary form):
   AL becomes 0xBF800000 (-1.0f)
+  Sign inverted: sets SIGN (S) to 1
+
+Suppose BL = 0x3F800000 (+1.0f).
+After execution of FCHS AL, BL (binary form):
+  AL <- 0xBF800000 (-1.0f)
+  BL remains 0x3F800000 (unmodified)
   Sign inverted: sets SIGN (S) to 1
 ```
 
@@ -1195,7 +1309,8 @@ After execution of FCHS AL:
 
 ```
 ================================================================================
-NOT dst / NOT AX — BITWISE LOGICAL COMPLEMENT
+NOT dst / NOT dst_64 — BITWISE LOGICAL COMPLEMENT (UNARY)
+NOT dst, src1 / NOT dst_64, src1_64 — BITWISE LOGICAL COMPLEMENT (BINARY)
 ================================================================================
 ```
 
@@ -1204,41 +1319,52 @@ NOT dst / NOT AX — BITWISE LOGICAL COMPLEMENT
 ```text
   BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
-|  -  |  -  |  X  |  -  |  -  |  -  |  -  |  X  |
+|  -  |  -  |  X  |  0  |  0  |  -  |  -  |  X  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
 ```
 
-* **`Z`**: Set to 1 if inverted result is zero (original was all 1s); reset to 0 otherwise.
+* **`Z`**: Set to 1 if inverted result is zero (operand was all 1s); reset to 0 otherwise.
 * **`S`**: Set to 1 if MSB of inverted result is 1; reset to 0 otherwise.
-* **`C`, `V`, `U`, `ERR`, `D`**: Unaffected.
+* **`C`**: Cleared to 0.
+* **`V`**: Cleared to 0.
+* **`U`, `ERR`, `D`**: Unaffected.
 
 #### Register Transfer & Datapath Flow
 
 ```text
 if W == 0:
-    AL [31:0] <- ~AL [31:0]
-    UPC       <- UPC + 1
+    dst [31:0] <- ~(src1 or dst) [31:0]
+    UPC        <- UPC + 1
 else:
-    Cycle 1: AL [31:0] <- ~AL [31:0]
-    Cycle 2: AH [31:0] <- ~AH [31:0]
-    UPC       <- UPC + 1
+    Cycle 1: dst_64_L [31:0] <- ~(src1_64_L or dst_64_L) [31:0]
+    Cycle 2: dst_64_H [31:0] <- ~(src1_64_H or dst_64_H) [31:0]
+    UPC                     <- UPC + 1
 ```
 
 #### Instruction Word Format
 
-`OPCODE = 010101`. `W = 0` (32-bit, 1 cycle) or `W = 1` (64-bit, 2 cycles). `RES_SEL = dst`, `HA_MUX = n/a`,
-`HB_MUX = dst`.
+`OPCODE = 010101`. `W = 0` (32-bit, 1 cycle) or `W = 1` (64-bit, 2 cycles). `RES_SEL = dst`, `HA_MUX = dst` (unary) or `src1` (binary),
+`HB_MUX = n/a`.
 
 #### Description
 
-Performs one's-complement bitwise inversion on all bits of `dst`.
+Performs one's-complement bitwise inversion on all bits of the operand. Resets `C` and `V` to 0.
+
+Supports unary (`NOT dst` / `NOT dst_64`) where `dst` (or `dst_64`) is inverted in place, and binary (`NOT dst, src1` / `NOT dst_64, src1_64`) where `~src1` (or `~src1_64`) is written to `dst` (or `dst_64`), leaving `src1` (or `src1_64`) unmodified.
 
 #### Concrete Numeric Example
 
 ```text
 Suppose AL = 0x00000000.
-After execution of NOT AL:
+After execution of NOT AL (unary form):
   AL <- 0xFFFFFFFF
+  Bit 31 = 1: sets SIGN (S) to 1
+  Non-zero result: sets ZERO (Z) to 0
+
+Suppose BL = 0x00000000.
+After execution of NOT AL, BL (binary form):
+  AL <- 0xFFFFFFFF
+  BL remains 0x00000000 (unmodified)
   Bit 31 = 1: sets SIGN (S) to 1
   Non-zero result: sets ZERO (Z) to 0
 ```
@@ -1249,7 +1375,7 @@ After execution of NOT AL:
 
 ```
 ================================================================================
-LSL dst[, src1] / LSL AX[, src1] — LOGICAL SHIFT LEFT
+LSL dst[, src1] / LSL dst_64[, src1] — LOGICAL SHIFT LEFT
 ================================================================================
 ```
 
@@ -1272,13 +1398,13 @@ LSL dst[, src1] / LSL AX[, src1] — LOGICAL SHIFT LEFT
 ```text
 count = src1[5:0] if src1 provided else C[5:0]
 if W == 0:
-    STATUS.C   <- (count > 0) ? AL [32 - count] : STATUS.C
+    STATUS.C   <- (count > 0) ? dst [32 - count] : STATUS.C
     dst [31:0] <- dst [31:0] << count
     UPC        <- UPC + 1
 else:
-    STATUS.C  <- (count > 0) ? AH [64 - count - 32] : STATUS.C
-    AX [63:0] <- AX [63:0] << count
-    UPC       <- UPC + 1
+    STATUS.C      <- (count > 0) ? dst_64_H [64 - count - 32] : STATUS.C
+    dst_64 [63:0] <- dst_64 [63:0] << count
+    UPC           <- UPC + 1
 ```
 
 #### Instruction Word Format
@@ -1306,7 +1432,7 @@ After execution of LSL AL:
 
 ```
 ================================================================================
-LSR dst[, src1] / LSR AX[, src1] — LOGICAL SHIFT RIGHT
+LSR dst[, src1] / LSR dst_64[, src1] — LOGICAL SHIFT RIGHT
 ================================================================================
 ```
 
@@ -1329,13 +1455,13 @@ LSR dst[, src1] / LSR AX[, src1] — LOGICAL SHIFT RIGHT
 ```text
 count = src1[5:0] if src1 provided else C[5:0]
 if W == 0:
-    STATUS.C   <- (count > 0) ? AL [count - 1] : STATUS.C
+    STATUS.C   <- (count > 0) ? dst [count - 1] : STATUS.C
     dst [31:0] <- dst [31:0] >> count  (zero-fill MSB)
     UPC        <- UPC + 1
 else:
-    STATUS.C  <- (count > 0) ? AX [count - 1] : STATUS.C
-    AX [63:0] <- AX [63:0] >> count
-    UPC       <- UPC + 1
+    STATUS.C      <- (count > 0) ? dst_64 [count - 1] : STATUS.C
+    dst_64 [63:0] <- dst_64 [63:0] >> count
+    UPC           <- UPC + 1
 ```
 
 #### Instruction Word Format
@@ -1362,7 +1488,7 @@ After execution of LSR AL:
 
 ```
 ================================================================================
-ASL dst[, src1] / ASL AX[, src1] — ARITHMETIC SHIFT LEFT
+ASL dst[, src1] / ASL dst_64[, src1] — ARITHMETIC SHIFT LEFT
 ================================================================================
 ```
 
@@ -1386,15 +1512,15 @@ ASL dst[, src1] / ASL AX[, src1] — ARITHMETIC SHIFT LEFT
 ```text
 count = src1[5:0] if src1 provided else C[5:0]
 if W == 0:
-    STATUS.C   <- (count > 0) ? AL [32 - count] : STATUS.C
+    STATUS.C   <- (count > 0) ? dst [32 - count] : STATUS.C
     STATUS.V   <- sign bit changed during shift
     dst [31:0] <- dst [31:0] << count
     UPC        <- UPC + 1
 else:
-    STATUS.C  <- (count > 0) ? AH [64 - count - 32] : STATUS.C
-    STATUS.V  <- sign bit changed during shift
-    AX [63:0] <- AX [63:0] << count
-    UPC       <- UPC + 1
+    STATUS.C      <- (count > 0) ? dst_64_H [64 - count - 32] : STATUS.C
+    STATUS.V      <- sign bit changed during shift
+    dst_64 [63:0] <- dst_64 [63:0] << count
+    UPC           <- UPC + 1
 ```
 
 #### Instruction Word Format
@@ -1422,7 +1548,7 @@ After execution of ASL AL:
 
 ```
 ================================================================================
-ASR dst[, src1] / ASR AX[, src1] — ARITHMETIC SHIFT RIGHT
+ASR dst[, src1] / ASR dst_64[, src1] — ARITHMETIC SHIFT RIGHT
 ================================================================================
 ```
 
@@ -1445,13 +1571,13 @@ ASR dst[, src1] / ASR AX[, src1] — ARITHMETIC SHIFT RIGHT
 ```text
 count = src1[5:0] if src1 provided else C[5:0]
 if W == 0:
-    STATUS.C   <- (count > 0) ? AL [count - 1] : STATUS.C
+    STATUS.C   <- (count > 0) ? dst [count - 1] : STATUS.C
     dst [31:0] <- dst [31:0] >>> count  (sign-extended into MSB)
     UPC        <- UPC + 1
 else:
-    STATUS.C  <- (count > 0) ? AX [count - 1] : STATUS.C
-    AX [63:0] <- AX [63:0] >>> count
-    UPC       <- UPC + 1
+    STATUS.C      <- (count > 0) ? dst_64 [count - 1] : STATUS.C
+    dst_64 [63:0] <- dst_64 [63:0] >>> count
+    UPC           <- UPC + 1
 ```
 
 #### Instruction Word Format
@@ -1478,7 +1604,7 @@ After execution of ASR AL:
 
 ```
 ================================================================================
-LZC dst, src2 / LZC AX, src2 — LEADING ZERO COUNT
+LZC dst, src2 / LZC dst_64, src2_64 — LEADING ZERO COUNT
 ================================================================================
 ```
 
@@ -1498,13 +1624,13 @@ LZC dst, src2 / LZC AX, src2 — LEADING ZERO COUNT
 
 ```text
 if W == 0:
-    dst [31:0] <- count_leading_zeros(src2 [31:0])  # 0 to 32
-    STATUS.Z   <- (src2 [31:0] == 0)
-    UPC        <- UPC + 1
+    dst [31:0]    <- count_leading_zeros(src2 [31:0])  # 0 to 32
+    STATUS.Z      <- (src2 [31:0] == 0)
+    UPC           <- UPC + 1
 else:
-    dst [63:0] <- count_leading_zeros(src2 [63:0])  # 0 to 64
-    STATUS.Z   <- (src2 [63:0] == 0)
-    UPC        <- UPC + 1
+    dst_64 [63:0] <- count_leading_zeros(src2_64 [63:0])  # 0 to 64
+    STATUS.Z      <- (src2_64 [63:0] == 0)
+    UPC           <- UPC + 1
 ```
 
 #### Instruction Word Format
@@ -1532,7 +1658,7 @@ After execution of LZC C, AL:
 
 ```
 ================================================================================
-PUSH src2 / PUSH AX — PUSH REGISTER ONTO OPERAND STACK
+PUSH src2 / PUSH src2_64 — PUSH REGISTER ONTO OPERAND STACK
 ================================================================================
 ```
 
@@ -1564,9 +1690,9 @@ else:       # 64-bit push (8 bytes)
     if OSP + 8 > 32:
         STATUS.ERR <- 1
     else:
-        STACK_RAM [OSP .. OSP+7] <- { src2_H [31:0], src2_L [31:0] }
+        STACK_RAM [OSP .. OSP+7] <- { src2_64_H [31:0], src2_64_L [31:0] }
         OSP                      <- OSP + 8
-        TOS                      <- src2_L [31:0]
+        TOS                      <- src2_64_L [31:0]
     UPC <- UPC + 1
 ```
 
@@ -1577,7 +1703,8 @@ else:       # 64-bit push (8 bytes)
 
 #### Description
 
-Pushes register `src2` onto the 32-byte operand stack, updates internal `TOS` cache register, and advances `OSP[4:0]`.
+Pushes register `src2` (or `src2_64`) onto the 32-byte operand stack, updates internal `TOS` cache register, and
+advances `OSP[4:0]`.
 No general-purpose register is written (`RES_SEL = NONE`). If pushing exceeds the physical depth, the `ERR` flag
 is asserted without clobbering arithmetic flags `VF` or `UF`.
 
@@ -1596,7 +1723,7 @@ After execution of PUSH AL:
 
 ```
 ================================================================================
-POP dst / POP AX — POP REGISTER FROM OPERAND STACK
+POP dst / POP dst_64 — POP REGISTER FROM OPERAND STACK
 ================================================================================
 ```
 
@@ -1629,8 +1756,8 @@ else:       # 64-bit pop
         STATUS.ERR <- 1
     else:
         OSP                    <- OSP - 8
-        {dst_H, dst_L}         <- STACK_RAM [OSP .. OSP+7]
-        TOS                    <- dst_L
+        {dst_64_H, dst_64_L}   <- STACK_RAM [OSP .. OSP+7]
+        TOS                    <- dst_64_L
     UPC <- UPC + 1
 ```
 
@@ -1641,7 +1768,8 @@ else:       # 64-bit pop
 
 #### Description
 
-Pops the top value from the operand stack into `dst` and decrements `OSP`. If popping from an empty stack ($OSP < 4$),
+Pops the top value from the operand stack into `dst` (or `dst_64`) and decrements `OSP`. If popping from an empty stack
+($OSP < 4$),
 `UF` and `ERR` flags are raised.
 
 #### Concrete Numeric Example
@@ -1658,7 +1786,7 @@ After execution of POP BL:
 
 ```
 ================================================================================
-LDC dst, tbl, addr — LOAD FROM CONSTANT / LUT ROM
+LDC dst, tbl, addr / LDC dst_64, tbl, addr — LOAD FROM CONSTANT / LUT ROM
 ================================================================================
 ```
 
@@ -1681,20 +1809,20 @@ effective_offset <- (HA_MUX == IMM) ? INSTR[9:0] : HA_MUX_REG
 case tbl of
     CONST (0b000):  # DATA_RAM base 0x100 (words 256..319)
         if W == 0:
-            dst [31:0]   <- DATA_RAM [0x100 | (effective_offset & 0x03F)]
+            dst [31:0]      <- DATA_RAM [0x100 | (effective_offset & 0x03F)]
         else:
-            dst_L [31:0] <- DATA_RAM [0x100 | (effective_offset & 0x03E)]
-            dst_H [31:0] <- DATA_RAM [0x101 | (effective_offset & 0x03E)]
+            dst_64_L [31:0] <- DATA_RAM [0x100 | (effective_offset & 0x03E)]
+            dst_64_H [31:0] <- DATA_RAM [0x101 | (effective_offset & 0x03E)]
     TRIG  (0b001):  # DATA_RAM base 0x200 (words 512..639)
-        dst [31:0]       <- DATA_RAM [0x200 | (effective_offset & 0x07F)]
+        dst [31:0]          <- DATA_RAM [0x200 | (effective_offset & 0x07F)]
     CHEB  (0b010):  # DATA_RAM base 0x280 (words 640..767)
-        dst [31:0]       <- DATA_RAM [0x280 | (effective_offset & 0x07F)]
+        dst [31:0]          <- DATA_RAM [0x280 | (effective_offset & 0x07F)]
     RECIP (0b011):  # DATA_RAM base 0x300 (words 768..1023), low 16-bit slice
-        dst [15:0]       <- DATA_RAM [0x300 | (effective_offset & 0x0FF)] [15:0]
-        dst [31:16]      <- 0
+        dst [15:0]          <- DATA_RAM [0x300 | (effective_offset & 0x0FF)] [15:0]
+        dst [31:16]         <- 0
     SQRT  (0b100):  # DATA_RAM base 0x300 (words 768..1023), high 16-bit slice
-        dst [15:0]       <- DATA_RAM [0x300 | (effective_offset & 0x0FF)] [31:16]
-        dst [31:16]      <- 0
+        dst [15:0]          <- DATA_RAM [0x300 | (effective_offset & 0x0FF)] [31:16]
+        dst [31:16]         <- 0
 
 UPC <- UPC + 1
 ```
@@ -1747,7 +1875,7 @@ LDC AH, SQRT, C
 
 ```
 ================================================================================
-LDI dst, imm — LOAD IMMEDIATE INTO REGISTER
+LDI dst, imm / LDI dst_64, imm — LOAD IMMEDIATE INTO REGISTER
 LDI flag, val — LOAD IMMEDIATE BIT INTO STATUS FLAG
 ================================================================================
 ```
@@ -1781,17 +1909,21 @@ When loading into a status flag (`dst == NONE`):
 
 ```text
 if dst != NONE:
-    dst [31:0]   <- zero_extend(INSTR[9:0])
-    STATUS       <- unaffected
-    UPC          <- UPC + 1
+    if W == 0:
+        dst [31:0]      <- zero_extend(INSTR[9:0])
+    else:
+        dst_64_L [31:0] <- zero_extend(INSTR[9:0])
+        dst_64_H [31:0] <- 0
+    STATUS              <- unaffected
+    UPC                 <- UPC + 1
 else:
-    STATUS[flag] <- INSTR[0]
-    UPC          <- UPC + 1
+    STATUS[flag]        <- INSTR[0]
+    UPC                 <- UPC + 1
 ```
 
 #### Instruction Word Format
 
-`OPCODE = 100011`. `W = 0` (1 cycle).
+`OPCODE = 100011`. `W = 0` (1 cycle) or `W = 1` (2 cycles).
 
 - **Register Form**: `RES_SEL = dst`, `HA_MUX = NONE`, `HB_MUX = IMM`, `IMM = imm[9:0]`.
 - **Flag Form**: `RES_SEL = NONE (0b1111)`, `HA_MUX = NONE`, `HB_MUX = IMM`, `FLAG_COND = flag[2:0]`,
@@ -1799,9 +1931,11 @@ else:
 
 #### Description
 
-1. **Register Load (`LDI dst, imm`)**: Loads a 10-bit unsigned immediate constant (`INSTR[9:0]`) into `dst` via
-   `HB_MUX = IMM`. If `W=1` (64-bit), the immediate is loaded into the low-half register (`dst`) and zero is loaded into
-   the high-half register (`dst | 1`).
+1. **Register Load (`LDI dst, imm` / `LDI dst_64, imm`)**: Loads a 10-bit unsigned immediate constant (`INSTR[9:0]`)
+   into `dst` via
+   `HB_MUX = IMM`. If `W=1` (64-bit), the immediate is loaded into the low-half register (`dst_64_L`) and zero is loaded
+   into
+   the high-half register (`dst_64_H`).
 2. **Flag Load (`LDI flag, val`)**: When `dst` is `NONE`, the instruction operates as a universal flag manipulation
    operation. It routes `status_wr_sel = 1 << flag` and `res_status = (val & 1) << flag` through the datapath writeback
    multiplexer, setting or clearing the chosen flag in a single cycle without altering any other register or status
@@ -1832,7 +1966,7 @@ LDI ZERO, 0
 
 ```
 ================================================================================
-LD dst, addr / LD dst, [src1] — LOAD FROM SCRATCHPAD MEMORY
+LD dst, addr / LD dst, [src1] / LD dst_64, addr — LOAD FROM SCRATCHPAD MEMORY
 ================================================================================
 ```
 
@@ -1857,8 +1991,8 @@ if W == 0:
     UPC        <- UPC + 1
 else:
     // 64-bit load requires an even base memory address (addr_val % 2 == 0)
-    dst_L      <- SCRATCHPAD [addr_val]
-    dst_H      <- SCRATCHPAD [addr_val | 1]
+    dst_64_L   <- SCRATCHPAD [addr_val]
+    dst_64_H   <- SCRATCHPAD [addr_val | 1]
     UPC        <- UPC + 1
 ```
 
@@ -1866,23 +2000,24 @@ else:
 
 `OPCODE = 100100`. `W = 0` (32-bit, 1 cycle) or `W = 1` (64-bit, 2 cycles). `RES_SEL = dst`. `HB_MUX = NONE`.
 
-- **Immediate Direct (`LD dst, addr`)**: `HA_MUX = IMM (0b1101)`, `imm[9:0] = addr` (`0..63`).
+- **Immediate Direct (`LD dst, addr` / `LD dst_64, addr`)**: `HA_MUX = IMM (0b1101)`, `imm[9:0] = addr` (`0..63`).
 - **Indirect Register (`LD dst, [src1]`)**: `HA_MUX = src1` (`AL..FH`, `EA`, `EB`, or `C`), `imm[9:0] = 0`.
 
 #### Description
 
 Loads 32 or 64 bits from the internal scratchpad memory (mapped to `DATA_RAM` base `0x080`, words 128..191,
-`SCR[0..63]`) into `dst`.
+`SCR[0..63]`) into `dst` (or `dst_64`).
 
 Addressing can be specified in two forms:
 
-1. **Direct Immediate Addressing (`LD dst, addr`)**: The address is specified directly as an immediate literal `addr` in
+1. **Direct Immediate Addressing (`LD dst, addr` / `LD dst_64, addr`)**: The address is specified directly as an
+   immediate literal `addr` in
    `0..63`.
 2. **Indirect Register Addressing (`LD dst, [src1]`)**: The address is sourced from register `src1` (`AL..FH`, `EA`,
    `EB`, or `C`) via `HA_MUX`, with bits `[5:0]` selecting the scratchpad slot.
 
 For 64-bit operations (`W = 1`), the effective address must be an even base address (`addr_val % 2 == 0`, bit 0 is 0);
-`dst_L` is loaded from `addr_val` and `dst_H` from `addr_val | 1`.
+`dst_64_L` is loaded from `addr_val` and `dst_64_H` from `addr_val | 1`.
 
 #### Concrete Numeric Example
 
@@ -1908,7 +2043,7 @@ After execution of LD AL, [C]:
 
 ```
 ================================================================================
-STO addr, src2 / STO [src1], src2 — STORE TO SCRATCHPAD MEMORY
+STO addr, src2 / STO [src1], src2 / STO addr, src2_64 — STORE TO SCRATCHPAD MEMORY
 ================================================================================
 ```
 
@@ -1933,8 +2068,8 @@ if W == 0:
     UPC                       <- UPC + 1
 else:
     // 64-bit store requires an even base memory address (addr_val % 2 == 0)
-    SCRATCHPAD [addr_val]     <- src2_L [31:0]
-    SCRATCHPAD [addr_val | 1] <- src2_H [31:0]
+    SCRATCHPAD [addr_val]     <- src2_64_L [31:0]
+    SCRATCHPAD [addr_val | 1] <- src2_64_H [31:0]
     UPC                       <- UPC + 1
 ```
 
@@ -1942,23 +2077,25 @@ else:
 
 `OPCODE = 100101`. `W = 0` (32-bit, 1 cycle) or `W = 1` (64-bit, 2 cycles). `RES_SEL = NONE (0b1111)`. `HB_MUX = src2`.
 
-- **Immediate Direct (`STO addr, src2`)**: `HA_MUX = IMM (0b1101)`, `imm[9:0] = addr` (`0..63`).
+- **Immediate Direct (`STO addr, src2` / `STO addr, src2_64`)**: `HA_MUX = IMM (0b1101)`, `imm[9:0] = addr` (`0..63`).
 - **Indirect Register (`STO [src1], src2`)**: `HA_MUX = src1` (`AL..FH`, `EA`, `EB`, or `C`), `imm[9:0] = 0`.
 
 #### Description
 
-Stores 32 or 64 bits from register `src2` into internal scratchpad memory (mapped to `DATA_RAM` base `0x080`, words
+Stores 32 or 64 bits from register `src2` (or `src2_64`) into internal scratchpad memory (mapped to `DATA_RAM` base
+`0x080`, words
 128..191, `SCR[0..63]`). Does not write to any general-purpose register (`RES_SEL = NONE`).
 
 Addressing can be specified in two forms:
 
-1. **Direct Immediate Addressing (`STO addr, src2`)**: The scratchpad target address is specified directly as an
+1. **Direct Immediate Addressing (`STO addr, src2` / `STO addr, src2_64`)**: The scratchpad target address is specified
+   directly as an
    immediate literal `addr` in `0..63`.
 2. **Indirect Register Addressing (`STO [src1], src2`)**: The scratchpad target address is sourced from register `src1`
    (`AL..FH`, `EA`, `EB`, or `C`) via `HA_MUX`, with bits `[5:0]` selecting the scratchpad slot.
 
 For 64-bit operations (`W = 1`), the effective address must be an even base address (`addr_val % 2 == 0`, bit 0 is 0);
-`src2_L` is stored into `addr_val` and `src2_H` into `addr_val | 1`.
+`src2_64_L` is stored into `addr_val` and `src2_64_H` into `addr_val | 1`.
 
 #### Concrete Numeric Example
 
@@ -1980,16 +2117,12 @@ After execution of STO [C], AL:
   Flags are unaffected.
 ```
 
-```
-
 ---
 
 ```
-
 ================================================================================
-MOV dst, src2 / MOV AX, src2 — REGISTER-TO-REGISTER MOVE
+MOV dst, src2 / MOV dst_64, src2_64 — REGISTER-TO-REGISTER MOVE
 ================================================================================
-
 ```
 
 #### Status Flags Affected
@@ -2007,11 +2140,11 @@ MOV dst, src2 / MOV AX, src2 — REGISTER-TO-REGISTER MOVE
 
 ```text
 if W == 0:
-    dst [31:0] <- src2 [31:0]
-    UPC        <- UPC + 1
+    dst [31:0]    <- src2 [31:0]
+    UPC           <- UPC + 1
 else:
-    dst [63:0] <- src2 [63:0]
-    UPC        <- UPC + 1
+    dst_64 [63:0] <- src2_64 [63:0]
+    UPC           <- UPC + 1
 ```
 
 #### Instruction Word Format
@@ -2021,7 +2154,8 @@ else:
 
 #### Description
 
-Transfers data directly from `src2` to `dst` across the internal data bus without changing any status flags.
+Performs register-to-register assignment from `src2` (or `src2_64`) to `dst` (or `dst_64`) across the internal data bus
+without changing any status flags.
 
 #### Concrete Numeric Example
 
@@ -2036,7 +2170,7 @@ After execution of MOV AL, BL:
 
 ```
 ================================================================================
-SWAP dst, src2 / SWAP AX, src2 — REGISTER EXCHANGE
+SWAP dst, src2 / SWAP dst_64, src2_64 — REGISTER EXCHANGE
 ================================================================================
 ```
 
@@ -2054,10 +2188,16 @@ SWAP dst, src2 / SWAP AX, src2 — REGISTER EXCHANGE
 #### Register Transfer & Datapath Flow
 
 ```text
-temp       <- dst
-dst [31:0] <- src2 [31:0]
-src2 [31:0] <- temp
-UPC        <- UPC + 1
+if W == 0:
+    temp        <- dst
+    dst [31:0]  <- src2 [31:0]
+    src2 [31:0] <- temp
+    UPC         <- UPC + 1
+else:
+    temp           <- dst_64
+    dst_64 [63:0]  <- src2_64 [63:0]
+    src2_64 [63:0] <- temp
+    UPC            <- UPC + 1
 ```
 
 #### Instruction Word Format
@@ -2067,7 +2207,8 @@ UPC        <- UPC + 1
 
 #### Description
 
-Exchanges the contents of registers `dst` and `src2` using the internal staging register in a single cycle.
+Exchanges the contents of registers `dst` and `src2` (or `dst_64` and `src2_64`) using the internal staging register in
+a single cycle.
 
 #### Concrete Numeric Example
 
@@ -2085,7 +2226,7 @@ After execution of SWAP AL, BL:
 
 ```
 ================================================================================
-LDU dst, addr — LOAD FROM HOST USER BUFFER
+LDU dst, addr / LDU dst_64, addr — LOAD FROM HOST USER BUFFER
 ================================================================================
 ```
 
@@ -2107,8 +2248,8 @@ if W == 0:
     dst [31:0] <- USER_BUFFER [addr [5:0]]
     UPC        <- UPC + 1
 else:
-    {dst_H, dst_L} <- { USER_BUFFER [addr+1], USER_BUFFER [addr] }
-    UPC            <- UPC + 1
+    {dst_64_H, dst_64_L} <- { USER_BUFFER [addr+1], USER_BUFFER [addr] }
+    UPC                  <- UPC + 1
 ```
 
 #### Instruction Word Format
@@ -2119,7 +2260,7 @@ else:
 #### Description
 
 Loads a word from the host-accessible user buffer (mapped to `DATA_RAM` base `0x0C0`, words 192..207, `USR[0..15]`) into
-`dst`.
+`dst` (or `dst_64`).
 
 #### Concrete Numeric Example
 
@@ -2134,7 +2275,7 @@ After execution of LDU AL, 0x00:
 
 ```
 ================================================================================
-STU addr, src2 — STORE TO HOST USER BUFFER
+STU addr, src2 / STU addr, src2_64 — STORE TO HOST USER BUFFER
 ================================================================================
 ```
 
@@ -2156,7 +2297,7 @@ if W == 0:
     USER_BUFFER [addr [5:0]] <- src2 [31:0]
     UPC                      <- UPC + 1
 else:
-    { USER_BUFFER [addr+1], USER_BUFFER [addr] } <- { src2_H [31:0], src2_L [31:0] }
+    { USER_BUFFER [addr+1], USER_BUFFER [addr] } <- { src2_64_H [31:0], src2_64_L [31:0] }
     UPC                      <- UPC + 1
 ```
 
@@ -2167,7 +2308,8 @@ else:
 
 #### Description
 
-Stores `src2` into the host-accessible user buffer (mapped to `DATA_RAM` base `0x0C0`, words 192..207, `USR[0..15]`) at
+Stores `src2` (or `src2_64`) into the host-accessible user buffer (mapped to `DATA_RAM` base `0x0C0`, words 192..207,
+`USR[0..15]`) at
 `addr`. Does not write to any general-purpose register (`RES_SEL = NONE`).
 
 #### Concrete Numeric Example
