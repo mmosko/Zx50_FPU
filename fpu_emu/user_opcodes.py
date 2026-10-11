@@ -58,6 +58,12 @@ class UserOpcode(Enum):
     ABS_I64 = 0x5A
     ABS_F64 = 0x5B
 
+    # Rounding Operations
+    FLOOR_F32 = 0x61
+    FLOOR_F64 = 0x63
+    CEIL_F32 = 0x69
+    CEIL_F64 = 0x6B
+
     # Trigonometric Operations
     SIN_F32 = 0x71
     SIN_F64 = 0x73
@@ -143,10 +149,10 @@ class UserOpcode(Enum):
     ZERO_MEM = 0xF0
     CLEAR_STACK = 0xF1
 
-    # PUSH_STACK is issued from the fpu_host to the dispatcher to 
+    # PUSH_STACK is issued from the fpu_host to the dispatcher to
     # indicate that 4 bytes are ready to write to the stack
     PUSH_STACK = 0xF2
-    
+
     EXEC_BATCH = 0xFA
     SET_BATCH = 0xFB
     SET_IMMEDIATE = 0xFC

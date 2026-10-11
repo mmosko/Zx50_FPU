@@ -8,15 +8,16 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 
 ## Current Status & Capacity
 
-- **Test Suite Status:** 100% pass rate (**1,109 / 1,109 tests passing**).
-- **Microcode Capacity:** **900 / 1,024 words used** (124 instruction words of headroom remaining).
+- **Test Suite Status:** 100% pass rate (**1,245 / 1,245 tests passing**).
+- **Microcode Capacity:** **1,019 / 1,024 words used** (5 instruction words of headroom remaining).
 - **Hardware Call Stack:** 16-deep $\times$ 10-bit return-address stack in distributed LUT RAM (`RAM16X1S`) with 4-bit `CSP` pointer fully implemented and verified.
 - **Datapath Bus Symmetry:** `HA_MUX` and `HB_MUX` widened to full 4-bit symmetry (14:1 32-bit muxing across all 10 registers `AL`..`FH`, `EA`, `EB`, `C`, and `IMM`), allowing any register as `src1` without register shuffling.
 - **Completed 32-Bit Math Operations:**
   - Standard integer arithmetic: `ADD_I32`, `SUB_I32`, `MUL_I32`, `DIV_I32` (100% complete).
   - Unsigned integer arithmetic: `ADD_U32`, `SUB_U32`, `MUL_U32`, `DIV_U32` (100% complete).
   - Floating-point arithmetic: `ADD_F32`, `SUB_F32`, `MUL_F32`, `DIV_F32`.
-  - Math utilities: `ABS_I32`, `ABS_F32`, `CHS_I32`, `CHS_F32`, `DUP4`.
+  - Conversions: `CONV_U32_I32`, `CONV_I32_U32`, `CONV_U32_F32`, `CONV_I32_F32`, `CONV_F32_I32`.
+  - Math utilities: `ABS_I32`, `ABS_F32`, `CHS_I32`, `CHS_F32`, `FLOOR_F32`, `CEIL_F32`, `DUP4`.
   - Transcendentals: `SQRT_F32`, `EXP2_F32`, `LOG2_F32`, `POW_F32`.
   - CORDIC Trigonometrics: `SIN_F32`, `COS_F32`, `TAN_F32` (with Cody-Waite range reduction and asymptote detection).
   - Memory Storage: `CP_MEMx_TOS` (slots 0..15), `CP_TOS_MEMx` (slots 0..15), `ZERO_MEM` (using indirect addressing and latched opcode nibble dispatch).
@@ -45,25 +46,29 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 
 ## Remaining Functional Roadmap
 
-### 1. Pure Integer Conversions (Final Remaining Pure-Integer Operations)
+### 1. Pure Integer Conversions
 - [x] Implement `CONV_I32_I64` (`0xC8`): Sign-extend signed 32-bit int to 64-bit int (net $+4$ bytes on stack).
 - [x] Implement `CONV_I64_I32` (`0xCA`): Narrow signed 64-bit int to 32-bit int with truncation overflow check ($V=1$) (net $-4$ bytes on stack).
 - [x] Implement `CONV_U32_U64` (`0xC2`): Zero-extend unsigned 32-bit uint to 64-bit uint (net $+4$ bytes on stack).
-- [ ] Implement `CONV_U64_U32` (`0xC3`): Narrow unsigned 64-bit uint to 32-bit uint with truncation overflow check ($V=1$) (net $-4$ bytes on stack).
-- [ ] Implement `CONV_U32_I32` (`0xC6`): Convert unsigned 32-bit uint to signed 32-bit int with range overflow check ($V=1$ if $u32 \ge 2^{31}$) (net $0$ bytes).
-- [ ] Implement `CONV_I32_U32` (`0xC7`): Convert signed 32-bit int to unsigned 32-bit uint with range overflow check ($V=1$ if $i32 < 0$) (net $0$ bytes).
+- [ ] Implement `CONV_U64_U32` (`0xC3`): Narrow unsigned 64-bit uint to 32-bit uint with truncation overflow check ($V=1$) (net $-4$ bytes on stack) — **NEXT IN QUEUE**.
+- [x] Implement `CONV_U32_I32` (`0xC6`): Convert unsigned 32-bit uint to signed 32-bit int with range overflow check ($V=1$ if $u32 \ge 2^{31}$) (net $0$ bytes).
+- [x] Implement `CONV_I32_U32` (`0xC7`): Convert signed 32-bit int to unsigned 32-bit uint with range overflow check ($V=1$ if $i32 < 0$) (net $0$ bytes).
 
 ### 2. Hybrid Integer $\leftrightarrow$ Floating-Point Conversions
-- [ ] Implement `CONV_I32_F32` (`0xCC`): Signed 32-bit int to IEEE-754 single float (net $0$ bytes on stack).
-- [ ] Implement `CONV_F32_I32` (`0xCD`): IEEE-754 single float to signed 32-bit int (truncate toward zero, $V=1$ on range overflow).
+- [x] Implement `CONV_U32_F32` (`0xC4`): Unsigned 32-bit uint to IEEE-754 single float (net $0$ bytes on stack).
+- [x] Implement `CONV_I32_F32` (`0xCC`): Signed 32-bit int to IEEE-754 single float (net $0$ bytes on stack).
+- [x] Implement `CONV_F32_I32` (`0xCD`): IEEE-754 single float to signed 32-bit int (truncate toward zero, $V=1$ on range overflow).
+- [ ] Implement `CONV_U64_F64` (`0xC5`): Unsigned 64-bit uint to IEEE-754 double float (net $0$ bytes on stack).
 - [ ] Implement `CONV_I64_F64` (`0xCE`): Signed 64-bit int to IEEE-754 double float (net $0$ bytes on stack).
 - [ ] Implement `CONV_F64_I64` (`0xCF`): IEEE-754 double float to signed 64-bit int (truncate toward zero, $V=1$ on range overflow).
 
 ### 3. Floating-Point Conversions & Utilities
 - [ ] Implement `CONV_F32_F64` (`0xC9`): Expand IEEE single float to double float (net $+4$ bytes on stack).
 - [ ] Implement `CONV_F64_F32` (`0xCB`): Narrow IEEE double float to single float (net $-4$ bytes on stack, $V=1$ on exponent overflow, $U=1$ on underflow).
-- [ ] Implement `FLOOR_F32`, `FLOOR_F64`: Mathematical floor toward $-\infty$.
-- [ ] Implement `CEIL_F32`, `CEIL_F64`: Mathematical ceiling toward $+\infty$.
+- [x] Implement `FLOOR_F32` (`0x61`): Mathematical floor toward $-\infty$.
+- [ ] Implement `FLOOR_F64` (`0x63`): Mathematical floor toward $-\infty$.
+- [x] Implement `CEIL_F32` (`0x69`): Mathematical ceiling toward $+\infty$.
+- [ ] Implement `CEIL_F64` (`0x6B`): Mathematical ceiling toward $+\infty$.
 
 ### 4. 64-Bit Floating-Point Arithmetic & Transcendentals
 - [ ] Implement `ADD_F64` (`0x03`): 64-bit IEEE-754 double-precision addition.
