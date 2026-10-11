@@ -1,0 +1,3 @@
+[submodule "ieee754-test-suite"]
+	path = ieee754-test-suite
+	url = https://github.com/sergev/ieee754-test-suite

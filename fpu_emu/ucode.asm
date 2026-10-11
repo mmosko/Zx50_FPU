@@ -16,6 +16,7 @@
 .include "asm/sub_u64.asm"
 
 .include "asm/mul_f32.asm"
+.include "asm/mul_f64.asm"
 .include "asm/mul_int.asm"
 
 .include "asm/div_f32.asm"

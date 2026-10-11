@@ -498,7 +498,9 @@ class AdderBlock(FunctionalBlock):
         self._ha_mux.select(exp_reg.value)
         exp_s = self._ha_mux.read_int()
         exp_12 = exp_s & self.MASK_12BIT
-        if exp_12 & self.SIGN_12BIT:
+        if exp_12 >= self.LIMIT_F64_EXP_MAX and exp_12 < 3072:
+            exp_s = exp_12
+        elif exp_12 >= 3072:
             exp_s = exp_12 - self.MOD_12BIT
         else:
             exp_s = exp_12
