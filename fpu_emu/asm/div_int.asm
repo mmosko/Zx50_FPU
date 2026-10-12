@@ -70,6 +70,7 @@ DIV_HALT:
 ; ------------------------------------------------------------------------------
 USER_DIV_I64:
     CALL    POP_TWO_64             ; AX <- A (NOS), BX <- B (TOS)
+    XOR     FX, FX                 ; FX <- 0
     OR      BX, BX                 ; Test if divisor B == 0
     JZ      ZERO, DIV_64_ZERO      ; Abort on divide-by-zero
 
@@ -80,15 +81,13 @@ USER_DIV_I64:
     ; Take |A|
     OR      AX, AX
     JZ      SIGN, .abs_a_done
-    XOR     FX, FX
-    SUB     AX, FX, AX
+    SUB     AX, FX, AX              ; FX already set to 0
 .abs_a_done:
 
     ; Take |B|
     OR      BX, BX
     JZ      SIGN, .abs_b_done
-    XOR     FX, FX
-    SUB     BX, FX, BX
+    SUB     BX, FX, BX              ; FX already set to 0
 .abs_b_done:
     JMP     DIV_64_CORE
 
@@ -140,7 +139,7 @@ DIV_64_PUSH_U64:
     JMP     DIV_64_PUSH_POS
 
 DIV_64_NEGATE:
-    XOR     FX, FX
+    ; FX already set to 0
     SUB     AX, FX, AX             ; AX = 0 - AX (SUB sets SIGN and ZERO flags!)
 
 DIV_64_PUSH_POS:

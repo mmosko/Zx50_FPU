@@ -75,42 +75,28 @@ USER_MUL_U64:
 
     ; Check if both A_hi and B_hi are non-zero:
     OR AH, AH
-    JZ ZERO, MUL_U64_CHECK_T2
-    OR BH, BH
-    JZ ZERO, MUL_U64_CHECK_T2
-    LDI DL, 1                   ; Both AH != 0 and BH != 0: A * B >= 2^64 (overflow)
+    JZ ZERO, .mul_u64_cross
+    OR DL, BH                   ; If AH != 0 and BH != 0: A * B >= 2^64 (overflow)
 
-MUL_U64_CHECK_T2:
+.mul_u64_cross:
     MOV CX, AX                  ; CX <- A (CL = A_lo, CH = A_hi)
     MULU AL, CH, BL             ; {AH, AL} <- A_hi * B_lo
-    OR AH, AH                   ; Check if high 32 bits of (A_hi * B_lo) non-zero
-    JZ ZERO, MUL_U64_NO_T2_OF
-    LDI DL, 1                   ; High word non-zero -> overflow
-MUL_U64_NO_T2_OF:
+    OR DL, AH                   ; Accumulate high word non-zero into DL
     MOV CH, AL                  ; CH <- T2 = (A_hi * B_lo)_lo
 
     MULU AL, CL, BH             ; {AH, AL} <- A_lo * B_hi
-    OR AH, AH                   ; Check if high 32 bits of (A_lo * B_hi) non-zero
-    JZ ZERO, MUL_U64_NO_T1_OF
-    LDI DL, 1                   ; High word non-zero -> overflow
-MUL_U64_NO_T1_OF:
+    OR DL, AH                   ; Accumulate high word non-zero into DL
     MOV DH, AL                  ; DH <- T1 = (A_lo * B_hi)_lo
 
     ADD CH, CH, DH              ; CH <- T2 + T1
-    JZ CARRY, MUL_U64_NO_C1_OF
-    LDI DL, 1                   ; Carry out of T2 + T1 -> overflow
-MUL_U64_NO_C1_OF:
+    ADC DL, 0                   ; Accumulate carry into DL
 
     MULU AL, CL, BL             ; {AH, AL} <- A_lo * B_lo
     ADD AH, AH, CH              ; AH <- (A_lo * B_lo)_hi + (T2 + T1)
-    JZ CARRY, MUL_U64_NO_C2_OF
-    LDI DL, 1                   ; Carry out of AH + CH -> overflow
-MUL_U64_NO_C2_OF:
+    ADC DL, 0                   ; Accumulate carry into DL
 
-    PUSH AX                     ; Push 64-bit product {AH, AL} (clears OVERFLOW and ERR)
-
-    OR DL, DL                   ; Test if overflow occurred
-    JZ ZERO, MUL_U64_DONE
+    OR DL, DL                   ; Test if overflow occurred (clears CARRY & OVERFLOW to 0)
+    JZ ZERO, .mul_u64_done
     LDI CARRY, 1                ; Overflow occurred: set CARRY = 1
-MUL_U64_DONE:
-    HALT
+.mul_u64_done:
+    HALT AX                     ; Push 64-bit product {AH, AL} and halt

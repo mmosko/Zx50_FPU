@@ -22,8 +22,7 @@ USER_ABS_I64:
     CALL POP_ONE_64             ; AX <- X (TOS)
     OR AX, AX                   ; Test sign bit (AH[31])
     JZ SIGN, ABS_I64_DONE       ; If positive (SIGN == 0): already non-negative
-    MOV FX, AX                  ; FX <- X (scratch copy)
-    XOR AX, AX                  ; AX <- 0
-    SUB AX, FX                  ; AX <- 0 - X = -X
+    XOR FX, FX                  ; AX <- 0
+    SUB AX, FX, AX                  ; AX <- 0 - X = -X
 ABS_I64_DONE:
     HALT AX                     ; Push |X|
