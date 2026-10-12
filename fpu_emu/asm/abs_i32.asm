@@ -25,5 +25,4 @@ USER_ABS_I32:
     NOT AL                      ; Negate in place: bitwise NOT
     ADD AL, 1                   ; Two's complement negation: ~AL + 1
 ABS_I32_DONE:
-    PUSH AL                     ; Push |X|
-    HALT
+    HALT AL                     ; Push |X|

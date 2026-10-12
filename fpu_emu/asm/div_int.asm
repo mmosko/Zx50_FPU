@@ -61,7 +61,7 @@ USER_DIV_U32:
 
 DIV_32_PUSH:
     JNZ ERR, DIV_HALT           ; If divide-by-zero (ERR=1): abort without pushing
-    PUSH AL                     ; Push 32-bit quotient
+    HALT AL                     ; Push 32-bit quotient and halt
 DIV_HALT:
     HALT
 
@@ -132,9 +132,8 @@ DIV_64_DONE:
     ; Expected positive result: check for overflow (-2^63 / -1)
     OR      AX, AX
     JZ      SIGN, DIV_64_PUSH_POS
-    PUSH    AX                     ; Overflow: push AX then set OVERFLOW
-    LDI     OVERFLOW, 1
-    HALT
+    LDI     OVERFLOW, 1            ; Overflow: set OVERFLOW then push AX and halt
+    HALT    AX
 
 DIV_64_PUSH_U64:
     OR      AX, AX                 ; Set ZERO and SIGN flags for U64 quotient
@@ -145,8 +144,7 @@ DIV_64_NEGATE:
     SUB     AX, FX, AX             ; AX = 0 - AX (SUB sets SIGN and ZERO flags!)
 
 DIV_64_PUSH_POS:
-    PUSH    AX                     ; Shared 64-bit push exit
-    HALT
+    HALT    AX                     ; Shared 64-bit push exit
 
 DIV_64_ZERO:
     LDI ERR, 1

@@ -28,7 +28,7 @@ USER_DIV_F64:
     CALL POP_TWO_64             ; AX <- A (NOS), BX <- B (TOS)
     CALL DIV_F64_CORE           ; AX <- A / B
     JNZ ERR, DIV_F64_HALT       ; If divide-by-zero, abort without pushing
-    PUSH AX                     ; Push 64-bit result
+    HALT AX                     ; Push 64-bit result and halt
 DIV_F64_HALT:
     HALT
 

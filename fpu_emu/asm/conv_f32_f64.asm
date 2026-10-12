@@ -45,8 +45,7 @@ USER_CONV_F32_F64:
     OR      DH, DH                      ; Restore status.SIGN from DH[31]
     PACK    AX, EA                      ; Pack 64-bit float into AX
 .f32_f64_push_halt:
-    PUSH    AX
-    HALT
+    HALT    AX
 
 .f32_f64_zero:
     XOR     AX, AX                      ; AX <- 0

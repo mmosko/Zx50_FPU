@@ -15,7 +15,7 @@ USER_SQRT_F32:
     CALL POP_ONE_32                 ; AL <- X (TOS)
     CALL SQRT_F32_CORE              ; AL <- sqrt(AL)
     JNZ ERR, SQRT_F32_HALT          ; If domain error (ERR set), abort without pushing
-    PUSH AL                         ; Push result
+    HALT AL                         ; Push result and halt
 SQRT_F32_HALT:
     HALT
 

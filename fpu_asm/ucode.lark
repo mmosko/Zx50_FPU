@@ -79,6 +79,7 @@ SHIFT_OP: "LSL"i | "LSR"i | "ASL"i | "ASR"i | "LZC"i
 // Block 4 & 5: Stack, Memory & Status Blocks
 inst_stack: "PUSH"i [WIDTH_SUFFIX] reg_or_imm -> inst_push
           | "POP"i [WIDTH_SUFFIX] reg          -> inst_pop
+          | "HALT"i [WIDTH_SUFFIX] [reg]       -> inst_halt
 
 reg_indirect: "[" reg "]"
 mem_addr: imm_operand | reg_indirect
@@ -105,7 +106,7 @@ inst_ctrl: "JMP"i imm_operand                -> inst_jmp
 
 // Zero-argument instructions across Control & Status
 inst_noarg: NOARG_OP
-NOARG_OP: "RET"i | "NOP"i | "HALT"i | "SSAV"i | "SRES"i
+NOARG_OP: "RET"i | "NOP"i | "SSAV"i | "SRES"i
 
 // -----------------------------------------------------------------------------
 // Terminals & Lexer Rules

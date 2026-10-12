@@ -21,5 +21,4 @@
 USER_CHS_F64:
     CALL POP_ONE_64             ; AX <- X (TOS)
     FCHS AX                     ; Invert sign bit (AH[31] ^= 1)
-    PUSH AX                     ; Push 64-bit -X
-    HALT
+    HALT AX                     ; Push 64-bit -X

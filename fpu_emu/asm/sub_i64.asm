@@ -22,5 +22,4 @@
 USER_SUB_I64:
     CALL POP_TWO_64             ; AX <- A (NOS), BX <- B (TOS)
     SUB AX, BX                  ; AX <- A - B (64-bit sub)
-    PUSH AX                     ; Push 64-bit result {AH, AL}
-    HALT
+    HALT AX                     ; Push 64-bit result {AH, AL}

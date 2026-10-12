@@ -267,10 +267,10 @@ block and its input AND walls:
 - **`0b010` (Logic Block):** Bitwise operations (`AND`, `OR`, `XOR`, `NOT`) and floating-point sign manipulation
   (`FABS`, `FCHS`).
 - **`0b011` (Control Block):** Branching (`JMP`, `JZ`, `JNZ`), loop control (`DJNZ`), call stack management (`CALL`,
-  `RET`), pipeline control (`NOP`), and sequencer completion (`HALT`).
+  `RET`), and pipeline control (`NOP`).
 - **`0b100` & `0b101` (Memory Block):** Math stack operations (`PUSH`, `POP`), scratchpad RAM access (`LD`, `STO`,
-  `LDU`, `STU`), constant/LUT table lookup (`LDC`), immediate loads (`LDI`), register transfers (`MOV`, `SWAP`), and
-  status shadowing (`SSAV`, `SRES`). Blocks `0b100` and `0b101` share the same memory controller and AND wall.
+  `LDU`, `STU`), constant/LUT table lookup (`LDC`), immediate loads (`LDI`), register transfers (`MOV`, `SWAP`),
+  status shadowing (`SSAV`, `SRES`), and sequencer completion (`HALT [dst]`). Blocks `0b100` and `0b101` share the same memory controller and AND wall.
 - **`0b110` (Shifter Block):** Barrel shifter for logical (`LSL`, `LSR`), arithmetic (`ASL`, `ASR`), and count leading
   zeros (`LZC`).
 - **`0b111` (Reserved):** Unallocated, reserved for future coprocessor expansion.

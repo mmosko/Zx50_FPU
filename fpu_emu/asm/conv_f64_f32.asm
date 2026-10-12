@@ -49,8 +49,7 @@ USER_CONV_F64_F32:
     LSR AX, 29                  ; AL[23:0] <- mantissa (bit 23 = hidden bit)
     MOV AH, DH                  ; AH[31] <- sign bit for NORMALIZE_F32
     CALL NORMALIZE_F32          ; Normalizes, checks limits (V=1/U=1), restores sign, PACK AL, EA
-    PUSH AL
-    HALT
+    HALT AL
 
 .f64_f32_special:
     ; Check if fraction is 0 (Inf vs NaN)
@@ -80,5 +79,4 @@ USER_CONV_F64_F32:
     LSR BL, 31
     LSL BL, 31                  ; BL <- sign bit (0x80000000 or 0)
     OR AL, BL                   ; Insert sign
-    PUSH AL
-    HALT
+    HALT AL

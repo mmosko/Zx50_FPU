@@ -24,8 +24,7 @@
 USER_SUB_F64:
     CALL POP_TWO_64                     ; AX <- A (NOS), BX <- B (TOS)
     CALL SUB_F64_CORE                   ; AX <- A - B
-    PUSH AX                             ; Push 64-bit result
-    HALT
+    HALT AX                             ; Push 64-bit result
 
 SUB_F64_CORE:
     FCHS BX                             ; Invert sign bit of subtrahend: B <- -B (BH[31] ^= 1)

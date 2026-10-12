@@ -26,5 +26,4 @@ USER_CONV_I32_I64:
     MOV AH, AL                  ; AX <- {AL, AL}
     ASR AX, 32                  ; AX <- sign_extend(X); sets S and Z
     OR AX, AX                   ; Clears C=0 and V=0, reaffirms S and Z
-    PUSH AX                     ; Push 64-bit result {AH, AL}
-    HALT
+    HALT AX                     ; Push 64-bit result {AH, AL}

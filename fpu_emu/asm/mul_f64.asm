@@ -26,8 +26,7 @@
 USER_MUL_F64:
     CALL POP_TWO_64             ; AX <- A (NOS), BX <- B (TOS)
     CALL MUL_F64_CORE           ; AX <- A * B
-    PUSH AX                     ; Push 64-bit result
-    HALT
+    HALT AX                     ; Push 64-bit result
 
 MUL_F64_CORE:
     XOR DH, AH, BH              ; DH[31] = sign(A) ^ sign(B) (result sign for NORMALIZE_F64)

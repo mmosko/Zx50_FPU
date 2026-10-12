@@ -24,5 +24,4 @@ USER_SUB_U32:
     CALL POP_TWO_32             ; AL <- A (NOS), BL <- B (TOS)
     SUB AL, BL                  ; AL <- A - B (sets CARRY on unsigned borrow, A < B)
     LDI VF, 0                   ; Clear VF to 0 in unsigned mode
-    PUSH AL                     ; Push result
-    HALT
+    HALT AL                     ; Push result

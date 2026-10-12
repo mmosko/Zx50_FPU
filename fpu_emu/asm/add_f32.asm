@@ -28,8 +28,7 @@
 USER_ADD_F32:
     CALL POP_TWO_32             ; AL <- A (NOS), BL <- B (TOS)
     CALL ADD_F32_CORE           ; AL <- A + B
-    PUSH AL                     ; Push result
-    HALT
+    HALT AL                     ; Push result
 
 ADD_F32_CORE:
     MOV FH, BL                  ; Scratch FH <- packed B (preserves sign and value)

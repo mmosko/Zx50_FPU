@@ -20,5 +20,4 @@
 USER_DUP4:
     CALL POP_ONE_32             ; AL <- X (TOS)
     PUSH AL                     ; Push first copy
-    PUSH AL                     ; Push second copy
-    HALT
+    HALT AL                     ; Push second copy

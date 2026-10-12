@@ -22,5 +22,4 @@ USER_CHS_I32:
     CALL POP_ONE_32             ; AL <- X (TOS)
     NOT AL                      ; Bitwise NOT
     ADD AL, 1                   ; Two's complement: ~AL + 1
-    PUSH AL                     ; Push negated result
-    HALT
+    HALT AL                     ; Push negated result

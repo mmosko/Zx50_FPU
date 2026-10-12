@@ -63,27 +63,23 @@ USER_POW_F32:
     ; Compute 2^AL
     CALL EXP2_CORE              ; AL <- 2^(X * log2(Y)) = Y^X
 
-    PUSH AL
-    HALT
+    HALT AL
 
 POW_RET_ONE:
     LDC AL, CONST, ONE_F32      ; Return 1.0f
-    PUSH AL
-    HALT
+    HALT AL
 
 POW_BASE_ZERO:
     OR BL, BL                   ; Test sign of exp (BL)
     JNZ SIGN, POW_ZERO_NEG_EXP
     XOR AL, AL                  ; 0^positive = 0.0
-    PUSH AL
-    HALT
+    HALT AL
 
 POW_ZERO_NEG_EXP:
     LDC AL, CONST, POS_INF_F32  ; 0^negative = +Inf
-    PUSH AL
     LDI ERR, 1
     LDI VF, 1
-    HALT
+    HALT AL
 
 POW_DOMAIN_ERR:
     LDI ERR, 1

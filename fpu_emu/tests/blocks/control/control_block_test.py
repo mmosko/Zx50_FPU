@@ -221,24 +221,6 @@ def test_control_nop(fpga: FpgaModel):
     assert fpga.reg_file.status.read_int() == 0
 
 
-def test_control_halt(fpga: FpgaModel):
-    """HALT resets BSY flag and terminates microprogram execution, preserving ERR."""
-    fpga.reg_file.status.set_bit(StatusFlag.BUSY, True)
-    microcode = [
-        MicroInstruction(op=MicroOp.HALT),
-    ]
-    fpga.dispatcher._run(microcode)
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.BUSY) is False
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR) is False
-
-    # Also test HALT with ERR already set (equivalent to TRAP)
-    fpga.reg_file.upc.write(0)
-    fpga.reg_file.status.set_bit(StatusFlag.ERR, True)
-    fpga.dispatcher._run([MicroInstruction(op=MicroOp.HALT)])
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.BUSY) is False
-    assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR) is True
-
-
 def test_control_nested_call_asserts(fpga: FpgaModel):
     """Nested CALL without RET beyond 16 levels should fail assertion."""
     microcode = [MicroInstruction(op=MicroOp.CALL, imm=i) for i in range(1, 18)]

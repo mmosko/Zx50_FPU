@@ -84,9 +84,9 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 - [x] Implement `CONV_U32_F32` (`0xC4`): Unsigned 32-bit uint to IEEE-754 single float (net $0$ bytes on stack).
 - [x] Implement `CONV_I32_F32` (`0xCC`): Signed 32-bit int to IEEE-754 single float (net $0$ bytes on stack).
 - [x] Implement `CONV_F32_I32` (`0xCD`): IEEE-754 single float to signed 32-bit int (truncate toward zero, $V=1$ on range overflow).
-- [ ] Implement `CONV_U64_F64` (`0xC5`): Unsigned 64-bit uint to IEEE-754 double float (net $0$ bytes on stack, ~10–14 words).
-- [ ] Implement `CONV_I64_F64` (`0xCE`): Signed 64-bit int to IEEE-754 double float (net $0$ bytes on stack, ~14–18 words).
-- [ ] Implement `CONV_F64_I64` (`0xCF`): IEEE-754 double float to signed 64-bit int (truncate toward zero, $V=1$ on range overflow, ~18–22 words).
+- [x] Implement `CONV_U64_F64` (`0xC5`): Unsigned 64-bit uint to IEEE-754 double float (net $0$ bytes on stack, 100% complete, 91 integration tests passing, 8 words).
+- [x] Implement `CONV_I64_F64` (`0xCE`): Signed 64-bit int to IEEE-754 double float (net $0$ bytes on stack, 100% complete, 167 integration tests passing, 7 words, shares unsigned core).
+- [x] Implement `CONV_F64_I64` (`0xCF`): IEEE-754 double float to signed 64-bit int (truncate toward zero, $V=1$ on range overflow, 100% complete, 49 integration tests passing, 51 words).
 
 ### 3. Floating-Point Conversions & Utilities
 - [x] Implement `CONV_F32_F64` (`0xC9`): Expand IEEE single float to double float (net $+4$ bytes on stack, 100% complete, 40 integration tests passing, 36 words).
@@ -101,25 +101,27 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 - [x] Implement `SUB_F64` (`0x0C`): 64-bit IEEE-754 double-precision subtraction (reusing `ADD_F64_CORE`, 28 integration tests passing, 6 words).
 - [x] Implement `MUL_F64` (`0x14`): 64-bit IEEE-754 double-precision multiplication using cross-terms via hardware Booth multiplier (100% complete, 29 integration tests passing, 25 words).
 - [x] Implement `DIV_F64` (`0x1C`): 64-bit IEEE-754 double-precision division via 54-iteration restoring loop (100% complete, 45 integration tests passing, 28 words).
-- [ ] Implement `SQRT_F64` (`0x23`): 64-bit IEEE-754 double-precision square root via digit-by-digit binary loop (~35–45 words).
-- [ ] Implement `POW_F64` (`0x2B`): 64-bit IEEE-754 double-precision power ($x^y$) via $2^{y \log_2 x}$ dispatch (~20–30 words).
-- [ ] Implement `LOG2_F64` (`0x33`): 64-bit base-2 logarithm via degree 7–8 Chebyshev polynomial (~90–130 words).
-- [ ] Implement `EXP2_F64` (`0x3B`): 64-bit base-2 exponential ($2^x$) via degree 7–8 polynomial (~80–110 words).
-- [ ] Implement 64-bit CORDIC trigonometrics: `SIN_F64` (`0x73`), `COS_F64` (`0x7B`), `TAN_F64` (`0x83`) (~180–240 words).
+- [x] Implement `SQRT_F64` (`0x23`): 64-bit IEEE-754 double-precision square root via digit-by-digit binary loop (100% complete, 43 integration tests passing, 57 words).
+- [x] Implement `POW_F64` (`0x2B`): 64-bit IEEE-754 double-precision power ($y^x$) via $2^{x \log_2 y}$ dispatch (100% complete, 44 integration tests passing, 33 words).
+- [x] Implement `LOG2_F64` (`0x33`): 64-bit base-2 logarithm via argument reduction and 11-term odd series (100% complete, 43 integration tests passing, 113 words).
+- [x] Implement `EXP2_F64` (`0x3B`): 64-bit base-2 exponential ($2^x$) via range reduction and 13-term Horner evaluation (100% complete, 52 integration tests passing, 150 words).
+- [x] Implement 64-bit trigonometrics: `SIN_F64` (`0x73`), `COS_F64` (`0x7B`), `TAN_F64` (`0x83`) via Cody-Waite range reduction and 8-term Horner evaluation (100% complete, 123 integration tests passing, 216 words total).
 
 #### Remaining F64 Functions & Estimated Instruction Counts
-| Category | Operations | Status | Estimated Instructions |
+| Category | Operations | Status | Instructions |
 | :--- | :--- | :---: | :---: |
 | **Basic 64-Bit Float Arithmetic** | `ADD_F64`, `SUB_F64`, `MUL_F64`, `DIV_F64` | **Done** | **87 words (actual)** |
 | **Sign / Magnitude Utilities** | `CHS_F64`, `ABS_F64`, `DUP8` | **Done** | **11 words (actual)** |
 | **Math Constants** | `PUSH_PI_64` .. `PUSH_INV_SQRT2_64` (8) | **Done** | **22 words (actual)** |
 | **Rounding Operations** | `FLOOR_F64`, `CEIL_F64` | **Done** | **42 words (actual)** |
 | **Pure Float Conversions** | `CONV_F32_F64`, `CONV_F64_F32` | **Done** | **76 words (actual)** |
-| **Integer $\leftrightarrow$ Float Conversions** | `CONV_U64_F64`, `CONV_I64_F64`, `CONV_F64_I64` | Pending | **~42 – 54 words** |
-| **Square Root** | `SQRT_F64` | Pending | **~35 – 45 words** |
-| **Transcendentals** | `LOG2_F64`, `EXP2_F64`, `POW_F64` | Pending | **~190 – 270 words** |
-| **CORDIC Trigonometrics** | `SIN_F64`, `COS_F64`, `TAN_F64` | Pending | **~180 – 240 words** |
-| **TOTAL REMAINING F64 INSTRUCTIONS** | **10 remaining operations** | Pending | **~395 – 495 words** |
+| **Integer $\leftrightarrow$ Float Conversions** | `CONV_U64_F64` (8w), `CONV_I64_F64` (7w), `CONV_F64_I64` (51w) | **Done** | **66 words (actual)** |
+| **Square Root** | `SQRT_F64` | **Done** | **57 words (actual)** |
+| **Logarithm (Base 2)** | `LOG2_F64` | **Done** | **113 words (actual)** |
+| **Exponential (Base 2)** | `EXP2_F64` | **Done** | **150 words (actual)** |
+| **General Power** | `POW_F64` | **Done** | **33 words (actual)** |
+| **Trigonometrics** | `SIN_F64`, `COS_F64`, `TAN_F64` | **Done** | **216 words (actual)** |
+| **ALL F64 PRE-REFACTOR OPERATIONS** | **12 operations complete** | **100% DONE** | **873 words total** |
 
 > [!IMPORTANT]
 > ### Microcode ROM Expansion & Architecture Refactor Plan (80–120 MHz)
@@ -150,7 +152,7 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 >    - **Standalone Assembly Files:** Author each of the remaining 12 F64 operations in standalone `.asm` files under `fpu_emu/asm/`.
 >    - **Exclude from `ucode.asm`:** Do **not** `.include` these new files into `ucode.asm` yet. The existing 1,023-word ROM remains green with all 1,473 tests passing.
 >    - **In-Memory Assembly:** In tests, assemble the `.asm` files dynamically via `fpu_asm.Assembler().assemble_file(path)` directly into `List[MicroInstruction]` in memory (zero filesystem object artifacts).
->    - **Cumulative Size Tracking:** Track cumulative total size in `fpu_emu/ucode_f64.asm` (currently at 1,099 words).
+>    - **Cumulative Size Tracking:** Track cumulative total size in `fpu_emu/ucode_f64.asm` (currently at 1,335 words).
 >    - **Unit / Verification Testing:** Run tests against a fresh `FpgaModel` by executing `fpga.dispatcher._run(assembled_instructions)` directly on pushed stack inputs.
 >    - **Instruction Word Accounting:** Measure and log the exact static instruction word count for each routine.
 >    - **Refactor Execution:** Once all 12 routines pass unit testing and the total instruction count is verified, execute the machine word rearrangement and EBR 0–5 expansion refactor.
@@ -158,16 +160,16 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 > #### F64 Pre-Refactor Implementation Checklist
 > - [x] **1. `CONV_F32_F64` (`0xC9`)**: Widens IEEE-754 32-bit float to 64-bit float (100% complete, 40 integration tests passing, 36 words).
 > - [x] **2. `CONV_F64_F32` (`0xCB`)**: Narrows IEEE-754 64-bit float to 32-bit float (100% complete, 52 integration tests passing, 40 words, $V=1$ on overflow, $U=1$ on underflow).
-> - [ ] **3. `CONV_U64_F64` (`0xC5`)**: Unsigned 64-bit integer $\to$ Double float.
-> - [ ] **4. `CONV_I64_F64` (`0xCE`)**: Signed 64-bit integer $\to$ Double float (shares unsigned core).
-> - [ ] **5. `CONV_F64_I64` (`0xCF`)**: Double float $\to$ Signed 64-bit integer.
-> - [ ] **6. `SQRT_F64` (`0x23`)**: 64-bit square root via 54-iteration restoring binary shift-and-subtract loop.
-> - [ ] **7. `LOG2_F64` (`0x33`)**: 64-bit base-2 logarithm via argument reduction and Chebyshev polynomial.
-> - [ ] **8. `EXP2_F64` (`0x3B`)**: 64-bit base-2 exponential ($2^x$) via range reduction and polynomial evaluation.
-> - [ ] **9. `POW_F64` (`0x2B`)**: 64-bit general power ($y^x = 2^{x \cdot \log_2(y)}$).
-> - [ ] **10. `SIN_F64` (`0x73`)**: 64-bit circular CORDIC sine (53 iterations).
-> - [ ] **11. `COS_F64` (`0x7B`)**: 64-bit circular CORDIC cosine (shared CORDIC core).
-> - [ ] **12. `TAN_F64` (`0x83`)**: 64-bit circular CORDIC tangent (CORDIC $\to$ `DIV_F64_CORE`).
+> - [x] **3. `CONV_U64_F64` (`0xC5`)**: Unsigned 64-bit integer $\to$ Double float (100% complete, 91 integration tests passing, 8 words).
+> - [x] **4. `CONV_I64_F64` (`0xCE`)**: Signed 64-bit integer $\to$ Double float (100% complete, 167 integration tests passing, 7 words, shares unsigned core).
+> - [x] **5. `CONV_F64_I64` (`0xCF`)**: Double float $\to$ Signed 64-bit integer (100% complete, 49 integration tests passing, 51 words).
+> - [x] **6. `SQRT_F64` (`0x23`)**: 64-bit square root via 54-iteration restoring binary shift-and-subtract loop (100% complete, 43 integration tests passing, 57 words).
+> - [x] **7. `LOG2_F64` (`0x33`)**: 64-bit base-2 logarithm via argument reduction and 11-term odd series (100% complete, 43 integration tests passing, 113 words).
+> - [x] **8. `EXP2_F64` (`0x3B`)**: 64-bit base-2 exponential ($2^x$) via range reduction and 13-term Horner evaluation (100% complete, 52 integration tests passing, 150 words).
+> - [x] **9. `POW_F64` (`0x2B`)**: 64-bit general power ($y^x = 2^{x \cdot \log_2(y)}$) via $2^{x \log_2 y}$ dispatch (100% complete, 44 integration tests passing, 33 words).
+> - [x] **10. `SIN_F64` (`0x73`)**: 64-bit sine via Cody-Waite range reduction and 8-term Horner evaluation (100% complete, 42 integration tests passing, shared trig core).
+> - [x] **11. `COS_F64` (`0x7B`)**: 64-bit cosine via Cody-Waite range reduction and 8-term Horner evaluation (100% complete, 42 integration tests passing, shared trig core).
+> - [x] **12. `TAN_F64` (`0x83`)**: 64-bit tangent via Cody-Waite range reduction and 8-term Horner evaluation (100% complete, 39 integration tests passing, 216 words total for all 3 trig functions).
 
 ### 5. Hardware Simulation & Verilog RTL
 - [ ] **Host Interface Simulation**:
@@ -177,3 +179,215 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
   - Modular Verilog RTL corresponding to V2 functional blocks, MUXes, AND walls, and write-back registers.
   - Self-checking Verilog testbenches with `$fatal` assertions on errors.
   - Synthesis for Lattice MachXO2 (`LCMXO2-2000HC-4TG100C`) and timing verification at 80 MHz.
+
+## Appendix: Microcode Optimization & Footprint Reduction Analysis (Saving $\ge 250$ Words)
+
+To fit all microcode within the 1,536-word limit of EBR 0–5 (expanding down from the current 1,743 assembled words in `ucode_f64.asm` to $\le 1,493$ words), the following optimization strategies have been analyzed across all 58 `.asm` files in `fpu_emu/asm/`:
+
+### Summary of Identified Savings
+
+| Strategy | Area | Potential Savings | Complexity / Risk |
+| :--- | :--- | :---: | :---: |
+| **1. Hardware Macro / Fused Opcode** | `PUSH_HALT <reg>` (or `HALT <reg>`) | **70 words** | Very Low (Hardware/Decoder) |
+| **2. Algorithmic Overhaul** | Replace F32 CORDIC with 4-term Horner in `trig_f32.asm` | **105–110 words** | Low (Proven math) |
+| **3. Hardware Flag Enhancement** | `UNPACK` sets `OVERFLOW` (or `SPECIAL`) on NaN/Inf | **45–55 words** | Very Low (Datapath flag) |
+| **4. Common Shared Subroutines** | Deduplicate Domain Error / Return 1.0 / Int-to-Float | **55–65 words** | None (Assembly only) |
+| **5. ROM Constant Offloading** | Load `1.0`, `MAGIC`, $\sqrt{2}$ from CONST ROM instead of synthesizing | **30–40 words** | None (Assembly only) |
+| **TOTAL IDENTIFIED SAVINGS** | | **305 – 340 words** | **Target: 250 words** |
+
+Adopting Strategies 1, 2, and 4 alone yields **$\approx 240\text{--}245$ words** with minimal risk. Adding Strategy 3 or 5 brings the total microcode down to **$\approx 1,400\text{--}1,450$ words** (leaving $\approx 100$ words of headroom in EBR 0–5).
+
+---
+
+### Strategy 1: Fused Hardware Opcode — `PUSH_HALT` / `HALT <reg>` (Saves 70 words)
+
+Every user-facing instruction ends by pushing its result to the stack and halting:
+- `PUSH AL; HALT`: **35 occurrences**
+- `PUSH AX; HALT`: **35 occurrences**
+- **Exact total**: **70 occurrences** across all `.asm` files.
+
+#### Architectural Implementation
+In the rearranged machine word format:
+```text
+ 31        26 25 24        21 20        17 16        13 12                                 0
++------------+--+------------+------------+------------+------------------------------------+
+|   OPCODE   |W |  DST/FLAG  |    SRC1    |    SRC2    |          IMMEDIATE / ADDR          |
++------------+--+------------+------------+------------+------------------------------------+
+```
+When `HALT` (opcode `0b011_111`) executes, bits `[24:21]` (`DST`) are completely unused.
+- If `DST == Reg.NONE` (`0`): Standard `HALT`.
+- If `DST != Reg.NONE`: The hardware automatically triggers `PUSH dst` into the math stack in Cycle 1 and asserts `exec_done` in Cycle 2.
+
+```assembly
+; BEFORE (2 instructions):
+    PUSH AX
+    HALT
+
+; AFTER (1 instruction):
+    HALT AX
+```
+**Net Savings: 70 words (100% mechanical, 0 risk).**
+
+---
+
+### Strategy 2: Algorithmic Overhaul — Replace F32 CORDIC with 4-Term Horner (Saves 105–110 words)
+
+`fpu_emu/asm/trig_f32.asm` currently occupies **165 instruction words**. 
+It uses a 24-stage circular CORDIC engine with dynamic table lookups (`LDC AH, TRIG, C`), direction testing, dual arithmetic barrel shifts, quadrant unwinding, and coordinate normalization.
+
+#### Why Horner is Superior for F32 on This Hardware:
+The Zx50 FPGA hardware already features a **single-cycle 32-bit Booth multiplier** (`MUL` / `MULU`).
+After Cody-Waite range reduction to $r \in [-\pi/4, \pi/4]$, IEEE-754 single-precision (24-bit mantissa) requires only **4 polynomial terms**:
+$$\sin(r) \approx r \cdot \left(1 - \frac{r^2}{6} \left(1 - \frac{r^2}{20} \left(1 - \frac{r^2}{42}\right)\right)\right)$$
+$$\cos(r) \approx 1 - \frac{r^2}{2} \left(1 - \frac{r^2}{12} \left(1 - \frac{r^2}{30}\right)\right)$$
+
+Evaluating a 4-term polynomial with Horner's rule requires only:
+1. One float multiplication $t = r^2$ via `MUL_F32_CORE`.
+2. 3 multiply-adds with small integer constant divisors (or ROM constants).
+3. The entire 24-step CORDIC loop, angle lookup table, and shift logic are eliminated.
+
+- **Current `trig_f32.asm`**: 165 words.
+- **Horner `trig_f32.asm`**: ~55 words (mirroring the clean structure of `trig_f64.asm`).
+- **Net Savings: ~110 words**.
+
+---
+
+### Strategy 3: Hardware Enhancement — `UNPACK` Sets NaN/Infinity Flag (Saves 45–55 words)
+
+Currently, `adder_block.py` only writes `ZERO`, `SIGN`, and `DIFF_SIGN` during `UNPACK`. It does not flag when the exponent is all 1s (`0xFF` in F32, `0x7FF` in F64).
+
+Consequently, **almost every float routine implements manual NaN/Inf checking**:
+- In F32 (2 words):
+  ```assembly
+  CMP EA, 255
+  JZ ZERO, .handle_special
+  ```
+- In F64 (4 to 7 words):
+  ```assembly
+  ; Pattern A (4 words in log2_f64, sqrt_f64):
+  EXP_SUB EB, EA, 1023
+  EXP_SUB EB, EB, 1023
+  EXP_SUB EB, EB, 1
+  JZ ZERO, .handle_special
+
+  ; Pattern B (6 words in trig_f64):
+  MOV DH, AH
+  LSL DH, 1
+  LSR DH, 21
+  ADD DL, DH, 1
+  LSR DL, 11
+  JNZ ZERO, .handle_special
+  ```
+
+#### Hardware Change:
+During `UNPACK`, if `exp_val == (1 << exp_width) - 1`, assert `StatusFlag.OVERFLOW` (or `SPECIAL`).
+Then in microcode:
+```assembly
+; BEFORE (4 to 6 words):
+    EXP_SUB EB, EA, 1023
+    EXP_SUB EB, EB, 1023
+    EXP_SUB EB, EB, 1
+    JZ ZERO, .special
+
+; AFTER (1 word):
+    JNZ OVERFLOW, .special
+```
+Tested across 15 floating-point routines:
+**Net Savings: ~50 words**.
+
+---
+
+### Strategy 4: Common Shared Subroutines & Exit Trampolines (Saves 55–65 words)
+
+Several verbose code sequences are duplicated verbatim across multiple files:
+
+#### 1. F64 Domain Error / Quiet NaN Exit (Duplicated in 6 files)
+`sqrt_f64`, `log2_f64`, `exp2_f64`, `pow_f64`, `trig_f64`, `div_f64` each independently generate Quiet NaN `0x7FF80000_00000000`:
+```assembly
+; Duplicated 6 times (7 instructions each = 42 words):
+    XOR AL, AL
+    LDI AH, 0x7F
+    LSL AH, 8
+    OR AH, AH, 0xF8
+    LSL AH, 16
+    LDI ERR, 1
+    HALT AX
+```
+- **Solution**: Consolidate into a single shared trampoline in `fpu_emu/asm/common_f64.asm`:
+  ```assembly
+  COMMON_F64_DOMAIN_ERR:
+      LDC AX, CONST, 36       ; Slot 36 is NAN_F64
+      LDI ERR, 1
+      HALT AX
+  ```
+  Each caller simply executes `JMP COMMON_F64_DOMAIN_ERR` (1 word).
+  **Savings: $(7 - 1) \times 6 = 36$ words.**
+
+#### 2. Shared Return +1.0 and 0.0 Exits
+Used across `pow_f64`, `exp2_f64`, `trig_f64`, `cos_f64`, `floor_ceil_f64`:
+```assembly
+COMMON_RET_ONE_F64:
+    LDC AX, CONST, 33       ; Slot 33 is ONE_F64
+    HALT AX
+```
+**Savings: ~15 words.**
+
+#### 3. Integer to Float64 Conversion Subroutine
+In `exp2_f64` (Horner step divisor) and `trig_f64`:
+```assembly
+; Repeated 7-instruction conversion:
+    LD AL, slot
+    XOR AH, AH
+    XOR DH, DH
+    LDI EA, 1023
+    EXP_ADD EA, 52
+    CALL NORMALIZE_F64
+```
+This can reuse `CONV_INT_F64_COMMON` from `fpu_emu/asm/conv_int_f64.asm`.
+**Savings: ~12 words.**
+
+---
+
+### Strategy 5: Utilizing CONST ROM vs In-line Synthesis (Saves 30–40 words)
+
+Float64 `1.0` (`0x3FF00000_00000000`) is synthesized on the fly via 3 instructions:
+`XOR BL, BL; LDI BH, 1023; LSL BH, 20` (occurs 16 times!).
+Similarly, `MAGIC` ($1.5 \times 2^{52} = \text{0x43380000\_00000000}$) is synthesized in 6 instructions:
+```assembly
+; In exp2_f64 and trig_f64 (6 words each):
+    XOR BL, BL
+    LDI BH, 0x43
+    LSL BH, 8
+    OR BH, 0x38
+    LSL BH, 16
+    STO 2, BX
+```
+And $\sqrt{2}$ high-word threshold (`0x3FF6A09E`) in `log2_f64`:
+```assembly
+; In log2_f64 (6 words):
+    LDI BL, 1023
+    LSL BL, 10
+    OR BL, 424
+    LSL BL, 10
+    OR BL, 158
+```
+All of these already exist (or can be placed) in the CONST ROM table:
+- `ONE_F64` is slot 33–34.
+- `SQRT2_F64` is slot 26–27 (`LDC BL, CONST, 27` loads `0x3FF6A09E` in 1 instruction!).
+- `MAGIC_F64` can take unused CONST ROM slots 62–63.
+
+Loading from CONST ROM with `LDC` replaces 3- to 6-instruction blocks with a single `LDC`.
+**Savings: ~35 words.**
+
+---
+
+### Actionable Roadmap to Save $\ge 250$ Words
+
+| Step | Action | Files | Savings | Cumulative Microcode Size | Status |
+| :-: | :--- | :--- | :-: | :-: | :-: |
+| — | *Initial baseline* | `ucode_f64.asm` | — | **1,749 words** | Baseline |
+| **1** | Implement `HALT <reg>` (push and halt) in Memory Block | Assembler, emulator, all 58 `.asm` files | **-76 words** | **1,673 words** | **COMPLETE** |
+| **2** | Replace F32 CORDIC with 4-term Horner | `trig_f32.asm` | **-110 words** | 1,563 words | Planned |
+| **3** | Deduplicate Quiet NaN, domain error, and 1.0 exit trampolines | `trig_f64`, `exp2_f64`, `log2_f64`, `pow_f64`, `sqrt_f64` | **-50 words** | **1,513 words** *(< 1,536 limit!)* | Planned |
+| **4** | Make `UNPACK` set `OVERFLOW` flag on NaN/Inf | `add_f64`, `mul_f64`, `div_f64`, `trig_f64`, `exp2_f64`, `sqrt_f64` | **-50 words** | **1,463 words** | Planned |
+| **5** | Use `LDC` from CONST ROM for `1.0`, `MAGIC`, $\sqrt{2}$ | `log2_f64`, `exp2_f64`, `trig_f64`, `floor_ceil_f64` | **-35 words** | **1,428 words** | Planned |

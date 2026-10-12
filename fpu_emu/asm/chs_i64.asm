@@ -22,5 +22,4 @@ USER_CHS_I64:
     CALL POP_ONE_64             ; AX <- X (TOS)
     XOR FX, FX                  ; FX <- 0
     SUB AX, FX, AX              ; AX <- 0 - X = -X
-    PUSH AX                     ; Push negated result
-    HALT
+    HALT AX                     ; Push negated result

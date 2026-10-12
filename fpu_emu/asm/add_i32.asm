@@ -22,5 +22,4 @@
 USER_ADD_I32:
     CALL POP_TWO_32             ; AL <- A (NOS), BL <- B (TOS)
     ADD AL, BL                  ; AL <- A + B
-    PUSH AL                     ; Push result
-    HALT
+    HALT AL                     ; Push result

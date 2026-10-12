@@ -53,8 +53,7 @@ USER_MUL_U32:
     LDI VF, 0                   ; In unsigned mode, VF is cleared to 0
 
 MUL_32_PUSH:
-    PUSH AL                     ; Push low 32 bits of product
-    HALT
+    HALT AL                     ; Push low 32 bits of product
 
 ; ------------------------------------------------------------------------------
 ; 64-Bit Multiplication Section
@@ -68,8 +67,7 @@ USER_MUL_I64:
     ADD CH, CH, AL              ; CH <- T2 + T1
     MULU AL, CL, BL             ; {AH, AL} <- A_lo * B_lo
     ADD AH, AH, CH              ; AH <- (A_lo * B_lo)_hi + T1 + T2
-    PUSH AX                     ; Push 64-bit product {AH, AL}
-    HALT
+    HALT AX                     ; Push 64-bit product {AH, AL}
 
 USER_MUL_U64:
     CALL POP_TWO_64             ; AX <- A (NOS), BX <- B (TOS)

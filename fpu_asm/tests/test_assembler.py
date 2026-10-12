@@ -740,4 +740,43 @@ def test_swap_64_assemble():
     assert prog[2].src == Reg.BL
 
 
+def test_halt_syntax_variants():
+    code = """
+        HALT
+        HALT AL
+        HALT AX
+        HALT.64 AX
+        HALT.32 AL
+    """
+    assembler = Assembler()
+    prog = [u for _, u in assembler.assemble(code)]
+
+    assert len(prog) == 5
+
+    # HALT (no args)
+    assert prog[0].op == MicroOp.HALT
+    assert prog[0].w == IW.W32
+    assert prog[0].src1 == Reg.NONE
+
+    # HALT AL
+    assert prog[1].op == MicroOp.HALT
+    assert prog[1].w == IW.W32
+    assert prog[1].src1 == Reg.AL
+
+    # HALT AX (inferred 64-bit)
+    assert prog[2].op == MicroOp.HALT
+    assert prog[2].w == IW.W64
+    assert prog[2].src1 == Reg.AL
+
+    # HALT.64 AX
+    assert prog[3].op == MicroOp.HALT
+    assert prog[3].w == IW.W64
+    assert prog[3].src1 == Reg.AL
+
+    # HALT.32 AL
+    assert prog[4].op == MicroOp.HALT
+    assert prog[4].w == IW.W32
+    assert prog[4].src1 == Reg.AL
+
+
 

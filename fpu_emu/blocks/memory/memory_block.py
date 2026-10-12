@@ -98,10 +98,36 @@ class MemoryBlock(FunctionalBlock):
                 self._ssav(instr)
             case MicroOp.SRES:
                 self._sres(instr)
+            case MicroOp.HALT:
+                self._halt(instr)
             case _:
                 raise HardwareBusError(f"Unsupported opcode: {instr.op}")
 
     STATUS_ERR_MASK = 1 << StatusFlag.ERR.value
+
+    def _push32_reg(self, reg: Reg, clear_err: bool = True) -> None:
+        """Pushes 32-bit register to TOS."""
+        assert reg is not Reg.NONE
+        self._inputs.hb_mux.select(reg.value)
+        self._inner_push32(clear_err=clear_err)
+
+    def _push64_reg(self, reg: Reg, clear_err: bool = True) -> bool:
+        """Pushes 64-bit register pair to TOS (low word then high word). Returns False on overflow."""
+        assert reg is not Reg.NONE
+        assert isinstance(reg, Reg)
+        assert reg.is_lo_half()
+        self._inputs.hb_mux.select(reg.value)
+        self._inner_push32(clear_err=clear_err)
+        self._writeback()
+
+        if self._outputs.res_status.read_int() != 0:
+            # Stack overflow error, abort second word push
+            return False
+
+        # select the HI register
+        self._inputs.hb_mux.select(reg.value | 1)
+        self._inner_push32(clear_err=clear_err)
+        return True
 
     def _push(self, instr: MicroInstruction) -> None:
         """push src to TOS"""
@@ -117,32 +143,52 @@ class MemoryBlock(FunctionalBlock):
     def _push32(self, instr: MicroInstruction) -> None:
         """push src to TOS"""
         assert instr.src is not Reg.NONE
-        self._inputs.hb_mux.select(instr.src.value)
-        self._inner_push32()
+        self._push32_reg(instr.src, clear_err=True)
         self._outputs.exec_done.set(1)
         self._writeback()
 
     def _push64(self, instr: MicroInstruction) -> None:
         """push src to TOS, pushes low order bytes first"""
         assert instr.src is not Reg.NONE
-        assert isinstance(instr.src, Reg)
-        assert instr.src.is_lo_half()
-        self._inputs.hb_mux.select(instr.src.value)
-        self._inner_push32()
-        self._writeback()
-
-        if self._outputs.res_status.read_int() != 0:
-            # It was an error, we abort
+        if not self._push64_reg(instr.src, clear_err=True):
             self._outputs.exec_done.set(1)
             return
-
-        # select the HI register
-        self._inputs.hb_mux.select(instr.src.value | 1)
-        self._inner_push32()
         self._outputs.exec_done.set(1)
         self._writeback()
 
-    def _inner_push32(self):
+    def _halt(self, instr: MicroInstruction) -> None:
+        # In Verilog, we would probalby have HALT go through the PUSH path, then at
+        # the end set the HALT condition if the opcode was HALT
+        assert instr.op == MicroOp.HALT
+        if instr.src1 is not Reg.NONE:
+            if instr.is_w32():
+                self._push32_reg(instr.src1, clear_err=False)
+            else:
+                if not self._push64_reg(instr.src1, clear_err=False):
+                    bsy_mask = (1 << StatusFlag.BUSY.value) | self.STATUS_ERR_MASK
+                    self._outputs.status_wr_sel.set(bsy_mask)
+                    self._outputs.res_status.set(self.STATUS_ERR_MASK)
+                    self._outputs.exec_done.set(1)
+                    self._writeback()
+                    return
+
+            if self._outputs.res_status.read_int() != 0:
+                bsy_mask = (1 << StatusFlag.BUSY.value) | self.STATUS_ERR_MASK
+                self._outputs.status_wr_sel.set(bsy_mask)
+                self._outputs.res_status.set(self.STATUS_ERR_MASK)
+                self._outputs.exec_done.set(1)
+                self._writeback()
+                return
+
+        bsy_mask = 1 << StatusFlag.BUSY.value
+        self._outputs.block_res.set(0)
+        self._outputs.block_res_sel.set(Reg.NONE.value)
+        self._outputs.status_wr_sel.set(bsy_mask)
+        self._outputs.res_status.set(0)  # BUSY=0
+        self._outputs.exec_done.set(1)
+        self._writeback()
+
+    def _inner_push32(self, clear_err: bool = True):
         value = self._inputs.hb_mux.read_int()
 
         # Set it up to calculate SP+1
@@ -150,16 +196,22 @@ class MemoryBlock(FunctionalBlock):
 
         self._outputs.block_res.set(0)
         self._outputs.block_res_sel.set(Reg.NONE.value)
-        self._outputs.status_wr_sel.set(self.STATUS_ERR_MASK)
 
         if self._stack_adder.is_overflow:
             # Stack overflow: set ERR, do not write memory or update SP
+            self._outputs.status_wr_sel.set(self.STATUS_ERR_MASK)
             self._outputs.res_status.set(self.STATUS_ERR_MASK)
             # calls to _writeback() done in caller
             return
 
-        # No overflow: clear ERR
-        self._outputs.res_status.set(0)
+        if clear_err:
+            # PUSH: clear ERR
+            self._outputs.status_wr_sel.set(self.STATUS_ERR_MASK)
+            self._outputs.res_status.set(0)
+        else:
+            # HALT: preserve ERR unless overflow
+            self._outputs.status_wr_sel.set(0)
+            self._outputs.res_status.set(0)
 
         # 1 cycle to present address and data
         addr = self.MTH_BASE | (self._sp.read_int() & 0x7F)

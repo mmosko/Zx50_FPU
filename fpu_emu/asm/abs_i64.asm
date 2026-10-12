@@ -26,5 +26,4 @@ USER_ABS_I64:
     XOR AX, AX                  ; AX <- 0
     SUB AX, FX                  ; AX <- 0 - X = -X
 ABS_I64_DONE:
-    PUSH AX                     ; Push |X|
-    HALT
+    HALT AX                     ; Push |X|

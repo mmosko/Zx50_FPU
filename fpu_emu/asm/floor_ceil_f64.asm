@@ -80,8 +80,7 @@ COMMON_ROUND_F64:
 ROUND_F64_PACK:
     CALL    NORMALIZE_F64              ; Normalizes if carry into bit 53, restores sign, packs into AX
 ROUND_F64_EXIT:
-    PUSH    AX
-    HALT
+    HALT    AX
 
 ROUND_F64_SMALL:
     XOR     AX, AX                     ; AX <- 0.0

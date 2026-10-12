@@ -13,8 +13,7 @@
 USER_EXP2_F32:
     CALL POP_ONE_32                 ; AL <- X (TOS)
     CALL EXP2_CORE                  ; AL <- 2^AL
-    PUSH AL
-    HALT
+    HALT AL
 
 EXP2_CORE:
     MOV BH, AL                      ; BH <- raw input (preserves sign and value)

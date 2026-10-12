@@ -101,16 +101,13 @@ ROUND_F32_SMALL_0:
 ROUND_F32_PACK:
     OR AH, AH                   ; Sets STATUS.SIGN from AH[31]
     PACK AL, EA                 ; Packs float, sets ZERO, SIGN, clears OVERFLOW
-    PUSH AL
-    HALT
+    HALT AL
 
 ROUND_F32_NO_FRAC:
     MOV AL, AH
     OR AL, AL                   ; Sets SIGN, ZERO=0, C=0, V=0
-    PUSH AL
-    HALT
+    HALT AL
 
 ROUND_F32_ZERO:
     MOV AL, AH                  ; Retains ZERO=1, SIGN=sign from UNPACK
-    PUSH AL
-    HALT
+    HALT AL

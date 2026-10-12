@@ -195,6 +195,10 @@ class Dispatcher:
                 self._blocks[block_num].execute()
                 logger.debug("   STATUS=%02x", self._status.read_int())
 
+                if instr.op == MicroOp.HALT:
+                    self._halted = True
+                    break
+
                 # Reading the UPC mux happens after execute, as it might need the result of a JUMP address
                 if block_num == 3 and self._blocks[3].outputs.block_res_sel.read_int() == Reg.UPC.value:
                     # The JUMP writeback

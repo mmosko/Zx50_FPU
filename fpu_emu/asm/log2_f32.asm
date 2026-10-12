@@ -15,7 +15,7 @@ USER_LOG2_F32:
     CALL POP_ONE_32                 ; AL <- X (TOS)
     CALL LOG2_CORE                  ; AL <- log2(AL)
     JNZ ERR, LOG2_HALT              ; If domain error (ERR set), abort without pushing
-    PUSH AL
+    HALT AL
 LOG2_HALT:
     HALT
 

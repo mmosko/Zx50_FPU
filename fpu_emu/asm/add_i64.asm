@@ -22,5 +22,4 @@
 USER_ADD_I64:
     CALL POP_TWO_64             ; AX <- A (NOS), BX <- B (TOS)
     ADD AX, BX                  ; AX <- A + B (64-bit add)
-    PUSH AX                     ; Push 64-bit result {AH, AL}
-    HALT
+    HALT AX                     ; Push 64-bit result {AH, AL}

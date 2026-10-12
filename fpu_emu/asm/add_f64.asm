@@ -24,8 +24,7 @@
 USER_ADD_F64:
     CALL POP_TWO_64                     ; AX <- A (NOS), BX <- B (TOS)
     CALL ADD_F64_CORE                   ; AX <- A + B
-    PUSH AX                             ; Push 64-bit result
-    HALT
+    HALT AX                             ; Push 64-bit result
 
 ADD_F64_CORE:
     MOV FX, BX                          ; Scratch FX <- packed B (preserves sign and value)

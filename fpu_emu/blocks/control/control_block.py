@@ -69,8 +69,6 @@ class ControlBlock(FunctionalBlock):
                 self._ret(instr)
             case MicroOp.NOP:
                 self._nop(instr)
-            case MicroOp.HALT:
-                self._halt(instr)
             case _:
                 raise HardwareBusError(f"Unsupported opcode: {instr.op}")
 
@@ -218,18 +216,3 @@ class ControlBlock(FunctionalBlock):
         self._outputs.block_res_sel.set(Reg.NONE.value)
         self._outputs.exec_done.set(1)
         self._clock.tick()
-
-    def _halt(self, instr: MicroInstruction) -> None:
-        assert instr.op == MicroOp.HALT
-        assert instr.dst is Reg.NONE
-        assert instr.src1 is Reg.NONE
-        assert instr.src is Reg.NONE
-
-        bsy_mask = 1 << StatusFlag.BUSY.value
-        self._outputs.status_wr_sel.set(bsy_mask)
-        self._outputs.res_status.set(0)  # BUSY=0
-        self._outputs.block_res.set(0x3FF)
-        self._outputs.block_res_sel.set(Reg.UPC.value)
-        self._outputs.exec_done.set(1)
-        self._csp.write(0)
-        self._writeback()

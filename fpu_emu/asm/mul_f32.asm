@@ -26,8 +26,7 @@
 USER_MUL_F32:
     CALL POP_TWO_32             ; AL <- A (NOS), BL <- B (TOS)
     CALL MUL_F32_CORE           ; AL <- A * B
-    PUSH AL
-    HALT
+    HALT AL
 
 MUL_F32_CORE:
     MOV BH, AL                  ; Stash A into BH

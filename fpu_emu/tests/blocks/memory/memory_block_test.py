@@ -821,4 +821,80 @@ def test_user_stu_64_odd_base_raises(fpga: FpgaModel):
         fpga.dispatcher._run(microcode)
 
 
+def test_memory_halt(fpga: FpgaModel):
+    """HALT resets BSY flag and terminates microprogram execution, preserving ERR."""
+    fpga.reg_file.status.set_bit(StatusFlag.BUSY, True)
+    microcode = [
+        MicroInstruction(op=MicroOp.HALT),
+    ]
+    fpga.dispatcher._run(microcode)
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.BUSY) is False
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR) is False
+
+    # Also test HALT with ERR already set (equivalent to TRAP)
+    fpga.reg_file.upc.write(0)
+    fpga.reg_file.status.set_bit(StatusFlag.ERR, True)
+    fpga.dispatcher._run([MicroInstruction(op=MicroOp.HALT)])
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.BUSY) is False
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR) is True
+
+
+def test_memory_halt_push_32(fpga: FpgaModel):
+    """HALT with 32-bit register pushes register value to math stack and halts."""
+    fpga.reg_file.al.write(0x12345678)
+    sp_before = fpga.reg_file.sp.read_int()
+    microcode = [
+        MicroInstruction(op=MicroOp.HALT, w=IW.W32, src1=Reg.AL),
+    ]
+    fpga.dispatcher._run(microcode)
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.BUSY) is False
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR) is False
+    assert fpga.reg_file.sp.read_int() == sp_before + 1
+    assert fpga.memory.read(0, 0x000 | sp_before) == 0x12345678
+
+
+def test_memory_halt_push_64(fpga: FpgaModel):
+    """HALT with 64-bit register pushes low and high words to math stack and halts."""
+    fpga.reg_file.al.write(0x11223344)
+    fpga.reg_file.ah.write(0x55667788)
+    sp_before = fpga.reg_file.sp.read_int()
+    microcode = [
+        MicroInstruction(op=MicroOp.HALT, w=IW.W64, src1=Reg.AL),
+    ]
+    fpga.dispatcher._run(microcode)
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.BUSY) is False
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR) is False
+    assert fpga.reg_file.sp.read_int() == sp_before + 2
+    assert fpga.memory.read(0, 0x000 | sp_before) == 0x11223344
+    fpga.clock.tick(1)
+    assert fpga.memory.read(0, 0x000 | (sp_before + 1)) == 0x55667788
+
+
+def test_memory_halt_push_overflow_sets_err(fpga: FpgaModel):
+    """HALT push when SP is at maximum (127) sets ERR and clears BUSY."""
+    fpga.reg_file.sp.write(127)
+    fpga.reg_file.al.write(0xDEADBEEF)
+    microcode = [
+        MicroInstruction(op=MicroOp.HALT, w=IW.W32, src1=Reg.AL),
+    ]
+    fpga.dispatcher._run(microcode)
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.BUSY) is False
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR) is True
+    assert fpga.reg_file.sp.read_int() == 127
+
+
+def test_memory_halt_push_preserves_preexisting_err(fpga: FpgaModel):
+    """HALT push with pre-existing ERR preserves ERR=1 and clears BUSY."""
+    fpga.reg_file.status.set_bit(StatusFlag.ERR, True)
+    fpga.reg_file.status.set_bit(StatusFlag.OVERFLOW, True)
+    fpga.reg_file.al.write(0x12345678)
+    microcode = [
+        MicroInstruction(op=MicroOp.HALT, w=IW.W32, src1=Reg.AL),
+    ]
+    fpga.dispatcher._run(microcode)
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.BUSY) is False
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR) is True
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW) is True
+
+
 

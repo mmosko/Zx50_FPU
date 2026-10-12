@@ -62,8 +62,7 @@ CONV_F32_I32_SIGN:
 
 CONV_F32_I32_DONE:
     OR AL, AL                   ; Sets SIGN, ZERO, clears CARRY and OVERFLOW
-    PUSH AL
-    HALT
+    HALT AL
 
 CONV_F32_I32_ZERO:
     XOR AL, AL                  ; AL <- 0
@@ -89,7 +88,6 @@ CONV_F32_I32_OVF:
     SUB AL, 1                   ; If positive, clamp to 0x7FFFFFFF
 CONV_F32_I32_SET_ERR:
     OR AL, AL                   ; Sets SIGN, ZERO, clears CARRY
-    PUSH AL                     ; Push clamped result to stack
     LDI OVERFLOW, 1             ; Assert OVERFLOW=1
     LDI ERR, 1                  ; Assert ERR=1
-    HALT
+    HALT AL                     ; Push clamped result to stack and halt

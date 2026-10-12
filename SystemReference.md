@@ -143,13 +143,14 @@ co-located:
 |                                  | `XOR`     | `dst_64, src1_64, src2_64` | 1 |      2       | `0x12` (`0b010_010`) |   •   |    •    |   X   | **0** | **0** | • | •  | X | `dst_64 <- src1_64 ^ src2_64` (**clears C and V**)                  |
 | **Control**<br>`0b011`           | `CALL`    | `addr`                     | 0 |      2       | `0x1C` (`0b011_100`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `CALL_STACK[CSP++] <- UPC + 1; UPC <- addr`                         |
 |                                  | `DJNZ`    | `addr`                     | 0 |    2 / 1     | `0x1B` (`0b011_011`) |   •   |    •    |   •   |   •   |   •   | • | •  | X | `C <- C - 1; if (C != 0) UPC <- addr` (sets ZF)                     |
-|                                  | `HALT`    | —                          | 0 |      1       | `0x1F` (`0b011_111`) | **0** |    •    |   •   |   •   |   •   | • | •  | • | `STATUS.BSY <- 0; pulse EXEC_DONE`                                  |
 |                                  | `JMP`     | `addr`                     | 0 |      2       | `0x18` (`0b011_000`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `UPC <- addr` (unconditional jump)                                  |
 |                                  | `JNZ`     | `[flag,] addr`             | 0 |    2 / 1     | `0x19` (`0b011_001`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `if (!cond) UPC <- addr` (default: `!ZF`)                           |
-|                                  | `JZ`      | `[flag,] addr`             | 0 |    2 / 1     | `0x1A` (`0b011_010`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `if (cond) UPC <- addr` (default: `ZF`)                             |
+|                                  | `JZ`      | `[flag,] addr`             | 0 |    2 / 1     | `0x1A` (`0b011_010`) |   •   |    2 / 1     | `0x1A` (`0b011_010`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `if (cond) UPC <- addr` (default: `ZF`)                             |
 |                                  | `NOP`     | —                          | 0 |      1       | `0x1E` (`0b011_110`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | No operation (pipeline bubble)                                      |
 |                                  | `RET`     | —                          | 0 |      2       | `0x1D` (`0b011_101`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `UPC <- CALL_STACK[--CSP]`                                          |
-| **Memory**<br>`0b100`<br>`0b101` | `LD`      | `dst, addr`                | 0 |      1       | `0x24` (`0b100_100`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `dst <- DATA_RAM[0x080 \| (addr & 0x3F)]`                           |
+| **Memory**<br>`0b100`<br>`0b101` | `HALT`    | `[src1]`                   | 0 |      1       | `0x2A` (`0b101_010`) | **0** | **X\*** |   •   |   •   |   •   | • | •  | • | `if (src1) PUSH src1; STATUS.BSY <- 0; pulse EXEC_DONE` (\*ERR on OF) |
+|                                  | `HALT`    | `[src1_64]`                | 1 |      2       | `0x2A` (`0b101_010`) | **0** | **X\*** |   •   |   •   |   •   | • | •  | • | `If (src1_64) PUSH src1_64; STATUS.BSY <- 0; pulse EXEC_DONE` (\*ERR on OF)         |
+|                                  | `LD`      | `dst, addr`                | 0 |      1       | `0x24` (`0b100_100`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `dst <- DATA_RAM[0x080 \| (addr & 0x3F)]`                           |
 |                                  | `LD`      | `dst, [src1]`              | 0 |      1       | `0x24` (`0b100_100`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `dst <- DATA_RAM[0x080 \| (src1 & 0x3F)]`                           |
 |                                  | `LD`      | `dst_64, addr`             | 1 |      2       | `0x24` (`0b100_100`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | 64-bit load from scratchpad                                         |
 |                                  | `LDC`     | `dst, tbl, addr`           | 0 |      1       | `0x22` (`0b100_010`) |   •   |    •    |   •   |   •   |   •   | • | •  | • | `dst <- DATA_RAM[TBL_BASE \| addr]` (constant/LUT)                  |
@@ -2915,7 +2916,7 @@ After execution of NOP:
 
 ```
 ================================================================================
-HALT — NORMAL EXECUTION TERMINATION
+HALT [src] — NORMAL EXECUTION TERMINATION & OPTIONAL RESULT PUSH
 ================================================================================
 ```
 
@@ -2924,35 +2925,59 @@ HALT — NORMAL EXECUTION TERMINATION
 ```text
   BSY   ERR    S     C     V     U    DF     Z
 +-----+-----+-----+-----+-----+-----+-----+-----+
-|  0  |  -  |  -  |  -  |  -  |  -  |  -  |  -  |
+|  0  |  *  |  -  |  -  |  -  |  -  |  -  |  -  |
 +-----+-----+-----+-----+-----+-----+-----+-----+
 ```
 
 * **`BSY`**: Cleared to 0 (operation completed successfully).
-* **`ERR`, `Z`, `S`, `C`, `V`, `U`, `D`**: Unaffected.
+* **`ERR`**: Set to 1 if an optional push triggers stack overflow; otherwise unaffected.
+* **`Z`, `S`, `C`, `V`, `U`, `D`**: Unaffected.
+
+#### Syntax & Variants
+
+```assembly
+HALT              ; Nullary: resets BSY=0, pulses EXEC_DONE, halts execution (1 cycle)
+HALT src1         ; 32-bit: pushes src1 to math stack, resets BSY=0, pulses EXEC_DONE (1 cycle)
+HALT src1_64      ; 64-bit: pushes src1_64 to math stack, resets BSY=0, pulses EXEC_DONE (2 cycles)
+```
 
 #### Register Transfer & Datapath Flow
 
 ```text
+if (src1 != Reg.NONE):
+    if (W == 0):
+        DATA_RAM[MTH_BASE | SP] <- HB_MUX[src1]
+        SP <- SP + 1 (sets STATUS.ERR if SP overflow)
+    else:
+        DATA_RAM[MTH_BASE | SP]     <- HB_MUX[src1_LO]
+        DATA_RAM[MTH_BASE | (SP+1)] <- HB_MUX[src1_HI]
+        SP <- SP + 2 (sets STATUS.ERR if SP overflow)
+
 STATUS.BSY <- 1'b0
-EXEC_DONE  <- 1'b1  (pulse)
-UPC [9:0]  <- 10'd0 (idle loop)
+EXEC_DONE  <- 1'b1 (pulse)
 ```
 
 #### Instruction Word Format
 
-`OPCODE = 011111`. `W = 0` (1 cycle). `RES_SEL = UPC`, `HA_MUX = n/a`, `HB_MUX = n/a`.
+`OPCODE = 101010` (`0x2A`). `W = 0` (32-bit push or no push, 1 cycle) or `W = 1` (64-bit push, 2 cycles). `SRC1 = src1` (or `Reg.NONE`).
 
 #### Description
 
-Halts the microprogram normally by resetting `STATUS.BSY = 0`, pulses `EXEC_DONE` to notify host or dispatcher that
-execution completed successfully, and vectors `UPC` back to the dispatch/idle state.
+Halts microprogram execution by resetting `STATUS.BSY = 0` and pulsing `EXEC_DONE` to notify host or dispatcher that
+execution is complete. If an optional register `src1` is provided (`HALT AL` or `HALT AX`), the register value is
+automatically pushed to the math stack before completing, fusing result commit and termination into a single instruction.
 
 #### Concrete Numeric Example
 
 ```text
-After execution of HALT:
+; Example 1: Simple HALT
+HALT
   STATUS.BSY <- 0
   EXEC_DONE pulses for 1 cycle.
-  UPC vectors to 0x000 (idle state).
+
+; Example 2: Fused Push and HALT
+HALT AX
+  TOS <- AX (pushes low word then high word)
+  STATUS.BSY <- 0
+  EXEC_DONE pulses for 1 cycle.
 ```

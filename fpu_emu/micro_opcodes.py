@@ -51,6 +51,7 @@ class MicroOp(Enum):
     SWAP = 0b100_111
     LDU = 0b101_000
     STU = 0b101_001
+    HALT = 0b101_010
     SSAV = 0b101_110
     SRES = 0b101_111
     # ====================
@@ -62,7 +63,6 @@ class MicroOp(Enum):
     CALL = 0b011_100
     RET = 0b011_101
     NOP = 0b011_110
-    HALT = 0b011_111
 
     @property
     def block_id(self) -> int:

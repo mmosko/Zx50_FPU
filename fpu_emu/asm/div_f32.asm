@@ -30,7 +30,7 @@ USER_DIV_F32:
     CALL POP_TWO_32             ; AL <- A (NOS), BL <- B (TOS)
     CALL DIV_F32_CORE           ; AL <- A / B
     JNZ ERR, DIV_F32_HALT       ; If divide-by-zero (ERR set), abort without pushing
-    PUSH AL                     ; Push result
+    HALT AL                     ; Push result and halt
 DIV_F32_HALT:
     HALT
 

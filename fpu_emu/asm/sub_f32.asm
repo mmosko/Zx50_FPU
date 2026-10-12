@@ -25,8 +25,7 @@
 USER_SUB_F32:
     CALL POP_TWO_32             ; AL <- A (NOS), BL <- B (TOS)
     CALL SUB_F32_CORE           ; AL <- A - B
-    PUSH AL                     ; Push result
-    HALT
+    HALT AL                     ; Push result
 
 SUB_F32_CORE:
     FCHS BL                     ; Invert sign bit of subtrahend: B <- -B

@@ -20,5 +20,4 @@
 USER_DUP8:
     CALL POP_ONE_64             ; AX <- X (TOS)
     PUSH AX                     ; Push first 64-bit copy
-    PUSH AX                     ; Push second 64-bit copy
-    HALT
+    HALT AX                     ; Push second 64-bit copy

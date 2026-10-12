@@ -537,6 +537,21 @@ class Pass2Encoder(Transformer):
         w = IW.W64 if (forced_w64 or is_64_dst) else IW.W32
         return MicroInstruction(op=MicroOp.POP, w=w, dst=dst)
 
+    def inst_halt(self, children):
+        idx = 0
+        forced_w64 = False
+        if idx < len(children) and children[idx] in (".64", ".32"):
+            if children[idx] == ".64":
+                forced_w64 = True
+            idx += 1
+        if idx < len(children):
+            src1, is_64_s1 = self._normalize_reg(children[idx])
+            w = IW.W64 if (forced_w64 or is_64_s1) else IW.W32
+            return MicroInstruction(op=MicroOp.HALT, w=w, src1=src1)
+        else:
+            w = IW.W64 if forced_w64 else IW.W32
+            return MicroInstruction(op=MicroOp.HALT, w=w, src1=Reg.NONE)
+
     def inst_ldc(self, children):
         idx = 0
         forced_w64 = False

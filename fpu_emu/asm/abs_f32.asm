@@ -21,5 +21,4 @@
 USER_ABS_F32:
     CALL POP_ONE_32             ; AL <- X (TOS)
     FABS AL                     ; Clear sign bit (AL[31] = 0)
-    PUSH AL                     ; Push |X|
-    HALT
+    HALT AL                     ; Push |X|

@@ -56,8 +56,7 @@ USER_PUSH_SQRT2_32:
 USER_PUSH_INV_SQRT2_32:
     LSL     C, 1                ; C <- (opcode & 0x0F) * 2 = 32-bit CONST slot
     LDC     FL, CONST, C        ; Load 32-bit float constant dynamically from CONST table
-    PUSH    FL                  ; Push 32-bit constant onto operand stack
-    HALT
+    HALT    FL                  ; Push 32-bit constant onto operand stack
 
 USER_PUSH_PI_64:
 USER_PUSH_E_64:
@@ -69,6 +68,5 @@ USER_PUSH_SQRT2_64:
 USER_PUSH_INV_SQRT2_64:
     LSL     C, 1                ; C <- (opcode & 0x0F) * 2 = 64-bit CONST slot
     LDC     FX, CONST, C        ; Load 64-bit double constant dynamically from CONST table
-    PUSH    FX                  ; Push 64-bit constant onto operand stack
-    HALT
+    HALT    FX                  ; Push 64-bit constant onto operand stack
 

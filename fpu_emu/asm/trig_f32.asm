@@ -187,8 +187,7 @@ TRIG_PACK_FLOAT:
     LSR AL, 7
     LDI EA, 127
     CALL NORMALIZE_F32
-    PUSH AL
-    HALT
+    HALT AL
 
     ; --- Tangent Reconstruction ---
 RECONSTRUCT_TAN:
@@ -241,23 +240,20 @@ TAN_FINISH_SIGN:
     ; Perform float division: AL / BL
     OR AL, AL, DH               ; Attach computed sign to numerator
     CALL DIV_F32_CORE           ; AL <- AL / BL
-    PUSH AL
-    HALT
+    HALT AL
 
 TAN_ZERO:
     XOR AL, AL                  ; Return zero mantissa
     MOV AH, DH                  ; Preserve computed sign
     CALL NORMALIZE_F32
-    PUSH AL
-    HALT
+    HALT AL
 
 TAN_DIV_ZERO:
     XOR BL, BL
     DIVU AL, BL                 ; Asserts ERR=1, VF=1 in hardware
     LDC AL, CONST, POS_INF_F32  ; POS_INF_F32 (0x7F800000)
     OR AL, AL, DH               ; Attach computed sign
-    PUSH AL
-    HALT
+    HALT AL
 
     ; --------------------------------------------------------------------------
     ; Special Cases (Zero, NaN, Small Angle)
@@ -266,16 +262,13 @@ TRIG_SMALL_ANGLE:               ; Merged ZERO and SMALL_ANGLE handlers (saves 5 
     CMP CL, 1
     JZ ZERO, TRIG_RET_ONE       ; COS(0 or small) -> 1.0
     MOV AL, CH                  ; Return original theta / 0.0
-    PUSH AL
-    HALT
+    HALT AL
 
 TRIG_RET_ONE:
     LDC AL, CONST, ONE_F32      ; ONE_F32 (0x3F800000 = 1.0)
-    PUSH AL
-    HALT
+    HALT AL
 
 TRIG_NAN_ERR:
     LDC AL, CONST, NAN_F32      ; NAN_F32 (0x7FC00000)
-    PUSH AL
     LDI ERR, 1
-    HALT
+    HALT AL

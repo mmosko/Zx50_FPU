@@ -21,5 +21,4 @@
 USER_CHS_F32:
     CALL POP_ONE_32             ; AL <- X (TOS)
     FCHS AL                     ; Invert sign bit (AL[31] ^= 1)
-    PUSH AL                     ; Push -X
-    HALT
+    HALT AL                     ; Push -X

@@ -25,5 +25,4 @@ USER_CONV_U32_U64:
     CALL POP_ONE_32             ; AL <- X (TOS), halts on stack underflow
     LDI AH, 0                   ; Zero-extend high word: AH <- 0x00000000
     OR AX, AX                   ; 64-bit OR: sets ZERO=(X==0), SIGN=0, CARRY=0, OVERFLOW=0
-    PUSH AX                     ; Push 64-bit result {AH, AL}
-    HALT
+    HALT AX                     ; Push 64-bit result {AH, AL}

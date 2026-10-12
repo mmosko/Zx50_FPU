@@ -43,5 +43,4 @@ USER_CONV_I32_F32:
 CONV_INT_F32_COMMON:
     LDI EA, 150                 ; Initial biased exponent for bit 23: 127 + 23 = 150
     CALL NORMALIZE_F32          ; Normalize mantissa in AL, EA, sign in AH[31]
-    PUSH AL                     ; Push IEEE-754 single float
-    HALT
+    HALT AL                     ; Push IEEE-754 single float
