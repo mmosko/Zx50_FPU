@@ -85,9 +85,8 @@ TRIG_F64_ENTRY:
     MOV DH, AH
     LSL DH, 1
     LSR DH, 21
-    ADD DL, DH, 1
-    LSR DL, 11
-    JNZ ZERO, .trig_nan_or_inf   ; If exponent was 2047: Inf or NaN
+    CMP DH, 2047
+    JZ ZERO, .trig_nan_or_inf   ; If exponent was 2047: Inf or NaN
 
     ; Tiny angle check: |theta| < 2^-27 (biased exp < 996)
     CMP DH, 996
@@ -332,8 +331,7 @@ TRIG_POLY_LOOP:
     MULU AL, CL, DH             ; AL <- dm integer (max 272)
     XOR AH, AH
     XOR DH, DH
-    LDI EA, 1023
-    EXP_ADD EA, 52
+    LDI EA, 1075
     CALL NORMALIZE_F64          ; AX <- float64(dm)
     STO 10, AX                  ; SCR[10..11] <- float64(dm)
 

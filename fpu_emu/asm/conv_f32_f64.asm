@@ -69,9 +69,7 @@ USER_CONV_F32_F64:
     LSL     AL, 9                       ; Discard bit 23, fraction in AL[31:9]
     XOR     AH, AH
     LSL     AX, 20                      ; Align fraction to AX[51:29]
-    LDI     BL, 0x3FF                   ; 1023 (fits in 10-bit immediate)
-    LSL     BL, 1                       ; BL <- 0x7FE
-    OR      BL, 1                       ; BL <- 0x7FF
+    LDI     BL, 0x7FF                   ; 2047 (Float64 special exponent [10:0])
     LSL     BL, 20                      ; BL <- 0x7FF00000 (Float64 special exponent)
     OR      AH, BL                      ; Insert exponent into AH[30:20]
     LSR     DH, 31

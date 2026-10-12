@@ -42,7 +42,6 @@ USER_CONV_I64_F64:
     SUB AX, FX, AX              ; AX <- -AX (two's complement 64-bit magnitude)
 
 CONV_INT_F64_COMMON:
-    LDI EA, 1023
-    EXP_ADD EA, 52              ; Initial biased exponent for bit 52: 1023 + 52 = 1075
+    LDI EA, 1075                ; Initial biased exponent for bit 52: 1023 + 52 = 1075
     CALL NORMALIZE_F64          ; Normalize mantissa in AX, EA, sign in DH[31]
     HALT AX                     ; Push IEEE-754 double float

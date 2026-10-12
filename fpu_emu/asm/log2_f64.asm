@@ -56,9 +56,7 @@ LOG2_F64_CORE:
     JNZ SIGN, LOG2_F64_ERR      ; log2(negative) -> domain error
 
     ; Check for NaN / +Inf (EA == 2047)
-    EXP_SUB EB, EA, 1023
-    EXP_SUB EB, EB, 1023
-    EXP_SUB EB, EB, 1
+    CMP EA, 2047
     JZ ZERO, LOG2_F64_RET_INPUT ; If NaN or +Inf, return original input
 
     ; Calculate unbiased exponent E = EA - 1023
@@ -129,8 +127,7 @@ LOG2_SERIES_LOOP:
     LD AL, 6                    ; AL <- D (unsigned integer 1..21)
     XOR AH, AH
     XOR DH, DH
-    LDI EA, 1023
-    EXP_ADD EA, 52
+    LDI EA, 1075
     CALL NORMALIZE_F64          ; AX <- float64(D)
 
     MOV BX, AX                  ; BX <- float64(D)
@@ -187,8 +184,7 @@ LOG2_SERIES_LOOP:
 .e_positive:
     MOV AL, BL
     XOR AH, AH
-    LDI EA, 1023
-    EXP_ADD EA, 52
+    LDI EA, 1075
     CALL NORMALIZE_F64          ; AX <- float64(E)
 
     ; log2(X) = float64(E) + log2(M)

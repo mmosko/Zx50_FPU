@@ -43,10 +43,8 @@ SQRT_F64_CORE:
     JZ ZERO, SQRT_F64_RET_BX    ; If X == +/-0.0: return original input
     JNZ SIGN, SQRT_F64_DOMAIN_ERR ; If X < 0: domain error (assert ERR and abort)
 
-    ; Check for NaN or +Inf (EA == 2047): 2047 - 1023 - 1023 - 1 == 0
-    EXP_SUB EB, EA, 1023
-    EXP_SUB EB, EB, 1023
-    EXP_SUB EB, EB, 1
+    ; Check for NaN or +Inf (EA == 2047)
+    CMP EA, 2047
     JZ ZERO, SQRT_F64_RET_BX    ; If NaN or +Inf: return original input
 
     ; Compute unbiased exponent: E = EA - 1023

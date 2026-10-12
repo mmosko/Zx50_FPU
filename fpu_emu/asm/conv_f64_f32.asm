@@ -32,19 +32,9 @@ USER_CONV_F64_F32:
     UNPACK AX, EA               ; EA <- E64 (0..2047), AH <- mant_hi, AL <- mant_lo
 
     ; Check if E64 == 2047 (NaN or +/-Inf)
-    ; Avoid immediates > 1023 by testing (E64 >> 1) == 1023 and bit 0 == 1
-    MOV BL, DH
-    LSL BL, 1                   ; Discard sign bit 31
-    LSR BL, 21                  ; BL <- E64 (0..2047)
-    LSR BL, 1                   ; BL <- E64 >> 1 (0..1023)
-    CMP BL, 1023                ; Upper 10 bits of exponent == 1?
-    JNZ ZERO, .f64_f32_finite
-    MOV BL, DH
-    LSR BL, 20
-    AND BL, 1                   ; Bit 0 of exponent == 1?
-    JNZ ZERO, .f64_f32_special  ; If E64 == 2047: special (NaN or +/-Inf)
+    CMP EA, 2047
+    JZ ZERO, .f64_f32_special  ; If E64 == 2047: special (NaN or +/-Inf)
 
-.f64_f32_finite:
     EXP_SUB EA, 896             ; EA <- E64 - (1023 - 127) = E64 - 896
     LSR AX, 29                  ; AL[23:0] <- mantissa (bit 23 = hidden bit)
     MOV AH, DH                  ; AH[31] <- sign bit for NORMALIZE_F32

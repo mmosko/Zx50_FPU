@@ -66,24 +66,12 @@ EXP2_F64_CORE:
     JZ ZERO, EXP2_F64_RET_ONE   ; 2^0 == 1.0
 
     ; Check if EA == 2047 (NaN or +/-inf)
-    MOV BL, EA
-    LSR BL, 1
-    CMP BL, 1023
-    JNZ ZERO, .exp2_not_special
-    MOV BL, EA
-    AND BL, 1
-    JNZ ZERO, EXP2_F64_SPECIAL  ; If EA == 2047: special
-.exp2_not_special:
+    CMP EA, 2047
+    JZ ZERO, EXP2_F64_SPECIAL   ; If EA == 2047: special
 
     ; Check if |X| >= 2048 (EA >= 1034)
-    CMP EA, 1023
-    JZ CARRY, .exp2_check_huge   ; If EA >= 1023, check distance
-    JMP .exp2_within_range
-.exp2_check_huge:
-    SUB BL, EA, 1023
-    CMP BL, 11
-    JZ CARRY, EXP2_F64_HUGE      ; If EA - 1023 >= 11 (EA >= 1034), out of range
-.exp2_within_range:
+    CMP EA, 1034
+    JZ CARRY, EXP2_F64_HUGE      ; If EA >= 1034, out of range
 
     ; --- Compute Y = X + MAGIC ---
     LD AX, 0                    ; AX <- X
@@ -107,10 +95,7 @@ EXP2_F64_CORE:
 
 .exp2_k_negative:
     ; FL < 0: check if FL < -1074
-    LDI BL, 1000
-    ADD CL, FL, BL
-    LDI BL, 74
-    ADD CL, CL, BL              ; CL <- FL + 1074
+    ADD CL, FL, 1074            ; CL <- FL + 1074
     JNZ SIGN, EXP2_F64_UNDERFLOW ; If FL + 1074 < 0 -> underflow
 
 .exp2_k_in_bounds:
@@ -156,8 +141,7 @@ EXP2_F64_HORNER_LOOP:
     LD AL, 10                   ; AL <- step
     XOR AH, AH                  ; AH <- 0
     XOR DH, DH                  ; Sign is positive
-    LDI EA, 1023
-    EXP_ADD EA, 52              ; Initial biased exponent 1075
+    LDI EA, 1075                ; Initial biased exponent 1075
     CALL NORMALIZE_F64          ; AX <- float64(step)
     MOV BX, AX                  ; BX <- float64(step)
 
@@ -190,10 +174,7 @@ EXP2_F64_APPLY_EXPONENT:
     JNZ SIGN, EXP2_F64_SUBNORMAL
 
     ; 2. BL >= 1: check overflow (BL >= 2047)
-    LDI DL, 1023
-    LSL DL, 1
-    ADD DL, 1                   ; DL <- 2047
-    CMP BL, DL                  ; BL - 2047: if BL >= 2047 -> CARRY = 0
+    CMP BL, 2047                ; BL - 2047: if BL >= 2047 -> CARRY = 0
     JZ CARRY, EXP2_F64_OVERFLOW
 
     ; Normal float64: 1 <= BL < 2047
@@ -251,9 +232,7 @@ EXP2_F64_OVERFLOW:
     XOR AL, AL
     LDI AH, 1
     LSL AH, 20                  ; AX <- non-zero mantissa with hidden bit
-    LDI EA, 1023
-    EXP_ADD EA, 1023
-    EXP_ADD EA, 1               ; EA <- 2047 (overflow)
+    LDI EA, 2047                ; EA <- 2047 (overflow)
     XOR DH, DH                  ; Sign is positive
     PACK AX, EA                 ; Sets OVERFLOW flag, AX <- +inf
     RET
