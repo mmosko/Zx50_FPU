@@ -28,6 +28,10 @@
 
 USER_CONV_F64_F32:
     CALL POP_ONE_64             ; AX <- float64 X (TOS), halts on underflow
+    CALL CONV_F64_F32_CORE
+    HALT AL
+
+CONV_F64_F32_CORE:
     MOV DH, AH                  ; DH[31] <- sign bit
     UNPACK AX, EA               ; EA <- E64 (0..2047), AH <- mant_hi, AL <- mant_lo
 
@@ -39,7 +43,7 @@ USER_CONV_F64_F32:
     LSR AX, 29                  ; AL[23:0] <- mantissa (bit 23 = hidden bit)
     MOV AH, DH                  ; AH[31] <- sign bit for NORMALIZE_F32
     CALL NORMALIZE_F32          ; Normalizes, checks limits (V=1/U=1), restores sign, PACK AL, EA
-    HALT AL
+    RET
 
 .f64_f32_special:
     ; Check if fraction is 0 (Inf vs NaN)
@@ -69,4 +73,4 @@ USER_CONV_F64_F32:
     LSR BL, 31
     LSL BL, 31                  ; BL <- sign bit (0x80000000 or 0)
     OR AL, BL                   ; Insert sign
-    HALT AL
+    RET

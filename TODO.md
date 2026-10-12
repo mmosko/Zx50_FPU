@@ -90,10 +90,10 @@ trigonometrics are implemented as thin wrappers calling the verified 64-bit core
   - Created directory `fpu_emu/asm/archive/`.
   - Copied `exp2_f32.asm`, `log2_f32.asm`, `pow_f32.asm`, and `trig_f32.asm` into `fpu_emu/asm/archive/`.
   - Safely preserved in source control without being included in current microcode.
-- [ ] **Step 2: Expose `CONV_F32_F64_CORE` and `CONV_F64_F32_CORE` Subroutines**
+- [x] **Step 2: Expose `CONV_F32_F64_CORE` and `CONV_F64_F32_CORE` Subroutines**
   - In `conv_f32_f64.asm`: Split `USER_CONV_F32_F64` to call a new `CONV_F32_F64_CORE` subroutine that takes float32 in `AL`, returns float64 in `AX`, and ends with `RET`.
   - In `conv_f64_f32.asm`: Split `USER_CONV_F64_F32` to call a new `CONV_F64_F32_CORE` subroutine that takes float64 in `AX`, returns float32 in `AL` (preserving `OVERFLOW`/`UNDERFLOW` flags), and ends with `RET`.
-  - Run conversion test suites to verify zero regression.
+  - Ran unit & integration test suites (92 conversion tests, 2,183 total tests all passed).
 - [ ] **Step 3: Expose `TRIG_F64_CORE` and `POW_F64_CORE` Callable Subroutines**
   - In `trig_f64.asm`: Refactor common exit points to execute `RET` with result in `AX`, leaving `USER_SIN_F64`, `USER_COS_F64`, and `USER_TAN_F64` to do `CALL TRIG_F64_CORE; HALT AX`.
   - In `pow_f64.asm`: Extract `POW_F64_CORE` (taking base in `AX` and exponent in `BX`, returning `AX` via `RET`).

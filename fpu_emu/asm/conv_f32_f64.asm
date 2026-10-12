@@ -27,6 +27,10 @@
 
 USER_CONV_F32_F64:
     CALL    POP_ONE_32                  ; AL <- float32 X (TOS)
+    CALL    CONV_F32_F64_CORE
+    HALT    AX
+
+CONV_F32_F64_CORE:
     MOV     DH, AL                      ; DH[31] <- sign bit
     UNPACK  AL, EA                      ; EA <- biased exp (0..255), AL <- mantissa, status.SIGN <- sign bit
     JZ      ZERO, .f32_f64_zero         ; If zero (+0.0 / -0.0): return signed 64-bit zero
@@ -44,14 +48,13 @@ USER_CONV_F32_F64:
     LSL     AX, 29                      ; Shift mantissa into 53-bit position (bit 20 of AH = 1)
     OR      DH, DH                      ; Restore status.SIGN from DH[31]
     PACK    AX, EA                      ; Pack 64-bit float into AX
-.f32_f64_push_halt:
-    HALT    AX
+    RET
 
 .f32_f64_zero:
     XOR     AX, AX                      ; AX <- 0
     OR      DH, DH                      ; Restore status.SIGN from DH[31]
     PACK    AX, EA                      ; Pack signed 64-bit zero
-    JMP     .f32_f64_push_halt
+    RET
 
 .f32_f64_subnormal:
     ; Subnormal float32: value is (-1)^S * 2^-126 * (0.frac)
@@ -61,7 +64,7 @@ USER_CONV_F32_F64:
     XOR     AH, AH
     LSL     AX, 29                      ; Align fraction so bit 23 moves to bit 52 (bit 20 of AH)
     CALL    NORMALIZE_F64               ; Normalizes AX, adjusts EA, restores sign, packs to AX
-    JMP     .f32_f64_push_halt
+    RET
 
 .f32_f64_special:
     ; EA == 255 (NaN or +/-Inf)
@@ -75,4 +78,4 @@ USER_CONV_F32_F64:
     LSR     DH, 31
     LSL     DH, 31                      ; DH <- 0x80000000 if negative, 0 if positive
     OR      AH, DH                      ; Insert sign into AH[31]
-    JMP     .f32_f64_push_halt
+    RET
