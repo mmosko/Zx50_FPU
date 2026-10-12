@@ -175,15 +175,6 @@ next instruction fetch, or loop until ready.
 ## Machine Instruction (INSTR)
 
 ```text
- 31        26  25        21       17           14        10                        0
-+------------+---+---------+--------+------------+---------+-------------------------+
-|   OPCODE   | W |   DST   | SRC2   | FLAG_COND  |  SRC1   |     IMMEDIATE / ADDR    |
-|   [5:0]    |   |  [3:0]  | [3:0]  |   [2:0]    |  [3:0]  |           [9:0]         |
-+------------+---+---------+--------+------------+---------+-------------------------+
-```
-
-Proposed Refactored Instruction Word
-```text
  31        26  25        21       17        13                                      0
 +------------+---+---------+--------+------------------------------------------------+
 |   OPCODE   | W | DST/FLAG| SRC1   |  SRC2   |                  IMMEDIATE / ADDR    |
@@ -191,8 +182,8 @@ Proposed Refactored Instruction Word
 +------------+---+---------+--------+------------------------------------------------+
 ```
 
-The immediate, address, offset values can be up to 10 bits, which is enough to address
-up to 1K PC locations (in 4-byte words) or immediate values 0 - 1023.
+The immediate, address, offset values can be up to 13 bits, which is enough to address
+up to 8K PC locations (in 4-byte words) or immediate values 0 - 8192.
 
 If SRC1 is None (`0b1111`), then binary operands like "AND AL, BL" mean `AL <- AL & BL`.
 If SRC1 is a valid `HA_MUX` register, then binary operands have a distinct

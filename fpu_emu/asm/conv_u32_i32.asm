@@ -30,6 +30,6 @@ USER_CONV_I32_U32:
     PUSH AL                     ; Writeback in-place to TOS
     OR AL, AL                   ; Sets ZERO=(AL==0), SIGN=AL[31], CARRY=0, OVERFLOW=0
     JZ SIGN, CONV_U32_I32_DONE  ; If SIGN == 0 (bit 31 is 0), no overflow -> done
-    LDI OVERFLOW, 1             ; If SIGN == 1 (bit 31 is 1), assert OVERFLOW = 1
+    SET OVERFLOW, 1             ; If SIGN == 1 (bit 31 is 1), assert OVERFLOW = 1
 CONV_U32_I32_DONE:
     HALT

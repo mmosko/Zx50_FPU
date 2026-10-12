@@ -83,7 +83,7 @@ class LogicBlock(FunctionalBlock):
 
     def _test(self, instr: MicroInstruction) -> None:
         assert instr.op == MicroOp.TEST
-        assert instr.src is not Reg.NONE
+        assert instr.src2 is not Reg.NONE
         assert instr.dst is not Reg.NONE
         src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
 
@@ -94,7 +94,7 @@ class LogicBlock(FunctionalBlock):
 
     def _test_32(self, instr: MicroInstruction, src1: Reg) -> None:
         self._ha_mux.select(src1.value)
-        self._hb_mux.select(instr.src.value)
+        self._hb_mux.select(instr.src2.value)
         result = self._logic_core(operator.and_)
         self._outputs.block_res.set(0)
         self._outputs.block_res_sel.set(Reg.NONE.value)
@@ -104,12 +104,12 @@ class LogicBlock(FunctionalBlock):
 
     def _test_64(self, instr: MicroInstruction, src1: Reg) -> None:
         assert src1.is_lo_half()
-        assert isinstance(instr.src, Reg)
-        assert instr.src.is_lo_half()
+        assert isinstance(instr.src2, Reg)
+        assert instr.src2.is_lo_half()
 
         # Cycle 1: low word
         self._ha_mux.select(src1.value)
-        self._hb_mux.select(instr.src.value)
+        self._hb_mux.select(instr.src2.value)
         result_lo = self._logic_core(operator.and_)
         self._outputs.block_res.set(0)
         self._outputs.block_res_sel.set(Reg.NONE.value)
@@ -117,7 +117,7 @@ class LogicBlock(FunctionalBlock):
 
         # Cycle 2: high word
         self._ha_mux.select(src1.value | 1)
-        self._hb_mux.select(instr.src.value | 1)
+        self._hb_mux.select(instr.src2.value | 1)
         result_hi = self._logic_core(operator.and_)
         result_hi.zf = result_lo.zf and result_hi.zf
         self._outputs.block_res.set(0)
@@ -129,7 +129,7 @@ class LogicBlock(FunctionalBlock):
     def _not(self, instr: MicroInstruction) -> None:
         assert instr.op == MicroOp.NOT
         assert instr.dst is not Reg.NONE
-        assert instr.src is Reg.NONE
+        assert instr.src2 is Reg.NONE
         src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
 
         wr_mask = (
@@ -186,7 +186,7 @@ class LogicBlock(FunctionalBlock):
     def _fabs(self, instr: MicroInstruction) -> None:
         assert instr.op == MicroOp.FABS
         assert instr.dst is not Reg.NONE
-        assert instr.src is Reg.NONE
+        assert instr.src2 is Reg.NONE
         src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
 
         wr_mask = (1 << StatusFlag.ZERO.value) | (1 << StatusFlag.SIGN.value)
@@ -236,7 +236,7 @@ class LogicBlock(FunctionalBlock):
     def _fchs(self, instr: MicroInstruction) -> None:
         assert instr.op == MicroOp.FCHS
         assert instr.dst is not Reg.NONE
-        assert instr.src is Reg.NONE
+        assert instr.src2 is Reg.NONE
         src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
 
         # Inverts sign bit and sets STATUS.S; other flags unaffected
@@ -296,12 +296,12 @@ class LogicBlock(FunctionalBlock):
 
     def _logic_32(self, instr: MicroInstruction, op: Callable) -> None:
         """32-bit generic binary logic operation (1 cycle)."""
-        assert instr.src is not Reg.NONE
+        assert instr.src2 is not Reg.NONE
         assert instr.dst is not Reg.NONE
 
         src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
         self._ha_mux.select(src1.value)
-        self._hb_mux.select(instr.src.value)
+        self._hb_mux.select(instr.src2.value)
         result = self._logic_core(op)
         self._outputs.block_res.set(result.res)
         self._outputs.block_res_sel.set(instr.dst.value)
@@ -311,17 +311,17 @@ class LogicBlock(FunctionalBlock):
 
     def _logic_64(self, instr: MicroInstruction, op: Callable) -> None:
         """64-bit generic binary logic operation (2 cycles)."""
-        assert instr.src is not Reg.NONE
-        assert isinstance(instr.src, Reg)
+        assert instr.src2 is not Reg.NONE
+        assert isinstance(instr.src2, Reg)
         assert instr.dst is not Reg.NONE
         src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
-        assert instr.src.is_lo_half()
+        assert instr.src2.is_lo_half()
         assert src1.is_lo_half()
         assert instr.dst.is_lo_half()
 
         # Cycle 1: low word
         self._ha_mux.select(src1.value)
-        self._hb_mux.select(instr.src.value)
+        self._hb_mux.select(instr.src2.value)
         result_lo = self._logic_core(op)
         self._outputs.block_res.set(result_lo.res)
         self._outputs.block_res_sel.set(instr.dst.value)
@@ -329,7 +329,7 @@ class LogicBlock(FunctionalBlock):
 
         # Cycle 2: high word
         self._ha_mux.select(src1.value | 1)
-        self._hb_mux.select(instr.src.value | 1)
+        self._hb_mux.select(instr.src2.value | 1)
         result_hi = self._logic_core(op)
         result_hi.zf = result_lo.zf and result_hi.zf
         self._outputs.block_res.set(result_hi.res)

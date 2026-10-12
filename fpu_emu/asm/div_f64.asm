@@ -64,5 +64,5 @@ DIV_F64_ZERO:
     JMP NORMALIZE_F64           ; Tail-call pack signed zero
 
 DIV_F64_DIV_ZERO:
-    LDI ERR, 1                  ; Assert hardware divide-by-zero error
+    SET ERR, 1                  ; Assert hardware divide-by-zero error
     RET

@@ -82,6 +82,8 @@ class MemoryBlock(FunctionalBlock):
                 self._ldc(instr)
             case MicroOp.LDI:
                 self._ldi(instr)
+            case MicroOp.SET:
+                self._set(instr)
             case MicroOp.LD:
                 self._ld(instr)
             case MicroOp.STO:
@@ -134,7 +136,7 @@ class MemoryBlock(FunctionalBlock):
         assert instr.op == MicroOp.PUSH
         assert instr.dst is Reg.NONE
         assert instr.src1 is Reg.NONE
-        assert instr.src is not Reg.NONE
+        assert instr.src2 is not Reg.NONE
         if instr.is_w32():
             self._push32(instr)
         else:
@@ -142,15 +144,15 @@ class MemoryBlock(FunctionalBlock):
 
     def _push32(self, instr: MicroInstruction) -> None:
         """push src to TOS"""
-        assert instr.src is not Reg.NONE
-        self._push32_reg(instr.src, clear_err=True)
+        assert instr.src2 is not Reg.NONE
+        self._push32_reg(instr.src2, clear_err=True)
         self._outputs.exec_done.set(1)
         self._writeback()
 
     def _push64(self, instr: MicroInstruction) -> None:
         """push src to TOS, pushes low order bytes first"""
-        assert instr.src is not Reg.NONE
-        if not self._push64_reg(instr.src, clear_err=True):
+        assert instr.src2 is not Reg.NONE
+        if not self._push64_reg(instr.src2, clear_err=True):
             self._outputs.exec_done.set(1)
             return
         self._outputs.exec_done.set(1)
@@ -227,7 +229,7 @@ class MemoryBlock(FunctionalBlock):
         assert instr.op == MicroOp.POP
         assert instr.dst is not Reg.NONE
         assert instr.src1 is Reg.NONE
-        assert instr.src is Reg.NONE
+        assert instr.src2 is Reg.NONE
         if instr.is_w32():
             self._pop32(instr)
         else:
@@ -318,21 +320,21 @@ class MemoryBlock(FunctionalBlock):
         """
         assert instr.op == MicroOp.LDC
         assert instr.dst is not Reg.NONE
-        assert instr.src is not Reg.NONE
-        assert instr.src1 is not Reg.NONE or instr.imm is not None
+        assert instr.src1 is not Reg.NONE
+        assert instr.src2 is not Reg.NONE or instr.imm is not None
 
         self._outputs.status_wr_sel.set(0)
         self._outputs.res_status.set(0)
 
-        # 1. Resolve offset from HA_MUX
-        if instr.src1 is not Reg.NONE and instr.src1 is not Reg.IMM:
-            self._ha_mux.select(instr.src1.value)
+        # 1. Resolve offset from HB_MUX / IMM
+        if instr.src2 is not Reg.NONE and instr.src2 is not Reg.IMM:
+            self._inputs.hb_mux.select(instr.src2.value)
         else:
-            self._ha_mux.select(Reg.IMM.value)
-        offset = self._ha_mux.read_int()
+            self._inputs.hb_mux.select(Reg.IMM.value)
+        offset = self._inputs.hb_mux.read_int()
 
-        # 2. Extract table selector
-        tbl = instr.src
+        # 2. Extract table selector from src1
+        tbl = instr.src1
 
         if instr.is_w32():
             self._ldc_core(dst=instr.dst.value, tbl=tbl, offset=offset)
@@ -375,33 +377,15 @@ class MemoryBlock(FunctionalBlock):
         self._outputs.block_res_sel.set(dst)
 
     def _ldi(self, instr: MicroInstruction) -> None:
-        """Loads 10-bit immediate into a register or modifies a single status flag.
-
-        If dst == Reg.NONE:
-            LDI <flag>, imm
-            Sets or clears the specified StatusFlag to (imm & 1) using status write mask.
-        If dst != Reg.NONE:
-            LDI <reg>, imm
-            Loads 10-bit unsigned immediate into register dst (zero-extended).
-        """
+        """Loads 13-bit immediate into a register dst (zero-extended)."""
         assert instr.op == MicroOp.LDI
+        assert isinstance(instr.dst, Reg) and instr.dst is not Reg.NONE
         assert instr.src1 is Reg.NONE
-        assert instr.src is Reg.NONE or instr.src == Reg.IMM
+        assert instr.src2 is Reg.NONE or instr.src2 == Reg.IMM
         self._inputs.hb_mux.select(Reg.IMM.value)
         imm = self._inputs.hb_mux.read_int()
 
-        if instr.dst is Reg.NONE:
-            flag = instr.flag
-            bit_val = imm & 1
-            mask = 1 << flag.value
-
-            self._outputs.block_res.set(0)
-            self._outputs.block_res_sel.set(Reg.NONE.value)
-            self._outputs.res_status.set(bit_val << flag.value)
-            self._outputs.status_wr_sel.set(mask)
-            self._outputs.exec_done.set(1)
-            self._writeback()
-        elif instr.is_w32():
+        if instr.is_w32():
             self._outputs.block_res.set(imm)
             self._outputs.block_res_sel.set(instr.dst.value)
             self._outputs.res_status.set(0)
@@ -422,12 +406,35 @@ class MemoryBlock(FunctionalBlock):
             self._outputs.exec_done.set(1)
             self._writeback()
 
+    def _set(self, instr: MicroInstruction) -> None:
+        """Sets or clears a single status flag using src1[0].
+
+        SET <flag>, <src1>
+        """
+        assert instr.op == MicroOp.SET
+        assert isinstance(instr.dst, StatusFlag)
+        flag = instr.dst
+        if instr.src1 == Reg.NONE or instr.src1 == Reg.IMM:
+            self._ha_mux.select(Reg.IMM.value)
+        else:
+            self._ha_mux.select(instr.src1.value)
+        val = self._ha_mux.read_int()
+        bit_val = val & 1
+        mask = 1 << flag.value
+
+        self._outputs.block_res.set(0)
+        self._outputs.block_res_sel.set(Reg.NONE.value)
+        self._outputs.res_status.set(bit_val << flag.value)
+        self._outputs.status_wr_sel.set(mask)
+        self._outputs.exec_done.set(1)
+        self._writeback()
+
     def _ld(self, instr: MicroInstruction) -> None:
         """Loads 32-bit or 64-bit from scratchpad RAM SCR[addr]."""
         assert instr.op == MicroOp.LD
         assert instr.dst is not Reg.NONE
         assert instr.src1 is not Reg.NONE
-        assert instr.src is Reg.NONE
+        assert instr.src2 is Reg.NONE
 
         self._outputs.status_wr_sel.set(0)
         self._outputs.res_status.set(0)
@@ -464,7 +471,7 @@ class MemoryBlock(FunctionalBlock):
         assert instr.op == MicroOp.STO
         assert instr.dst is Reg.NONE
         assert instr.src1 is not Reg.NONE
-        assert instr.src is not Reg.NONE
+        assert instr.src2 is not Reg.NONE
 
         self._outputs.status_wr_sel.set(0)
         self._outputs.res_status.set(0)
@@ -475,20 +482,20 @@ class MemoryBlock(FunctionalBlock):
         addr = self._ha_mux.read_int()
 
         if instr.is_w32():
-            self._sto_core(src=instr.src.value, addr=addr)
+            self._sto_core(src=instr.src2.value, addr=addr)
             self._outputs.exec_done.set(1)
             self._writeback()
         else:
-            assert isinstance(instr.src, Reg)
-            assert instr.src.is_lo_half()
+            assert isinstance(instr.src2, Reg)
+            assert instr.src2.is_lo_half()
             assert addr % 2 == 0, "64-bit STO must use even base"
 
             # 1. Write LO word to addr
-            self._sto_core(src=instr.src.value, addr=addr)
+            self._sto_core(src=instr.src2.value, addr=addr)
             self._writeback()
 
             # 2. Write HI word to addr + 1
-            self._sto_core(src=instr.src.value | 1, addr=addr | 1)
+            self._sto_core(src=instr.src2.value | 1, addr=addr | 1)
             self._outputs.exec_done.set(1)
             self._writeback()
 
@@ -503,7 +510,7 @@ class MemoryBlock(FunctionalBlock):
         """Loads 32-bit or 64-bit from user buffer USR[imm] in DATA_RAM."""
         assert instr.op == MicroOp.LDU
         assert instr.dst is not Reg.NONE
-        assert instr.src is Reg.NONE
+        assert instr.src2 is Reg.NONE
         assert instr.src1 is Reg.NONE or instr.src1 == Reg.IMM
 
         self._outputs.status_wr_sel.set(0)
@@ -540,7 +547,7 @@ class MemoryBlock(FunctionalBlock):
         """Stores 32-bit or 64-bit from register src into user buffer USR[imm] in DATA_RAM."""
         assert instr.op == MicroOp.STU
         assert instr.dst is Reg.NONE
-        assert instr.src is not Reg.NONE
+        assert instr.src2 is not Reg.NONE
         assert instr.src1 is Reg.NONE or instr.src1 == Reg.IMM
 
         self._outputs.status_wr_sel.set(0)
@@ -552,20 +559,20 @@ class MemoryBlock(FunctionalBlock):
         imm = self._ha_mux.read_int()
 
         if instr.is_w32():
-            self._stu_core(src=instr.src.value, addr=imm)
+            self._stu_core(src=instr.src2.value, addr=imm)
             self._outputs.exec_done.set(1)
             self._writeback()
         else:
-            assert isinstance(instr.src, Reg)
-            assert instr.src.is_lo_half()
+            assert isinstance(instr.src2, Reg)
+            assert instr.src2.is_lo_half()
             assert imm % 2 == 0, "64-bit STU must use even base"
 
             # 1. Write LO word to addr
-            self._stu_core(src=instr.src.value, addr=imm)
+            self._stu_core(src=instr.src2.value, addr=imm)
             self._writeback()
 
             # 2. Write HI word to addr + 1
-            self._stu_core(src=instr.src.value | 1, addr=imm | 1)
+            self._stu_core(src=instr.src2.value | 1, addr=imm | 1)
             self._outputs.exec_done.set(1)
             self._writeback()
 
@@ -579,30 +586,30 @@ class MemoryBlock(FunctionalBlock):
     def _mov(self, instr: MicroInstruction) -> None:
         assert instr.op == MicroOp.MOV
         assert instr.dst is not Reg.NONE
-        assert instr.src is not Reg.NONE
+        assert instr.src2 is not Reg.NONE
         assert instr.src1 is Reg.NONE
 
         self._outputs.status_wr_sel.set(0)
         self._outputs.res_status.set(0)
 
         if instr.is_w32():
-            self._inputs.hb_mux.select(instr.src.value)
+            self._inputs.hb_mux.select(instr.src2.value)
             self._outputs.block_res.set(self._inputs.hb_mux.read_int())
             self._outputs.block_res_sel.set(instr.dst.value)
             self._outputs.exec_done.set(1)
             self._writeback()
         else:
-            assert isinstance(instr.src, Reg)
-            assert instr.src.is_lo_half()
+            assert isinstance(instr.src2, Reg)
+            assert instr.src2.is_lo_half()
             assert instr.dst.is_lo_half()
             # 1. Transfer LO word
-            self._inputs.hb_mux.select(instr.src.value)
+            self._inputs.hb_mux.select(instr.src2.value)
             self._outputs.block_res.set(self._inputs.hb_mux.read_int())
             self._outputs.block_res_sel.set(instr.dst.value)
             self._writeback()
 
             # 2. Transfer HI word
-            self._inputs.hb_mux.select(instr.src.value | 1)
+            self._inputs.hb_mux.select(instr.src2.value | 1)
             self._outputs.block_res.set(self._inputs.hb_mux.read_int())
             self._outputs.block_res_sel.set(instr.dst.value | 1)
             self._outputs.exec_done.set(1)
@@ -610,7 +617,7 @@ class MemoryBlock(FunctionalBlock):
 
     def _swap(self, instr: MicroInstruction) -> None:
         assert instr.op == MicroOp.SWAP
-        assert instr.src is not Reg.NONE
+        assert instr.src2 is not Reg.NONE
         assert instr.dst is not Reg.NONE
         src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
 
@@ -630,17 +637,17 @@ class MemoryBlock(FunctionalBlock):
         self._outputs.status_wr_sel.set(0)
         self._outputs.res_status.set(0)
 
-        if src1 == instr.src:
+        if src1 == instr.src2:
             self._outputs.block_res_sel.set(Reg.NONE.value)
             self._outputs.exec_done.set(1)
             self._writeback()
             return
 
         # Use FL as intermediary unless FL is an operand, in which case use DL
-        temp_reg = Reg.DL if Reg.FL in (src1, instr.src) else Reg.FL
+        temp_reg = Reg.DL if Reg.FL in (src1, instr.src2) else Reg.FL
 
         # Cycle 1: temp_reg <- src
-        self._inputs.hb_mux.select(instr.src.value)
+        self._inputs.hb_mux.select(instr.src2.value)
         self._outputs.block_res.set(self._inputs.hb_mux.read_int())
         self._outputs.block_res_sel.set(temp_reg.value)
         self._outputs.exec_done.set(0)
@@ -649,7 +656,7 @@ class MemoryBlock(FunctionalBlock):
         # Cycle 2: src <- src1
         self._inputs.hb_mux.select(src1.value)
         self._outputs.block_res.set(self._inputs.hb_mux.read_int())
-        self._outputs.block_res_sel.set(instr.src.value)
+        self._outputs.block_res_sel.set(instr.src2.value)
         self._outputs.exec_done.set(0)
         self._writeback()
 
@@ -663,24 +670,24 @@ class MemoryBlock(FunctionalBlock):
     def _swap_64(self, instr: MicroInstruction, src1: Reg) -> None:
         """Exchanges the contents of two 64-bit registers using FL/FH (or DL/DH) as intermediary."""
         assert src1.is_lo_half()
-        assert isinstance(instr.src, Reg)
-        assert instr.src.is_lo_half()
+        assert isinstance(instr.src2, Reg)
+        assert instr.src2.is_lo_half()
 
         self._outputs.status_wr_sel.set(0)
         self._outputs.res_status.set(0)
 
-        if src1 == instr.src:
+        if src1 == instr.src2:
             self._outputs.block_res_sel.set(Reg.NONE.value)
             self._outputs.exec_done.set(1)
             self._writeback()
             return
 
         # Use FL/FH as intermediary unless FL is an operand, in which case use DL/DH
-        temp_reg = Reg.DL if Reg.FL in (src1, instr.src) else Reg.FL
+        temp_reg = Reg.DL if Reg.FL in (src1, instr.src2) else Reg.FL
 
         # Swap low word
         # Cycle 1: temp_reg <- src_lo
-        self._inputs.hb_mux.select(instr.src.value)
+        self._inputs.hb_mux.select(instr.src2.value)
         self._outputs.block_res.set(self._inputs.hb_mux.read_int())
         self._outputs.block_res_sel.set(temp_reg.value)
         self._outputs.exec_done.set(0)
@@ -689,7 +696,7 @@ class MemoryBlock(FunctionalBlock):
         # Cycle 2: src_lo <- src1_lo
         self._inputs.hb_mux.select(src1.value)
         self._outputs.block_res.set(self._inputs.hb_mux.read_int())
-        self._outputs.block_res_sel.set(instr.src.value)
+        self._outputs.block_res_sel.set(instr.src2.value)
         self._outputs.exec_done.set(0)
         self._writeback()
 
@@ -702,7 +709,7 @@ class MemoryBlock(FunctionalBlock):
 
         # Swap high word
         # Cycle 4: temp_reg_hi <- src_hi
-        self._inputs.hb_mux.select(instr.src.value | 1)
+        self._inputs.hb_mux.select(instr.src2.value | 1)
         self._outputs.block_res.set(self._inputs.hb_mux.read_int())
         self._outputs.block_res_sel.set(temp_reg.value | 1)
         self._outputs.exec_done.set(0)
@@ -711,7 +718,7 @@ class MemoryBlock(FunctionalBlock):
         # Cycle 5: src_hi <- src1_hi
         self._inputs.hb_mux.select(src1.value | 1)
         self._outputs.block_res.set(self._inputs.hb_mux.read_int())
-        self._outputs.block_res_sel.set(instr.src.value | 1)
+        self._outputs.block_res_sel.set(instr.src2.value | 1)
         self._outputs.exec_done.set(0)
         self._writeback()
 
@@ -726,7 +733,7 @@ class MemoryBlock(FunctionalBlock):
         assert instr.op == MicroOp.SSAV
         assert instr.dst is Reg.NONE
         assert instr.src1 is Reg.NONE
-        assert instr.src is Reg.NONE
+        assert instr.src2 is Reg.NONE
         status = self._inputs.status.read_int()
         self._status_shadow.write(status)
         self._outputs.block_res.set(0)
@@ -739,7 +746,7 @@ class MemoryBlock(FunctionalBlock):
         assert instr.op == MicroOp.SRES
         assert instr.dst is Reg.NONE
         assert instr.src1 is Reg.NONE
-        assert instr.src is Reg.NONE
+        assert instr.src2 is Reg.NONE
         status = self._status_shadow.read_int()
         self._outputs.block_res.set(0)
         self._outputs.block_res_sel.set(Reg.NONE.value)

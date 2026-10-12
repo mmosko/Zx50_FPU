@@ -291,7 +291,7 @@ TRIG_F64_ENTRY:
 .trig_inf_err:
     ; Return Quiet NaN (0x7FF80000_00000000) with ERR=1
     LDC AX, CONST, NAN_F64
-    LDI ERR, 1
+    SET ERR, 1
     HALT AX
 
 ; ==============================================================================

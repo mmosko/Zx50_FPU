@@ -22,7 +22,7 @@ def test_and_32_basic(fpga: FpgaModel):
     fpga.reg_file.al.write(0x0000FFFF)
     fpga.reg_file.bl.write(0x00FF00FF)
 
-    instr = MicroInstruction(op=MicroOp.AND, w=IW.W32, dst=Reg.AL, src=Reg.BL)
+    instr = MicroInstruction(op=MicroOp.AND, w=IW.W32, dst=Reg.AL, src2=Reg.BL)
     elapsed = run_logic(fpga, instr)
 
     assert elapsed == 1
@@ -38,7 +38,7 @@ def test_and_32_zero_and_sign(fpga: FpgaModel):
     fpga.reg_file.al.write(0x0F0F0F0F)
     fpga.reg_file.bl.write(0xF0F0F0F0)
 
-    instr = MicroInstruction(op=MicroOp.AND, w=IW.W32, dst=Reg.AL, src=Reg.BL)
+    instr = MicroInstruction(op=MicroOp.AND, w=IW.W32, dst=Reg.AL, src2=Reg.BL)
     run_logic(fpga, instr)
 
     assert fpga.reg_file.al.read_int() == 0
@@ -63,7 +63,7 @@ def test_and_64(fpga: FpgaModel):
     fpga.reg_file.bl.write(0x00FF00FF)
     fpga.reg_file.bh.write(0xFFFFFFFF)
 
-    instr = MicroInstruction(op=MicroOp.AND, w=IW.W64, dst=Reg.AL, src=Reg.BL)
+    instr = MicroInstruction(op=MicroOp.AND, w=IW.W64, dst=Reg.AL, src2=Reg.BL)
     elapsed = run_logic(fpga, instr)
 
     assert elapsed == 2
@@ -79,7 +79,7 @@ def test_or_32_basic(fpga: FpgaModel):
     fpga.reg_file.al.write(0x12000000)
     fpga.reg_file.bl.write(0x00000034)
 
-    instr = MicroInstruction(op=MicroOp.OR, w=IW.W32, dst=Reg.AL, src=Reg.BL)
+    instr = MicroInstruction(op=MicroOp.OR, w=IW.W32, dst=Reg.AL, src2=Reg.BL)
     elapsed = run_logic(fpga, instr)
 
     assert elapsed == 1
@@ -94,7 +94,7 @@ def test_or_64(fpga: FpgaModel):
     fpga.reg_file.bl.write(0x22220000)
     fpga.reg_file.bh.write(0x00003333)
 
-    instr = MicroInstruction(op=MicroOp.OR, w=IW.W64, dst=Reg.AL, src=Reg.BL)
+    instr = MicroInstruction(op=MicroOp.OR, w=IW.W64, dst=Reg.AL, src2=Reg.BL)
     elapsed = run_logic(fpga, instr)
 
     assert elapsed == 2
@@ -108,7 +108,7 @@ def test_xor_32_basic(fpga: FpgaModel):
     fpga.reg_file.al.write(0xAAAAAAAA)
     fpga.reg_file.bl.write(0xAAAAAAAA)
 
-    instr = MicroInstruction(op=MicroOp.XOR, w=IW.W32, dst=Reg.AL, src=Reg.BL)
+    instr = MicroInstruction(op=MicroOp.XOR, w=IW.W32, dst=Reg.AL, src2=Reg.BL)
     elapsed = run_logic(fpga, instr)
 
     assert elapsed == 1
@@ -123,7 +123,7 @@ def test_xor_64(fpga: FpgaModel):
     fpga.reg_file.bl.write(0x12345678)
     fpga.reg_file.bh.write(0x07654321)
 
-    instr = MicroInstruction(op=MicroOp.XOR, w=IW.W64, dst=Reg.AL, src=Reg.BL)
+    instr = MicroInstruction(op=MicroOp.XOR, w=IW.W64, dst=Reg.AL, src2=Reg.BL)
     elapsed = run_logic(fpga, instr)
 
     assert elapsed == 2
@@ -249,7 +249,7 @@ def test_and_32_ternary(fpga: FpgaModel):
     fpga.reg_file.bl.write(0x00FF00FF)
     fpga.reg_file.cl.write(0)
 
-    instr = MicroInstruction(op=MicroOp.AND, w=IW.W32, dst=Reg.CL, src1=Reg.AL, src=Reg.BL)
+    instr = MicroInstruction(op=MicroOp.AND, w=IW.W32, dst=Reg.CL, src1=Reg.AL, src2=Reg.BL)
     elapsed = run_logic(fpga, instr)
 
     assert elapsed == 1
@@ -267,7 +267,7 @@ def test_and_64_ternary(fpga: FpgaModel):
     fpga.reg_file.cl.write(0)
     fpga.reg_file.ch.write(0)
 
-    instr = MicroInstruction(op=MicroOp.AND, w=IW.W64, dst=Reg.CL, src1=Reg.AL, src=Reg.BL)
+    instr = MicroInstruction(op=MicroOp.AND, w=IW.W64, dst=Reg.CL, src1=Reg.AL, src2=Reg.BL)
     elapsed = run_logic(fpga, instr)
 
     assert elapsed == 2
@@ -285,7 +285,7 @@ def test_or_32_ternary(fpga: FpgaModel):
     fpga.reg_file.bl.write(0x00000034)
     fpga.reg_file.cl.write(0)
 
-    instr = MicroInstruction(op=MicroOp.OR, w=IW.W32, dst=Reg.CL, src1=Reg.AL, src=Reg.BL)
+    instr = MicroInstruction(op=MicroOp.OR, w=IW.W32, dst=Reg.CL, src1=Reg.AL, src2=Reg.BL)
     elapsed = run_logic(fpga, instr)
 
     assert elapsed == 1
@@ -303,7 +303,7 @@ def test_or_64_ternary(fpga: FpgaModel):
     fpga.reg_file.cl.write(0)
     fpga.reg_file.ch.write(0)
 
-    instr = MicroInstruction(op=MicroOp.OR, w=IW.W64, dst=Reg.CL, src1=Reg.AL, src=Reg.BL)
+    instr = MicroInstruction(op=MicroOp.OR, w=IW.W64, dst=Reg.CL, src1=Reg.AL, src2=Reg.BL)
     elapsed = run_logic(fpga, instr)
 
     assert elapsed == 2
@@ -321,7 +321,7 @@ def test_xor_32_ternary(fpga: FpgaModel):
     fpga.reg_file.bl.write(0x0F0F0F0F)
     fpga.reg_file.cl.write(0)
 
-    instr = MicroInstruction(op=MicroOp.XOR, w=IW.W32, dst=Reg.CL, src1=Reg.AL, src=Reg.BL)
+    instr = MicroInstruction(op=MicroOp.XOR, w=IW.W32, dst=Reg.CL, src1=Reg.AL, src2=Reg.BL)
     elapsed = run_logic(fpga, instr)
 
     assert elapsed == 1
@@ -339,7 +339,7 @@ def test_xor_64_ternary(fpga: FpgaModel):
     fpga.reg_file.cl.write(0xFF)
     fpga.reg_file.ch.write(0xFF)
 
-    instr = MicroInstruction(op=MicroOp.XOR, w=IW.W64, dst=Reg.CL, src1=Reg.AL, src=Reg.BL)
+    instr = MicroInstruction(op=MicroOp.XOR, w=IW.W64, dst=Reg.CL, src1=Reg.AL, src2=Reg.BL)
     elapsed = run_logic(fpga, instr)
 
     assert elapsed == 2
@@ -355,7 +355,7 @@ def test_test_32(fpga: FpgaModel):
     fpga.reg_file.al.write(0x80000000)
     fpga.reg_file.bl.write(0x80000000)
 
-    instr = MicroInstruction(op=MicroOp.TEST, w=IW.W32, dst=Reg.AL, src=Reg.BL)
+    instr = MicroInstruction(op=MicroOp.TEST, w=IW.W32, dst=Reg.AL, src2=Reg.BL)
     elapsed = run_logic(fpga, instr)
 
     assert elapsed == 1
@@ -382,7 +382,7 @@ def test_test_64(fpga: FpgaModel):
     fpga.reg_file.bl.write(0x12345678)
     fpga.reg_file.bh.write(0x80000000)
 
-    instr = MicroInstruction(op=MicroOp.TEST, w=IW.W64, dst=Reg.AL, src=Reg.BL)
+    instr = MicroInstruction(op=MicroOp.TEST, w=IW.W64, dst=Reg.AL, src2=Reg.BL)
     elapsed = run_logic(fpga, instr)
 
     assert elapsed == 2
@@ -401,7 +401,7 @@ def test_not_32_binary(fpga: FpgaModel):
     fpga.reg_file.al.write(0x0000FFFF)
     fpga.reg_file.bl.write(0)
 
-    instr = MicroInstruction(op=MicroOp.NOT, w=IW.W32, dst=Reg.BL, src1=Reg.AL, src=Reg.NONE)
+    instr = MicroInstruction(op=MicroOp.NOT, w=IW.W32, dst=Reg.BL, src1=Reg.AL, src2=Reg.NONE)
     elapsed = run_logic(fpga, instr)
 
     assert elapsed == 1
@@ -418,7 +418,7 @@ def test_not_64_binary(fpga: FpgaModel):
     fpga.reg_file.bl.write(0)
     fpga.reg_file.bh.write(0)
 
-    instr = MicroInstruction(op=MicroOp.NOT, w=IW.W64, dst=Reg.BL, src1=Reg.AL, src=Reg.NONE)
+    instr = MicroInstruction(op=MicroOp.NOT, w=IW.W64, dst=Reg.BL, src1=Reg.AL, src2=Reg.NONE)
     elapsed = run_logic(fpga, instr)
 
     assert elapsed == 2
@@ -434,7 +434,7 @@ def test_fabs_32_binary(fpga: FpgaModel):
     fpga.reg_file.al.write(0xBF800000)  # -1.0f
     fpga.reg_file.bl.write(0)
 
-    instr = MicroInstruction(op=MicroOp.FABS, w=IW.W32, dst=Reg.BL, src1=Reg.AL, src=Reg.NONE)
+    instr = MicroInstruction(op=MicroOp.FABS, w=IW.W32, dst=Reg.BL, src1=Reg.AL, src2=Reg.NONE)
     elapsed = run_logic(fpga, instr)
 
     assert elapsed == 1
@@ -449,7 +449,7 @@ def test_fabs_64_binary(fpga: FpgaModel):
     fpga.reg_file.bl.write(0)
     fpga.reg_file.bh.write(0)
 
-    instr = MicroInstruction(op=MicroOp.FABS, w=IW.W64, dst=Reg.BL, src1=Reg.AL, src=Reg.NONE)
+    instr = MicroInstruction(op=MicroOp.FABS, w=IW.W64, dst=Reg.BL, src1=Reg.AL, src2=Reg.NONE)
     elapsed = run_logic(fpga, instr)
 
     assert elapsed == 2
@@ -464,7 +464,7 @@ def test_fchs_32_binary(fpga: FpgaModel):
     fpga.reg_file.al.write(0x3F800000)  # +1.0f
     fpga.reg_file.bl.write(0)
 
-    instr = MicroInstruction(op=MicroOp.FCHS, w=IW.W32, dst=Reg.BL, src1=Reg.AL, src=Reg.NONE)
+    instr = MicroInstruction(op=MicroOp.FCHS, w=IW.W32, dst=Reg.BL, src1=Reg.AL, src2=Reg.NONE)
     elapsed = run_logic(fpga, instr)
 
     assert elapsed == 1
@@ -480,7 +480,7 @@ def test_fchs_64_binary(fpga: FpgaModel):
     fpga.reg_file.bl.write(0)
     fpga.reg_file.bh.write(0)
 
-    instr = MicroInstruction(op=MicroOp.FCHS, w=IW.W64, dst=Reg.BL, src1=Reg.AL, src=Reg.NONE)
+    instr = MicroInstruction(op=MicroOp.FCHS, w=IW.W64, dst=Reg.BL, src1=Reg.AL, src2=Reg.NONE)
     elapsed = run_logic(fpga, instr)
 
     assert elapsed == 2
@@ -492,7 +492,7 @@ def test_fchs_64_binary(fpga: FpgaModel):
 
 
 def test_unsupported_opcode_raises(fpga: FpgaModel):
-    instr = MicroInstruction(op=MicroOp.ADD, w=IW.W32, dst=Reg.AL, src=Reg.BL)
+    instr = MicroInstruction(op=MicroOp.ADD, w=IW.W32, dst=Reg.AL, src2=Reg.BL)
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
 
     with pytest.raises(HardwareBusError, match="Unsupported opcode"):
@@ -504,7 +504,7 @@ def test_dispatcher_and_execution(fpga: FpgaModel):
     fpga.reg_file.bl.write(0x12345678)
 
     microcode = [
-        MicroInstruction(op=MicroOp.AND, w=IW.W32, dst=Reg.AL, src=Reg.BL),
+        MicroInstruction(op=MicroOp.AND, w=IW.W32, dst=Reg.AL, src2=Reg.BL),
     ]
 
     fpga.dispatcher._run(microcode)

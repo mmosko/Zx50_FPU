@@ -14,7 +14,7 @@ def create_nop_instruction() -> MicroInstruction:
         op=MicroOp.NOP,
         w=IW.W32,
         dst=Reg.NONE,
-        src=Reg.NONE,
+        src2=Reg.NONE,
         src1=Reg.NONE,
     )
 
@@ -67,23 +67,23 @@ def format_micro_instruction(inst: MicroInstruction) -> str:
     parts = [f"op=MicroOp.{inst.op.name}"]
     if inst.w == IW.W64:
         parts.append("w=IW.W64")
-    if inst.dst != Reg.NONE:
+    if isinstance(inst.dst, StatusFlag):
+        parts.append(f"dst=StatusFlag.{inst.dst.name}")
+    elif inst.dst != Reg.NONE:
         parts.append(f"dst=Reg.{inst.dst.name}")
     if inst.src1 != Reg.NONE:
-        parts.append(f"src1=Reg.{inst.src1.name}")
-    if inst.src != Reg.NONE:
-        if isinstance(inst.src, FpuTable):
-            parts.append(f"src=FpuTable.{inst.src.name}")
+        if isinstance(inst.src1, FpuTable):
+            parts.append(f"src1=FpuTable.{inst.src1.name}")
         else:
-            parts.append(f"src=Reg.{inst.src.name}")
-    if inst.op in (MicroOp.JZ, MicroOp.JNZ) or (inst.op == MicroOp.LDI and inst.dst == Reg.NONE) or inst.flag.value != 0:
-        parts.append(f"flag=StatusFlag.{inst.flag.name}")
+            parts.append(f"src1=Reg.{inst.src1.name}")
+    if inst.src2 != Reg.NONE:
+        parts.append(f"src2=Reg.{inst.src2.name}")
     if (
         inst.imm != 0
-        or inst.src == Reg.IMM
+        or inst.src2 == Reg.IMM
         or inst.src1 == Reg.IMM
         or (inst.op in (MicroOp.LD, MicroOp.STO) and inst.src1 in (Reg.NONE, Reg.IMM))
-        or inst.op in (MicroOp.JMP, MicroOp.CALL, MicroOp.JZ, MicroOp.JNZ, MicroOp.LDC)
+        or inst.op in (MicroOp.JMP, MicroOp.CALL, MicroOp.JZ, MicroOp.JNZ, MicroOp.LDC, MicroOp.SET)
     ):
         parts.append(f"imm={inst.imm}")
     return f"MicroInstruction({', '.join(parts)})"

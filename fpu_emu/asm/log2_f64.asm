@@ -203,5 +203,5 @@ LOG2_F64_RET_INPUT:
     RET
 
 LOG2_F64_ERR:
-    LDI ERR, 1                  ; Assert domain error
+    SET ERR, 1                  ; Assert domain error
     RET

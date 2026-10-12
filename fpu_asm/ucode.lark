@@ -87,6 +87,7 @@ mem_addr: imm_operand | reg_indirect
 inst_mem: "LDC"i [WIDTH_SUFFIX] reg "," table_ref "," reg_or_imm   -> inst_ldc
         | "LDI"i reg "," imm_operand                               -> inst_ldi_reg
         | "LDI"i FLAG "," imm_operand                              -> inst_ldi_flag
+        | "SET"i FLAG "," reg_or_imm                               -> inst_set
         | "LD"i [WIDTH_SUFFIX] reg "," mem_addr                    -> inst_ld
         | "STO"i [WIDTH_SUFFIX] mem_addr "," reg_or_imm            -> inst_sto
         | "LDU"i [WIDTH_SUFFIX] reg "," imm_operand                -> inst_ldu

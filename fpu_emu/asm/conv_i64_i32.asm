@@ -33,5 +33,5 @@ USER_CONV_I64_I32:
     HALT
 CONV_I64_I32_VF:
     OR AL, AL                   ; Set ZERO=(AL==0), SIGN=AL[31], CARRY=0, OVERFLOW=0
-    LDI OVERFLOW, 1             ; Assert OVERFLOW=1
+    SET OVERFLOW, 1             ; Assert OVERFLOW=1
     HALT

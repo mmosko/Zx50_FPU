@@ -29,7 +29,7 @@ def test_lzc_32_msb_set(fpga: FpgaModel):
     """AL = 0x80000000 -> 0 leading zeros, ZF = False, C = 0."""
     fpga.reg_file.al.write(0x80000000)
 
-    instr = MicroInstruction(op=MicroOp.LZC, w=IW.W32, dst=Reg.C, src=Reg.AL)
+    instr = MicroInstruction(op=MicroOp.LZC, w=IW.W32, dst=Reg.C, src2=Reg.AL)
     elapsed = run_shifter(fpga, instr)
 
     assert elapsed == 1
@@ -41,7 +41,7 @@ def test_lzc_32_systemref_example(fpga: FpgaModel):
     """SystemReference.md example: AL = 0x00080000 -> 12 leading zeros, C = 12."""
     fpga.reg_file.al.write(0x00080000)
 
-    instr = MicroInstruction(op=MicroOp.LZC, w=IW.W32, dst=Reg.C, src=Reg.AL)
+    instr = MicroInstruction(op=MicroOp.LZC, w=IW.W32, dst=Reg.C, src2=Reg.AL)
     elapsed = run_shifter(fpga, instr)
 
     assert elapsed == 1
@@ -53,7 +53,7 @@ def test_lzc_32_lsb_set(fpga: FpgaModel):
     """AL = 0x00000001 -> 31 leading zeros, C = 31."""
     fpga.reg_file.al.write(0x00000001)
 
-    instr = MicroInstruction(op=MicroOp.LZC, w=IW.W32, dst=Reg.C, src=Reg.AL)
+    instr = MicroInstruction(op=MicroOp.LZC, w=IW.W32, dst=Reg.C, src2=Reg.AL)
     elapsed = run_shifter(fpga, instr)
 
     assert elapsed == 1
@@ -65,7 +65,7 @@ def test_lzc_32_zero(fpga: FpgaModel):
     """AL = 0x00000000 -> 32 leading zeros, ZF = True, C = 32."""
     fpga.reg_file.al.write(0x00000000)
 
-    instr = MicroInstruction(op=MicroOp.LZC, w=IW.W32, dst=Reg.C, src=Reg.AL)
+    instr = MicroInstruction(op=MicroOp.LZC, w=IW.W32, dst=Reg.C, src2=Reg.AL)
     elapsed = run_shifter(fpga, instr)
 
     assert elapsed == 1
@@ -89,7 +89,7 @@ def test_lzc_32_dst_register_override(fpga: FpgaModel):
     """Writing LZC result to a general register (e.g. BL) instead of C."""
     fpga.reg_file.al.write(0x00000004)  # bit 2 -> 29 leading zeros
 
-    instr = MicroInstruction(op=MicroOp.LZC, w=IW.W32, dst=Reg.BL, src=Reg.AL)
+    instr = MicroInstruction(op=MicroOp.LZC, w=IW.W32, dst=Reg.BL, src2=Reg.AL)
     elapsed = run_shifter(fpga, instr)
 
     assert elapsed == 1
@@ -101,7 +101,7 @@ def test_lzc_32_src_register_override(fpga: FpgaModel):
     """Counting leading zeros of BL instead of AL."""
     fpga.reg_file.bl.write(0x40000000)  # bit 30 -> 1 leading zero
 
-    instr = MicroInstruction(op=MicroOp.LZC, w=IW.W32, dst=Reg.C, src=Reg.BL)
+    instr = MicroInstruction(op=MicroOp.LZC, w=IW.W32, dst=Reg.C, src2=Reg.BL)
     elapsed = run_shifter(fpga, instr)
 
     assert elapsed == 1
@@ -118,7 +118,7 @@ def test_lzc_32_preserves_unrelated_flags(fpga: FpgaModel):
 
     fpga.reg_file.al.write(0x00000000)
 
-    instr = MicroInstruction(op=MicroOp.LZC, w=IW.W32, dst=Reg.C, src=Reg.AL)
+    instr = MicroInstruction(op=MicroOp.LZC, w=IW.W32, dst=Reg.C, src2=Reg.AL)
     run_shifter(fpga, instr)
 
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ZERO)
@@ -138,7 +138,7 @@ def test_lzc_64_msb_set(fpga: FpgaModel):
     fpga.reg_file.ah.write(0x80000000)
     fpga.reg_file.al.write(0x00000000)
 
-    instr = MicroInstruction(op=MicroOp.LZC, w=IW.W64, dst=Reg.C, src=Reg.AL)
+    instr = MicroInstruction(op=MicroOp.LZC, w=IW.W64, dst=Reg.C, src2=Reg.AL)
     elapsed = run_shifter(fpga, instr)
 
     assert elapsed == 2
@@ -151,7 +151,7 @@ def test_lzc_64_high_word_nonzero(fpga: FpgaModel):
     fpga.reg_file.ah.write(0x00080000)
     fpga.reg_file.al.write(0x12345678)
 
-    instr = MicroInstruction(op=MicroOp.LZC, w=IW.W64, dst=Reg.C, src=Reg.AL)
+    instr = MicroInstruction(op=MicroOp.LZC, w=IW.W64, dst=Reg.C, src2=Reg.AL)
     elapsed = run_shifter(fpga, instr)
 
     assert elapsed == 2
@@ -164,7 +164,7 @@ def test_lzc_64_boundary_bit31(fpga: FpgaModel):
     fpga.reg_file.ah.write(0x00000000)
     fpga.reg_file.al.write(0x80000000)
 
-    instr = MicroInstruction(op=MicroOp.LZC, w=IW.W64, dst=Reg.C, src=Reg.AL)
+    instr = MicroInstruction(op=MicroOp.LZC, w=IW.W64, dst=Reg.C, src2=Reg.AL)
     elapsed = run_shifter(fpga, instr)
 
     assert elapsed == 2
@@ -177,7 +177,7 @@ def test_lzc_64_low_word_nonzero(fpga: FpgaModel):
     fpga.reg_file.ah.write(0x00000000)
     fpga.reg_file.al.write(0x00080000)
 
-    instr = MicroInstruction(op=MicroOp.LZC, w=IW.W64, dst=Reg.C, src=Reg.AL)
+    instr = MicroInstruction(op=MicroOp.LZC, w=IW.W64, dst=Reg.C, src2=Reg.AL)
     elapsed = run_shifter(fpga, instr)
 
     assert elapsed == 2
@@ -190,7 +190,7 @@ def test_lzc_64_lsb_set(fpga: FpgaModel):
     fpga.reg_file.ah.write(0x00000000)
     fpga.reg_file.al.write(0x00000001)
 
-    instr = MicroInstruction(op=MicroOp.LZC, w=IW.W64, dst=Reg.C, src=Reg.AL)
+    instr = MicroInstruction(op=MicroOp.LZC, w=IW.W64, dst=Reg.C, src2=Reg.AL)
     elapsed = run_shifter(fpga, instr)
 
     assert elapsed == 2
@@ -203,7 +203,7 @@ def test_lzc_64_zero(fpga: FpgaModel):
     fpga.reg_file.ah.write(0x00000000)
     fpga.reg_file.al.write(0x00000000)
 
-    instr = MicroInstruction(op=MicroOp.LZC, w=IW.W64, dst=Reg.C, src=Reg.AL)
+    instr = MicroInstruction(op=MicroOp.LZC, w=IW.W64, dst=Reg.C, src2=Reg.AL)
     elapsed = run_shifter(fpga, instr)
 
     assert elapsed == 2
@@ -217,7 +217,7 @@ def test_lzc_64_dst_pair(fpga: FpgaModel):
     fpga.reg_file.bh.write(0x00000000)
     fpga.reg_file.bl.write(0x00000008)  # bit 3 set -> 64 - 4 = 60 leading zeros
 
-    instr = MicroInstruction(op=MicroOp.LZC, w=IW.W64, dst=Reg.AL, src=Reg.BL)
+    instr = MicroInstruction(op=MicroOp.LZC, w=IW.W64, dst=Reg.AL, src2=Reg.BL)
     elapsed = run_shifter(fpga, instr)
 
     assert elapsed == 3
@@ -250,7 +250,7 @@ def test_lsl_32_explicit_src(fpga: FpgaModel):
     """AL = 0x0000000F, IMM = 4 -> AL = 0x000000F0, CF = 0."""
     fpga.reg_file.al.write(0x0000000F)
 
-    instr = MicroInstruction(op=MicroOp.LSL, w=IW.W32, dst=Reg.AL, src=Reg.IMM, imm=4)
+    instr = MicroInstruction(op=MicroOp.LSL, w=IW.W32, dst=Reg.AL, src2=Reg.IMM, imm=4)
     elapsed = run_shifter(fpga, instr)
 
     assert elapsed == 1
@@ -341,7 +341,7 @@ def test_lsr_32_explicit_src(fpga: FpgaModel):
     """AL = 0x000000F0, IMM = 4 -> AL = 0x0000000F, CF = 0."""
     fpga.reg_file.al.write(0x000000F0)
 
-    instr = MicroInstruction(op=MicroOp.LSR, w=IW.W32, dst=Reg.AL, src=Reg.IMM, imm=4)
+    instr = MicroInstruction(op=MicroOp.LSR, w=IW.W32, dst=Reg.AL, src2=Reg.IMM, imm=4)
     elapsed = run_shifter(fpga, instr)
 
     assert elapsed == 1

@@ -301,7 +301,7 @@ class Pass2Encoder(Transformer):
             w=w,
             dst=dst,
             src1=src1 if isinstance(src1, Reg) else Reg.NONE,
-            src=src2 if isinstance(src2, Reg) else Reg.NONE,
+            src2=src2 if isinstance(src2, Reg) else Reg.NONE,
             imm=imm,
         )
 
@@ -322,7 +322,7 @@ class Pass2Encoder(Transformer):
             op=MicroOp.CMP,
             w=w,
             dst=src1,
-            src=src2,
+            src2=src2,
             imm=imm,
         )
 
@@ -343,7 +343,7 @@ class Pass2Encoder(Transformer):
             op=MicroOp.TEST,
             w=w,
             dst=src1,
-            src=src2,
+            src2=src2,
             imm=imm,
         )
 
@@ -368,7 +368,7 @@ class Pass2Encoder(Transformer):
 
         w = IW.W64 if (forced_w64 or is_64_dst or is_64_s1 or is_64_s2) else IW.W32
 
-        return MicroInstruction(op=MicroOp.parse(op_str), w=w, dst=dst, src1=src1, src=src2)
+        return MicroInstruction(op=MicroOp.parse(op_str), w=w, dst=dst, src1=src1, src2=src2)
 
     def inst_math_alu(self, children):
         op_str = str(children[0].value).upper()
@@ -399,7 +399,7 @@ class Pass2Encoder(Transformer):
             w=w,
             dst=dst,
             src1=src1 if isinstance(src1, Reg) else Reg.NONE,
-            src=src2 if isinstance(src2, Reg) else Reg.NONE,
+            src2=src2 if isinstance(src2, Reg) else Reg.NONE,
             imm=imm,
         )
 
@@ -432,7 +432,7 @@ class Pass2Encoder(Transformer):
             w=w,
             dst=dst,
             src1=src1 if isinstance(src1, Reg) else Reg.NONE,
-            src=src2 if isinstance(src2, Reg) else Reg.NONE,
+            src2=src2 if isinstance(src2, Reg) else Reg.NONE,
             imm=imm,
         )
 
@@ -455,7 +455,7 @@ class Pass2Encoder(Transformer):
             is_64_s1 = False
 
         w = IW.W64 if (forced_w64 or is_64_dst or is_64_s1) else IW.W32
-        return MicroInstruction(op=MicroOp.parse(op_str), w=w, dst=dst, src1=src1, src=Reg.NONE)
+        return MicroInstruction(op=MicroOp.parse(op_str), w=w, dst=dst, src1=src1, src2=Reg.NONE)
 
     def inst_shift(self, children):
         op_str = str(children[0].value).upper()
@@ -476,7 +476,7 @@ class Pass2Encoder(Transformer):
                 src2_raw = children[idx + 1]
             src2, imm, is_64_s2 = self._parse_reg_or_imm(src2_raw)
             w = IW.W64 if (forced_w64 or is_64_s2) else IW.W32
-            return MicroInstruction(op=MicroOp.LZC, w=w, dst=dst, src=src2, imm=imm)
+            return MicroInstruction(op=MicroOp.LZC, w=w, dst=dst, src2=src2, imm=imm)
         else:
             dst, is_64_dst = self._normalize_reg(children[idx])
             idx += 1
@@ -513,7 +513,7 @@ class Pass2Encoder(Transformer):
                 raise AssemblerError(f"Too many operands for {op_str}")
 
             w = IW.W64 if (forced_w64 or is_64_dst or is_64_s1 or is_64_s2) else IW.W32
-            return MicroInstruction(op=MicroOp.parse(op_str), w=w, dst=dst, src1=src1, src=src2, imm=imm)
+            return MicroInstruction(op=MicroOp.parse(op_str), w=w, dst=dst, src1=src1, src2=src2, imm=imm)
 
     def inst_push(self, children):
         idx = 0
@@ -524,7 +524,7 @@ class Pass2Encoder(Transformer):
             idx += 1
         src2, imm, is_64_s2 = self._parse_reg_or_imm(children[idx])
         w = IW.W64 if (forced_w64 or is_64_s2) else IW.W32
-        return MicroInstruction(op=MicroOp.PUSH, w=w, dst=Reg.NONE, src=src2, imm=imm)
+        return MicroInstruction(op=MicroOp.PUSH, w=w, dst=Reg.NONE, src2=src2, imm=imm)
 
     def inst_pop(self, children):
         idx = 0
@@ -564,22 +564,33 @@ class Pass2Encoder(Transformer):
         offset = children[idx + 2]
         w = IW.W64 if (forced_w64 or is_64_dst) else IW.W32
         if isinstance(offset, Reg):
-            src1, _ = self._normalize_reg(offset)
+            src2, _ = self._normalize_reg(offset)
             imm = 0
         else:
-            src1 = Reg.IMM
+            src2 = Reg.IMM
             imm = int(offset)
-        return MicroInstruction(op=MicroOp.LDC, w=w, dst=dst, src=table, src1=src1, imm=imm)
+        return MicroInstruction(op=MicroOp.LDC, w=w, dst=dst, src1=table, src2=src2, imm=imm)
 
     def inst_ldi_reg(self, children):
         dst, _ = self._normalize_reg(children[0])
         imm = int(children[1])
-        return MicroInstruction(op=MicroOp.LDI, w=IW.W32, dst=dst, src=Reg.IMM, imm=imm)
+        return MicroInstruction(op=MicroOp.LDI, w=IW.W32, dst=dst, src2=Reg.IMM, imm=imm)
 
     def inst_ldi_flag(self, children):
         flag = StatusFlag(children[0])
         imm = int(children[1])
-        return MicroInstruction(op=MicroOp.LDI, w=IW.W32, dst=Reg.NONE, flag=flag, src=Reg.IMM, imm=imm)
+        return MicroInstruction(op=MicroOp.SET, w=IW.W32, dst=flag, src1=Reg.IMM, imm=imm)
+
+    def inst_set(self, children):
+        flag = StatusFlag(children[0])
+        val_item = children[1]
+        if isinstance(val_item, Reg):
+            src1, _ = self._normalize_reg(val_item)
+            imm = 0
+        else:
+            src1 = Reg.IMM
+            imm = int(val_item)
+        return MicroInstruction(op=MicroOp.SET, w=IW.W32, dst=flag, src1=src1, imm=imm)
 
     def inst_ld(self, children):
         idx = 0
@@ -614,7 +625,7 @@ class Pass2Encoder(Transformer):
                 op=MicroOp.STO,
                 w=w,
                 dst=Reg.NONE,
-                src=src2,
+                src2=src2,
                 src1=src1,
                 imm=imm,
             )
@@ -624,7 +635,7 @@ class Pass2Encoder(Transformer):
                 op=MicroOp.STO,
                 w=w,
                 dst=Reg.NONE,
-                src=src2,
+                src2=src2,
                 src1=Reg.IMM,
                 imm=addr if imm == 0 else imm,
             )
@@ -655,7 +666,7 @@ class Pass2Encoder(Transformer):
             op=MicroOp.STU,
             w=w,
             dst=Reg.NONE,
-            src=src2,
+            src2=src2,
             imm=addr if imm == 0 else imm,
         )
 
@@ -669,7 +680,7 @@ class Pass2Encoder(Transformer):
         dst, is_64_dst = self._normalize_reg(children[idx])
         src2, imm, is_64_s2 = self._parse_reg_or_imm(children[idx + 1])
         w = IW.W64 if (forced_w64 or is_64_dst or is_64_s2) else IW.W32
-        return MicroInstruction(op=MicroOp.MOV, w=w, dst=dst, src=src2, imm=imm)
+        return MicroInstruction(op=MicroOp.MOV, w=w, dst=dst, src2=src2, imm=imm)
 
     def inst_swap(self, children):
         idx = 0
@@ -681,7 +692,7 @@ class Pass2Encoder(Transformer):
         dst, is_64_dst = self._normalize_reg(children[idx])
         src2, is_64_s2 = self._normalize_reg(children[idx + 1])
         w = IW.W64 if (forced_w64 or is_64_dst or is_64_s2) else IW.W32
-        return MicroInstruction(op=MicroOp.SWAP, w=w, dst=dst, src=src2)
+        return MicroInstruction(op=MicroOp.SWAP, w=w, dst=dst, src2=src2)
 
     def inst_jmp(self, children):
         target = int(children[0])
@@ -689,7 +700,7 @@ class Pass2Encoder(Transformer):
             op=MicroOp.JMP,
             w=IW.W32,
             dst=Reg.NONE,
-            src=Reg.NONE,
+            src2=Reg.NONE,
             imm=target,
         )
 
@@ -700,7 +711,7 @@ class Pass2Encoder(Transformer):
         else:
             flag_val = StatusFlag.ZERO.value
             target = int(children[0])
-        return MicroInstruction(op=MicroOp.JNZ, w=IW.W32, flag=StatusFlag(flag_val), imm=target)
+        return MicroInstruction(op=MicroOp.JNZ, w=IW.W32, dst=StatusFlag(flag_val), imm=target)
 
     def inst_jz(self, children):
         if len(children) == 2:
@@ -709,7 +720,7 @@ class Pass2Encoder(Transformer):
         else:
             flag_val = StatusFlag.ZERO.value
             target = int(children[0])
-        return MicroInstruction(op=MicroOp.JZ, w=IW.W32, flag=StatusFlag(flag_val), imm=target)
+        return MicroInstruction(op=MicroOp.JZ, w=IW.W32, dst=StatusFlag(flag_val), imm=target)
 
     def inst_djnz(self, children):
         target = int(children[0])
@@ -717,7 +728,7 @@ class Pass2Encoder(Transformer):
             op=MicroOp.DJNZ,
             w=IW.W32,
             dst=Reg.NONE,
-            src=Reg.NONE,
+            src2=Reg.NONE,
             imm=target,
         )
 
@@ -727,7 +738,7 @@ class Pass2Encoder(Transformer):
             op=MicroOp.CALL,
             w=IW.W32,
             dst=Reg.NONE,
-            src=Reg.NONE,
+            src2=Reg.NONE,
             imm=target,
         )
 

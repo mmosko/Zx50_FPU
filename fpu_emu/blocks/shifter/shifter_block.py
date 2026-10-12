@@ -59,7 +59,7 @@ class ShifterBlock(FunctionalBlock):
 
     def _lzc_32(self, instr: MicroInstruction) -> None:
         assert instr.src1 is Reg.NONE
-        src = instr.src if instr.src is not Reg.NONE else Reg.AL
+        src = instr.src2 if instr.src2 is not Reg.NONE else Reg.AL
         dst = instr.dst if instr.dst is not Reg.NONE else Reg.C
 
         self._hb_mux.select(src.value)
@@ -83,7 +83,7 @@ class ShifterBlock(FunctionalBlock):
 
     def _lzc_64(self, instr: MicroInstruction) -> None:
         assert instr.src1 is Reg.NONE
-        src = instr.src if instr.src is not Reg.NONE else Reg.AL
+        src = instr.src2 if instr.src2 is not Reg.NONE else Reg.AL
         dst = instr.dst if instr.dst is not Reg.NONE else Reg.C
         assert isinstance(src, Reg)
         assert src.is_lo_half(), f"64-bit LZC source must be low-half register, got {src}"
@@ -180,7 +180,7 @@ class ShifterBlock(FunctionalBlock):
     def _shift_32(self, instr: MicroInstruction, shift_fn: Callable[[int, int, ShifterAdder], ShifterResult]) -> None:
         assert instr.dst is not Reg.NONE, "Shift destination register must be specified"
         assert instr.src1 is Reg.NONE
-        src = instr.src if instr.src is not Reg.NONE else Reg.C
+        src = instr.src2 if instr.src2 is not Reg.NONE else Reg.C
         dst = instr.dst
 
         # Read shift count from HA_MUX (src or C)
@@ -218,7 +218,7 @@ class ShifterBlock(FunctionalBlock):
         assert instr.dst is not Reg.NONE, "Shift destination register must be specified"
         assert instr.dst.is_lo_half(), f"64-bit shift destination must be low-half register, got {instr.dst}"
         assert instr.src1 is Reg.NONE
-        src = instr.src if instr.src is not Reg.NONE else Reg.C
+        src = instr.src2 if instr.src2 is not Reg.NONE else Reg.C
         dst = instr.dst
 
         # Cycle 1: Latch shift count from HA_MUX and low half from HB_MUX

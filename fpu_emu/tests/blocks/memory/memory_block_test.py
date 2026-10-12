@@ -26,7 +26,7 @@ def test_push_basic(fpga: FpgaModel):
     assert fpga.reg_file.sp.read_int() == 0
 
     microcode = [
-        MicroInstruction(op=MicroOp.PUSH, src=Reg.AL),
+        MicroInstruction(op=MicroOp.PUSH, src2=Reg.AL),
     ]
 
     fpga.dispatcher._run(microcode)
@@ -49,9 +49,9 @@ def test_push_multiple(fpga: FpgaModel):
     fpga.reg_file.dl.write(0xCCCCCCCC)
 
     microcode = [
-        MicroInstruction(op=MicroOp.PUSH, src=Reg.AL),
-        MicroInstruction(op=MicroOp.PUSH, src=Reg.BL),
-        MicroInstruction(op=MicroOp.PUSH, src=Reg.DL),
+        MicroInstruction(op=MicroOp.PUSH, src2=Reg.AL),
+        MicroInstruction(op=MicroOp.PUSH, src2=Reg.BL),
+        MicroInstruction(op=MicroOp.PUSH, src2=Reg.DL),
     ]
 
     fpga.dispatcher._run(microcode)
@@ -74,7 +74,7 @@ def test_push_overflow(fpga: FpgaModel):
     fpga.reg_file.al.write(0xDEADBEEF)
 
     microcode = [
-        MicroInstruction(op=MicroOp.PUSH, src=Reg.AL),
+        MicroInstruction(op=MicroOp.PUSH, src2=Reg.AL),
     ]
 
     fpga.dispatcher._run(microcode)
@@ -98,7 +98,7 @@ def test_push_clears_previous_err(fpga: FpgaModel):
     fpga.reg_file.al.write(0x42)
 
     microcode = [
-        MicroInstruction(op=MicroOp.PUSH, src=Reg.AL),
+        MicroInstruction(op=MicroOp.PUSH, src2=Reg.AL),
     ]
 
     fpga.dispatcher._run(microcode)
@@ -125,7 +125,7 @@ def test_push_pop_32_roundtrip(fpga: FpgaModel, src, dst, val, desc):
     initial_sp = fpga.reg_file.sp.read_int()
 
     microcode = [
-        MicroInstruction(op=MicroOp.PUSH, src=src, w=IW.W32),
+        MicroInstruction(op=MicroOp.PUSH, src2=src, w=IW.W32),
         MicroInstruction(op=MicroOp.POP, dst=dst, w=IW.W32),
     ]
 
@@ -157,7 +157,7 @@ def test_push_pop_64_roundtrip(fpga: FpgaModel, src_lo, dst_lo, val_lo, val_hi, 
     initial_sp = fpga.reg_file.sp.read_int()
 
     microcode = [
-        MicroInstruction(op=MicroOp.PUSH, src=src_lo, w=IW.W64),
+        MicroInstruction(op=MicroOp.PUSH, src2=src_lo, w=IW.W64),
         MicroInstruction(op=MicroOp.POP, dst=dst_lo, w=IW.W64),
     ]
 
@@ -215,7 +215,7 @@ def test_pop64_underflow_one_item(fpga: FpgaModel):
 
     # Push 1 32-bit word, so SP becomes 1
     microcode = [
-        MicroInstruction(op=MicroOp.PUSH, src=Reg.AL, w=IW.W32),
+        MicroInstruction(op=MicroOp.PUSH, src2=Reg.AL, w=IW.W32),
         MicroInstruction(op=MicroOp.POP, dst=Reg.BL, w=IW.W64),
     ]
 
@@ -235,7 +235,7 @@ def test_push64_overflow_at_127(fpga: FpgaModel):
     fpga.reg_file.ah.write(0x9ABCDEF0)
 
     microcode = [
-        MicroInstruction(op=MicroOp.PUSH, src=Reg.AL, w=IW.W64),
+        MicroInstruction(op=MicroOp.PUSH, src2=Reg.AL, w=IW.W64),
     ]
 
     fpga.dispatcher._run(microcode)
@@ -253,7 +253,7 @@ def test_push64_overflow_at_126(fpga: FpgaModel):
     fpga.reg_file.ah.write(0x9ABCDEF0)
 
     microcode = [
-        MicroInstruction(op=MicroOp.PUSH, src=Reg.AL, w=IW.W64),
+        MicroInstruction(op=MicroOp.PUSH, src2=Reg.AL, w=IW.W64),
     ]
 
     fpga.dispatcher._run(microcode)
@@ -271,7 +271,7 @@ def test_pop32_clears_previous_err(fpga: FpgaModel):
     fpga.reg_file.al.write(0x1234)
 
     microcode = [
-        MicroInstruction(op=MicroOp.PUSH, src=Reg.AL, w=IW.W32),
+        MicroInstruction(op=MicroOp.PUSH, src2=Reg.AL, w=IW.W32),
         MicroInstruction(op=MicroOp.POP, dst=Reg.BL, w=IW.W32),
     ]
 
@@ -290,7 +290,7 @@ def test_pop64_clears_previous_err(fpga: FpgaModel):
     fpga.reg_file.ah.write(0x33334444)
 
     microcode = [
-        MicroInstruction(op=MicroOp.PUSH, src=Reg.AL, w=IW.W64),
+        MicroInstruction(op=MicroOp.PUSH, src2=Reg.AL, w=IW.W64),
         MicroInstruction(op=MicroOp.POP, dst=Reg.BL, w=IW.W64),
     ]
 
@@ -309,7 +309,7 @@ def test_pop64_clears_previous_err(fpga: FpgaModel):
 def test_push64_invalid_src_raises(fpga: FpgaModel, invalid_reg):
     """PUSH64 requires a low-half register (AL, BL, DL, FL); others raise AssertionError."""
     microcode = [
-        MicroInstruction(op=MicroOp.PUSH, src=invalid_reg, w=IW.W64),
+        MicroInstruction(op=MicroOp.PUSH, src2=invalid_reg, w=IW.W64),
     ]
     with pytest.raises(AssertionError):
         fpga.dispatcher._run(microcode)
@@ -332,7 +332,7 @@ def test_mov_32(fpga: FpgaModel):
     """MOV copies 32-bit register without affecting flags."""
     fpga.reg_file.bl.write(0xDEADBEEF)
     microcode = [
-        MicroInstruction(op=MicroOp.MOV, dst=Reg.AL, src=Reg.BL),
+        MicroInstruction(op=MicroOp.MOV, dst=Reg.AL, src2=Reg.BL),
     ]
     fpga.dispatcher._run(microcode)
     assert fpga.reg_file.al.read_int() == 0xDEADBEEF
@@ -343,7 +343,7 @@ def test_mov_64(fpga: FpgaModel):
     fpga.reg_file.bl.write(0x12345678)
     fpga.reg_file.bh.write(0x9ABCDEF0)
     microcode = [
-        MicroInstruction(op=MicroOp.MOV, dst=Reg.DL, src=Reg.BL, w=IW.W64),
+        MicroInstruction(op=MicroOp.MOV, dst=Reg.DL, src2=Reg.BL, w=IW.W64),
     ]
     fpga.dispatcher._run(microcode)
     assert fpga.reg_file.dl.read_int() == 0x12345678
@@ -354,7 +354,7 @@ def test_scratchpad_ld_sto_32(fpga: FpgaModel):
     """STO writes 32-bit word to scratchpad and LD reads it back."""
     fpga.reg_file.al.write(0xCAFEBABE)
     microcode = [
-        MicroInstruction(op=MicroOp.STO, src=Reg.AL, src1=Reg.IMM, imm=4),
+        MicroInstruction(op=MicroOp.STO, src2=Reg.AL, src1=Reg.IMM, imm=4),
         MicroInstruction(op=MicroOp.LD, dst=Reg.BL, src1=Reg.IMM, imm=4),
     ]
     fpga.dispatcher._run(microcode)
@@ -366,7 +366,7 @@ def test_scratchpad_ld_sto_64(fpga: FpgaModel):
     fpga.reg_file.al.write(0x11223344)
     fpga.reg_file.ah.write(0x55667788)
     microcode = [
-        MicroInstruction(op=MicroOp.STO, src=Reg.AL, src1=Reg.IMM, imm=8, w=IW.W64),
+        MicroInstruction(op=MicroOp.STO, src2=Reg.AL, src1=Reg.IMM, imm=8, w=IW.W64),
         MicroInstruction(op=MicroOp.LD, dst=Reg.BL, src1=Reg.IMM, imm=8, w=IW.W64),
     ]
     fpga.dispatcher._run(microcode)
@@ -386,7 +386,7 @@ def test_scratchpad_ld_64_odd_base_raises(fpga: FpgaModel):
 def test_scratchpad_sto_64_odd_base_raises(fpga: FpgaModel):
     """64-bit STO with odd base address must raise AssertionError."""
     microcode = [
-        MicroInstruction(op=MicroOp.STO, src=Reg.AL, src1=Reg.IMM, imm=5, w=IW.W64),
+        MicroInstruction(op=MicroOp.STO, src2=Reg.AL, src1=Reg.IMM, imm=5, w=IW.W64),
     ]
     with pytest.raises(AssertionError, match="64-bit STO must use even base"):
         fpga.dispatcher._run(microcode)
@@ -397,7 +397,7 @@ def test_scratchpad_ld_sto_32_indirect(fpga: FpgaModel):
     fpga.reg_file.c.write(0x06)
     fpga.reg_file.al.write(0xDEADBEEF)
     microcode = [
-        MicroInstruction(op=MicroOp.STO, src=Reg.AL, src1=Reg.C),
+        MicroInstruction(op=MicroOp.STO, src2=Reg.AL, src1=Reg.C),
         MicroInstruction(op=MicroOp.LD, dst=Reg.BL, src1=Reg.C),
     ]
     fpga.dispatcher._run(microcode)
@@ -411,7 +411,7 @@ def test_scratchpad_ld_sto_64_indirect(fpga: FpgaModel):
     fpga.reg_file.al.write(0x12345678)
     fpga.reg_file.ah.write(0x9ABCDEF0)
     microcode = [
-        MicroInstruction(op=MicroOp.STO, src=Reg.AL, src1=Reg.BL, w=IW.W64),
+        MicroInstruction(op=MicroOp.STO, src2=Reg.AL, src1=Reg.BL, w=IW.W64),
         MicroInstruction(op=MicroOp.LD, dst=Reg.DL, src1=Reg.BL, w=IW.W64),
     ]
     fpga.dispatcher._run(microcode)
@@ -436,7 +436,7 @@ def test_scratchpad_sto_64_indirect_odd_base_raises(fpga: FpgaModel):
     """64-bit indirect STO with odd base address must raise AssertionError."""
     fpga.reg_file.c.write(7)
     microcode = [
-        MicroInstruction(op=MicroOp.STO, src=Reg.AL, src1=Reg.C, w=IW.W64),
+        MicroInstruction(op=MicroOp.STO, src2=Reg.AL, src1=Reg.C, w=IW.W64),
     ]
     with pytest.raises(AssertionError, match="64-bit STO must use even base"):
         fpga.dispatcher._run(microcode)
@@ -450,7 +450,7 @@ def test_scratchpad_ld_sto_none_src1_raises(fpga: FpgaModel):
     fpga.clock.tick()
     fpga.reg_file.upc.write(0)
     with pytest.raises(AssertionError):
-        fpga.dispatcher._run([MicroInstruction(op=MicroOp.STO, src=Reg.AL, src1=Reg.NONE)])
+        fpga.dispatcher._run([MicroInstruction(op=MicroOp.STO, src2=Reg.AL, src1=Reg.NONE)])
 
 
 def test_swap_basic(fpga: FpgaModel):
@@ -458,7 +458,7 @@ def test_swap_basic(fpga: FpgaModel):
     fpga.reg_file.al.write(0x11112222)
     fpga.reg_file.bl.write(0x33334444)
     microcode = [
-        MicroInstruction(op=MicroOp.SWAP, dst=Reg.AL, src=Reg.BL),
+        MicroInstruction(op=MicroOp.SWAP, dst=Reg.AL, src2=Reg.BL),
     ]
     fpga.dispatcher._run(microcode)
     assert fpga.reg_file.al.read_int() == 0x33334444
@@ -470,7 +470,7 @@ def test_swap_ea_eb(fpga: FpgaModel):
     fpga.reg_file.ea.write(127)
     fpga.reg_file.eb.write(140)
     microcode = [
-        MicroInstruction(op=MicroOp.SWAP, dst=Reg.EA, src=Reg.EB),
+        MicroInstruction(op=MicroOp.SWAP, dst=Reg.EA, src2=Reg.EB),
     ]
     fpga.dispatcher._run(microcode)
     assert fpga.reg_file.ea.read_int() == 140
@@ -481,7 +481,7 @@ def test_swap_same_reg(fpga: FpgaModel):
     """SWAP AL, AL is a no-op."""
     fpga.reg_file.al.write(0x12345678)
     microcode = [
-        MicroInstruction(op=MicroOp.SWAP, dst=Reg.AL, src=Reg.AL),
+        MicroInstruction(op=MicroOp.SWAP, dst=Reg.AL, src2=Reg.AL),
     ]
     fpga.dispatcher._run(microcode)
     assert fpga.reg_file.al.read_int() == 0x12345678
@@ -492,7 +492,7 @@ def test_swap_with_fl(fpga: FpgaModel):
     fpga.reg_file.fl.write(0xAAAAAAAA)
     fpga.reg_file.bl.write(0xBBBBBBBB)
     microcode = [
-        MicroInstruction(op=MicroOp.SWAP, dst=Reg.FL, src=Reg.BL),
+        MicroInstruction(op=MicroOp.SWAP, dst=Reg.FL, src2=Reg.BL),
     ]
     fpga.dispatcher._run(microcode)
     assert fpga.reg_file.fl.read_int() == 0xBBBBBBBB
@@ -506,7 +506,7 @@ def test_swap_64_basic(fpga: FpgaModel):
     fpga.reg_file.bl.write(0x55556666)
     fpga.reg_file.bh.write(0x77778888)
     microcode = [
-        MicroInstruction(op=MicroOp.SWAP, dst=Reg.AL, src=Reg.BL, w=IW.W64),
+        MicroInstruction(op=MicroOp.SWAP, dst=Reg.AL, src2=Reg.BL, w=IW.W64),
     ]
     fpga.dispatcher._run(microcode)
     assert fpga.reg_file.al.read_int() == 0x55556666
@@ -520,7 +520,7 @@ def test_swap_64_same_reg(fpga: FpgaModel):
     fpga.reg_file.al.write(0x12345678)
     fpga.reg_file.ah.write(0x9ABCDEF0)
     microcode = [
-        MicroInstruction(op=MicroOp.SWAP, dst=Reg.AL, src=Reg.AL, w=IW.W64),
+        MicroInstruction(op=MicroOp.SWAP, dst=Reg.AL, src2=Reg.AL, w=IW.W64),
     ]
     fpga.dispatcher._run(microcode)
     assert fpga.reg_file.al.read_int() == 0x12345678
@@ -534,7 +534,7 @@ def test_swap_64_with_fx(fpga: FpgaModel):
     fpga.reg_file.bl.write(0x33333333)
     fpga.reg_file.bh.write(0x44444444)
     microcode = [
-        MicroInstruction(op=MicroOp.SWAP, dst=Reg.FL, src=Reg.BL, w=IW.W64),
+        MicroInstruction(op=MicroOp.SWAP, dst=Reg.FL, src2=Reg.BL, w=IW.W64),
     ]
     fpga.dispatcher._run(microcode)
     assert fpga.reg_file.fl.read_int() == 0x33333333
@@ -548,7 +548,7 @@ def test_swap_src1_operand(fpga: FpgaModel):
     fpga.reg_file.al.write(0xAAAAAAAA)
     fpga.reg_file.bl.write(0x55555555)
     microcode = [
-        MicroInstruction(op=MicroOp.SWAP, dst=Reg.AL, src1=Reg.AL, src=Reg.BL),
+        MicroInstruction(op=MicroOp.SWAP, dst=Reg.AL, src1=Reg.AL, src2=Reg.BL),
     ]
     fpga.dispatcher._run(microcode)
     assert fpga.reg_file.al.read_int() == 0x55555555
@@ -614,9 +614,9 @@ def test_sres_preserves_err_and_busy(fpga: FpgaModel):
 def test_ldi_register_32(fpga: FpgaModel):
     """LDI dst, imm loads a 10-bit immediate into a 32-bit register."""
     microcode = [
-        MicroInstruction(op=MicroOp.LDI, dst=Reg.AL, src=Reg.IMM, imm=0x2AB),
-        MicroInstruction(op=MicroOp.LDI, dst=Reg.C, src=Reg.IMM, imm=24),
-        MicroInstruction(op=MicroOp.LDI, dst=Reg.EA, src=Reg.IMM, imm=127),
+        MicroInstruction(op=MicroOp.LDI, dst=Reg.AL, src2=Reg.IMM, imm=0x2AB),
+        MicroInstruction(op=MicroOp.LDI, dst=Reg.C, src2=Reg.IMM, imm=24),
+        MicroInstruction(op=MicroOp.LDI, dst=Reg.EA, src2=Reg.IMM, imm=127),
     ]
     fpga.dispatcher._run(microcode)
     assert fpga.reg_file.al.read_int() == 0x2AB
@@ -628,7 +628,7 @@ def test_ldi_register_64(fpga: FpgaModel):
     """LDI dst, imm with W64 loads imm into low half and 0 into high half."""
     fpga.reg_file.ah.write(0xFFFFFFFF)
     microcode = [
-        MicroInstruction(op=MicroOp.LDI, w=IW.W64, dst=Reg.AL, src=Reg.IMM, imm=42),
+        MicroInstruction(op=MicroOp.LDI, w=IW.W64, dst=Reg.AL, src2=Reg.IMM, imm=42),
     ]
     fpga.dispatcher._run(microcode)
     assert fpga.reg_file.al.read_int() == 42
@@ -642,8 +642,8 @@ def test_ldi_flag_set_and_clear(fpga: FpgaModel):
 
     # Set ERR=1 and ZERO=1
     microcode = [
-        MicroInstruction(op=MicroOp.LDI, dst=Reg.NONE, src=Reg.IMM, flag=StatusFlag.ERR, imm=1),
-        MicroInstruction(op=MicroOp.LDI, dst=Reg.NONE, src=Reg.IMM, flag=StatusFlag.ZERO, imm=1),
+        MicroInstruction(op=MicroOp.SET, dst=StatusFlag.ERR, src1=Reg.IMM, imm=1),
+        MicroInstruction(op=MicroOp.SET, dst=StatusFlag.ZERO, src1=Reg.IMM, imm=1),
     ]
     fpga.dispatcher._run(microcode)
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
@@ -653,11 +653,20 @@ def test_ldi_flag_set_and_clear(fpga: FpgaModel):
     # Clear ERR=0 while leaving ZERO=1
     fpga.reg_file.upc.write(0)
     microcode = [
-        MicroInstruction(op=MicroOp.LDI, dst=Reg.NONE, src=Reg.IMM, flag=StatusFlag.ERR, imm=0),
+        MicroInstruction(op=MicroOp.SET, dst=StatusFlag.ERR, src1=Reg.IMM, imm=0),
     ]
     fpga.dispatcher._run(microcode)
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ZERO)
+
+    # Set CARRY from register AL bit 0
+    fpga.reg_file.upc.write(0)
+    fpga.reg_file.al.write(0x1)
+    microcode = [
+        MicroInstruction(op=MicroOp.SET, dst=StatusFlag.CARRY, src1=Reg.AL),
+    ]
+    fpga.dispatcher._run(microcode)
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.CARRY)
 
 
 def test_ldc_immediate_const_pi_f32(fpga: FpgaModel):
@@ -667,7 +676,8 @@ def test_ldc_immediate_const_pi_f32(fpga: FpgaModel):
         MicroInstruction(
             op=MicroOp.LDC,
             dst=Reg.AL,
-            src=FpuTable.CONST,
+            src1=FpuTable.CONST,
+            src2=Reg.IMM,
             imm=FpuConst.PI_F32,
         ),
     ]
@@ -689,7 +699,8 @@ def test_ldc_immediate_const_64bit(fpga: FpgaModel):
             op=MicroOp.LDC,
             w=IW.W64,
             dst=Reg.AL,
-            src=FpuTable.CONST,
+            src1=FpuTable.CONST,
+            src2=Reg.IMM,
             imm=FpuConst.PI_F64,
         ),
     ]
@@ -707,14 +718,16 @@ def test_ldc_immediate_const_one_and_magic_f64(fpga: FpgaModel):
             op=MicroOp.LDC,
             w=IW.W64,
             dst=Reg.AL,
-            src=FpuTable.CONST,
+            src1=FpuTable.CONST,
+            src2=Reg.IMM,
             imm=FpuConst.ONE_F64,
         ),
         MicroInstruction(
             op=MicroOp.LDC,
             w=IW.W64,
             dst=Reg.BL,
-            src=FpuTable.CONST,
+            src1=FpuTable.CONST,
+            src2=Reg.IMM,
             imm=FpuConst.MAGIC_F64,
         ),
     ]
@@ -735,8 +748,8 @@ def test_ldc_dynamic_reg_sqrt_c(fpga: FpgaModel):
         MicroInstruction(
             op=MicroOp.LDC,
             dst=Reg.AH,
-            src=FpuTable.SQRT,
-            src1=Reg.C,
+            src1=FpuTable.SQRT,
+            src2=Reg.C,
         ),
     ]
     fpga.dispatcher._run(microcode)
@@ -755,8 +768,8 @@ def test_ldc_dynamic_reg_sqrt_bl(fpga: FpgaModel):
         MicroInstruction(
             op=MicroOp.LDC,
             dst=Reg.AH,
-            src=FpuTable.SQRT,
-            src1=Reg.BL,
+            src1=FpuTable.SQRT,
+            src2=Reg.BL,
         ),
     ]
     fpga.dispatcher._run(microcode)
@@ -775,8 +788,8 @@ def test_ldc_dynamic_reg_recip(fpga: FpgaModel):
         MicroInstruction(
             op=MicroOp.LDC,
             dst=Reg.BL,
-            src=FpuTable.RECIP,
-            src1=Reg.AL,
+            src1=FpuTable.RECIP,
+            src2=Reg.AL,
         ),
     ]
     fpga.dispatcher._run(microcode)
@@ -793,7 +806,8 @@ def test_ldc_immediate_trig_cordic(fpga: FpgaModel):
         MicroInstruction(
             op=MicroOp.LDC,
             dst=Reg.DL,
-            src=FpuTable.TRIG,
+            src1=FpuTable.TRIG,
+            src2=Reg.IMM,
             imm=0,
         ),
     ]
@@ -806,7 +820,7 @@ def test_user_ldu_stu_32(fpga: FpgaModel):
     """STU writes 32-bit word to user memory USR[imm] and LDU reads it back."""
     fpga.reg_file.al.write(0x12345678)
     microcode = [
-        MicroInstruction(op=MicroOp.STU, src=Reg.AL, imm=2),
+        MicroInstruction(op=MicroOp.STU, src2=Reg.AL, imm=2),
         MicroInstruction(op=MicroOp.LDU, dst=Reg.BL, imm=2),
     ]
     fpga.dispatcher._run(microcode)
@@ -819,7 +833,7 @@ def test_user_ldu_stu_64(fpga: FpgaModel):
     fpga.reg_file.al.write(0xAABBCCDD)
     fpga.reg_file.ah.write(0x11223344)
     microcode = [
-        MicroInstruction(op=MicroOp.STU, src=Reg.AL, imm=4, w=IW.W64),
+        MicroInstruction(op=MicroOp.STU, src2=Reg.AL, imm=4, w=IW.W64),
         MicroInstruction(op=MicroOp.LDU, dst=Reg.BL, imm=4, w=IW.W64),
     ]
     fpga.dispatcher._run(microcode)
@@ -842,7 +856,7 @@ def test_user_ldu_64_odd_base_raises(fpga: FpgaModel):
 def test_user_stu_64_odd_base_raises(fpga: FpgaModel):
     """64-bit STU with odd base address must raise AssertionError."""
     microcode = [
-        MicroInstruction(op=MicroOp.STU, src=Reg.AL, imm=5, w=IW.W64),
+        MicroInstruction(op=MicroOp.STU, src2=Reg.AL, imm=5, w=IW.W64),
     ]
     with pytest.raises(AssertionError, match="64-bit STU must use even base"):
         fpga.dispatcher._run(microcode)

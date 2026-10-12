@@ -20,7 +20,7 @@ from fpu_emu.rom.fpu_const_map import FpuTable
 
 
 def test_pad_instructions_default_512():
-    inst0 = MicroInstruction(op=MicroOp.ADD, dst=Reg.AL, src=Reg.BL)
+    inst0 = MicroInstruction(op=MicroOp.ADD, dst=Reg.AL, src2=Reg.BL)
     inst2 = MicroInstruction(op=MicroOp.HALT)
     instructions = [(0, inst0), (2, inst2)]
 
@@ -34,7 +34,7 @@ def test_pad_instructions_default_512():
 
 
 def test_pad_instructions_no_pad():
-    inst0 = MicroInstruction(op=MicroOp.ADD, dst=Reg.AL, src=Reg.BL)
+    inst0 = MicroInstruction(op=MicroOp.ADD, dst=Reg.AL, src2=Reg.BL)
     inst2 = MicroInstruction(op=MicroOp.HALT)
     instructions = [(0, inst0), (2, inst2)]
 
@@ -46,8 +46,8 @@ def test_pad_instructions_no_pad():
 
 
 def test_pad_instructions_duplicate_address():
-    inst0 = MicroInstruction(op=MicroOp.ADD, dst=Reg.AL, src=Reg.BL)
-    inst1 = MicroInstruction(op=MicroOp.SUB, dst=Reg.AL, src=Reg.BL)
+    inst0 = MicroInstruction(op=MicroOp.ADD, dst=Reg.AL, src2=Reg.BL)
+    inst1 = MicroInstruction(op=MicroOp.SUB, dst=Reg.AL, src2=Reg.BL)
     instructions = [(0, inst0), (0, inst1)]
 
     with pytest.raises(ValueError, match="Multiple instructions defined"):
@@ -78,8 +78,8 @@ def test_emit_binary_and_hex():
 def test_emit_python():
     insts = [
         MicroInstruction(op=MicroOp.POP, dst=Reg.BL),
-        MicroInstruction(op=MicroOp.JNZ, flag=StatusFlag.UNDERFLOW, imm=6),
-        MicroInstruction(op=MicroOp.LDC, dst=Reg.AL, src=FpuTable.CONST, imm=1),
+        MicroInstruction(op=MicroOp.JNZ, dst=StatusFlag.UNDERFLOW, imm=6),
+        MicroInstruction(op=MicroOp.LDC, dst=Reg.AL, src1=FpuTable.CONST, imm=1),
         MicroInstruction(op=MicroOp.HALT),
     ]
     syms = {
@@ -101,7 +101,7 @@ def test_emit_python():
     assert "fpu_symbols" in namespace
     assert len(namespace["fpu_ucode"]) == 4
     assert namespace["fpu_ucode"][0].op == MicroOp.POP
-    assert namespace["fpu_ucode"][1].flag == StatusFlag.UNDERFLOW
+    assert namespace["fpu_ucode"][1].dst == StatusFlag.UNDERFLOW
 
     # Only User_ symbols should be present in fpu_symbols, and sorted
     symbols_dict = namespace["fpu_symbols"]
@@ -224,8 +224,8 @@ def test_emit_python_indirect_ld_sto():
     insts = [
         MicroInstruction(op=MicroOp.LD, dst=Reg.AL, src1=Reg.C),
         MicroInstruction(op=MicroOp.LD, dst=Reg.AL, src1=Reg.IMM, imm=10),
-        MicroInstruction(op=MicroOp.STO, src=Reg.BL, src1=Reg.C),
-        MicroInstruction(op=MicroOp.STO, src=Reg.BL, src1=Reg.IMM, imm=20),
+        MicroInstruction(op=MicroOp.STO, src2=Reg.BL, src1=Reg.C),
+        MicroInstruction(op=MicroOp.STO, src2=Reg.BL, src1=Reg.IMM, imm=20),
     ]
     py_str = emit_python(insts)
     namespace = {}

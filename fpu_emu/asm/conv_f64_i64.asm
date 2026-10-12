@@ -101,6 +101,6 @@ CONV_F64_I64_OVF:
     SUB AL, 1                   ; AL <- 0xFFFFFFFF
 CONV_F64_I64_SET_ERR:
     OR AX, AX                   ; Sets flags
-    LDI OVERFLOW, 1
-    LDI ERR, 1
+    SET OVERFLOW, 1
+    SET ERR, 1
     HALT AX

@@ -77,10 +77,10 @@ POW_BASE_ZERO:
 
 POW_ZERO_NEG_EXP:
     LDC AL, CONST, POS_INF_F32  ; 0^negative = +Inf
-    LDI ERR, 1
-    LDI VF, 1
+    SET ERR, 1
+    SET VF, 1
     HALT AL
 
 POW_DOMAIN_ERR:
-    LDI ERR, 1
+    SET ERR, 1
     HALT

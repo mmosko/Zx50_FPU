@@ -23,5 +23,5 @@
 USER_SUB_U64:
     CALL POP_TWO_64             ; AX <- A (NOS), BX <- B (TOS)
     SUB AX, BX                  ; AX <- A - B (sets CARRY on borrow out)
-    LDI VF, 0                   ; Clear VF to 0 in unsigned mode
+    SET VF, 0                   ; Clear VF to 0 in unsigned mode
     HALT AX                     ; Push 64-bit result {AH, AL}

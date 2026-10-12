@@ -76,7 +76,7 @@ class ControlBlock(FunctionalBlock):
         assert instr.op == MicroOp.JMP
         assert instr.dst is Reg.NONE
         assert instr.src1 is Reg.NONE
-        assert instr.src is Reg.NONE or instr.src == Reg.IMM
+        assert instr.src2 is Reg.NONE or instr.src2 == Reg.IMM
 
         self._inputs.hb_mux.select(Reg.IMM.value)
         addr = self._inputs.hb_mux.read()
@@ -96,7 +96,8 @@ class ControlBlock(FunctionalBlock):
             JNZ branches if flag == 1 (flag is set / not zero).
             JZ branches if flag == 0 (flag is clear / zero).
         """
-        flag_to_test = instr.flag
+        assert isinstance(instr.dst, StatusFlag)
+        flag_to_test = instr.dst
         bit_is_set = self._inputs.status.is_bit_set(flag_to_test)
         if flag_to_test == StatusFlag.ZERO:
             return bit_is_set if instr.op == MicroOp.JZ else not bit_is_set
@@ -105,9 +106,9 @@ class ControlBlock(FunctionalBlock):
 
     def _jnz(self, instr: MicroInstruction) -> None:
         assert instr.op == MicroOp.JNZ
-        assert instr.dst is Reg.NONE
+        assert isinstance(instr.dst, StatusFlag)
         assert instr.src1 is Reg.NONE
-        assert instr.src is Reg.NONE or instr.src == Reg.IMM
+        assert instr.src2 is Reg.NONE or instr.src2 == Reg.IMM
 
         flag = 1 if self._test_condition(instr) else 0
         self._jump_zero(flag)
@@ -116,9 +117,9 @@ class ControlBlock(FunctionalBlock):
 
     def _jz(self, instr: MicroInstruction) -> None:
         assert instr.op == MicroOp.JZ
-        assert instr.dst is Reg.NONE
+        assert isinstance(instr.dst, StatusFlag)
         assert instr.src1 is Reg.NONE
-        assert instr.src is Reg.NONE or instr.src == Reg.IMM
+        assert instr.src2 is Reg.NONE or instr.src2 == Reg.IMM
 
         flag = 1 if self._test_condition(instr) else 0
         self._jump_zero(flag)
@@ -137,7 +138,7 @@ class ControlBlock(FunctionalBlock):
         assert instr.op == MicroOp.DJNZ
         assert instr.dst is Reg.NONE
         assert instr.src1 is Reg.NONE
-        assert instr.src is Reg.NONE or instr.src == Reg.IMM
+        assert instr.src2 is Reg.NONE or instr.src2 == Reg.IMM
 
         count_adder = self._count_adder
         new_c = count_adder.val
@@ -160,7 +161,7 @@ class ControlBlock(FunctionalBlock):
         assert instr.op == MicroOp.CALL
         assert instr.dst is Reg.NONE
         assert instr.src1 is Reg.NONE
-        assert instr.src is Reg.NONE or instr.src == Reg.IMM
+        assert instr.src2 is Reg.NONE or instr.src2 == Reg.IMM
 
         csp = self._csp.read_int()
         next_csp = csp + 1
@@ -190,7 +191,7 @@ class ControlBlock(FunctionalBlock):
         assert instr.op == MicroOp.RET
         assert instr.dst is Reg.NONE
         assert instr.src1 is Reg.NONE
-        assert instr.src is Reg.NONE
+        assert instr.src2 is Reg.NONE
 
         # small adder or state machine for 4-bit CSP
         csp = self._csp.read_int() - 1
@@ -209,7 +210,7 @@ class ControlBlock(FunctionalBlock):
         assert instr.op == MicroOp.NOP
         assert instr.dst is Reg.NONE
         assert instr.src1 is Reg.NONE
-        assert instr.src is Reg.NONE
+        assert instr.src2 is Reg.NONE
 
         self._outputs.exec_wb.set(0)
         self._outputs.status_wr_sel.set(0)

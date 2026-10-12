@@ -131,7 +131,7 @@ DIV_64_DONE:
     ; Expected positive result: check for overflow (-2^63 / -1)
     OR      AX, AX
     JZ      SIGN, DIV_64_PUSH_POS
-    LDI     OVERFLOW, 1            ; Overflow: set OVERFLOW then push AX and halt
+    SET     OVERFLOW, 1            ; Overflow: set OVERFLOW then push AX and halt
     HALT    AX
 
 DIV_64_PUSH_U64:
@@ -146,6 +146,6 @@ DIV_64_PUSH_POS:
     HALT    AX                     ; Shared 64-bit push exit
 
 DIV_64_ZERO:
-    LDI ERR, 1
-    LDI OVERFLOW, 1
+    SET ERR, 1
+    SET OVERFLOW, 1
     HALT

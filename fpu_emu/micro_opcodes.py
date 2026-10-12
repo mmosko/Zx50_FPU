@@ -52,6 +52,7 @@ class MicroOp(Enum):
     LDU = 0b101_000
     STU = 0b101_001
     HALT = 0b101_010
+    SET = 0b101_011
     SSAV = 0b101_110
     SRES = 0b101_111
     # ====================

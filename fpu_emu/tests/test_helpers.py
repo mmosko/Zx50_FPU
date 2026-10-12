@@ -35,7 +35,7 @@ def user_push32(fpga: FpgaModel, val: int) -> None:
     """Simulates a user pushing a 32-bit word onto the math stack."""
     fpga.reg_file.al.write(val & MASK_32)
     fpga.reg_file.upc.write(0)
-    fpga.dispatcher._run([MicroInstruction(op=MicroOp.PUSH, w=IW.W32, src=Reg.AL)])
+    fpga.dispatcher._run([MicroInstruction(op=MicroOp.PUSH, w=IW.W32, src2=Reg.AL)])
 
 
 def user_pop32(fpga: FpgaModel) -> int:
@@ -52,7 +52,7 @@ def user_push64(fpga: FpgaModel, val: int) -> None:
     fpga.reg_file.al.write(val_lo)
     fpga.reg_file.ah.write(val_hi)
     fpga.reg_file.upc.write(0)
-    fpga.dispatcher._run([MicroInstruction(op=MicroOp.PUSH, w=IW.W64, src=Reg.AL)])
+    fpga.dispatcher._run([MicroInstruction(op=MicroOp.PUSH, w=IW.W64, src2=Reg.AL)])
 
 
 def user_pop64(fpga: FpgaModel) -> int:

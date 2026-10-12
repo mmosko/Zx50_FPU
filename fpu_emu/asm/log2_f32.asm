@@ -121,5 +121,5 @@ LOG2_RET_INPUT:
     RET
 
 LOG2_DOMAIN_ERR:
-    LDI ERR, 1
+    SET ERR, 1
     RET

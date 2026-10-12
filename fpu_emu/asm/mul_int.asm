@@ -49,8 +49,8 @@ USER_MUL_U32:
     CALL POP_TWO_32             ; AL <- A (NOS), BL <- B (TOS)
     MULU AL, BL                 ; {AH, AL} <- A * B (unsigned Booth hardware); VF set if AH != 0
     JZ VF, MUL_32_PUSH          ; If VF == 0 (no overflow), skip setting CARRY
-    LDI CARRY, 1                ; High 32-bit product non-zero: set CARRY = 1
-    LDI VF, 0                   ; In unsigned mode, VF is cleared to 0
+    SET CARRY, 1                ; High 32-bit product non-zero: set CARRY = 1
+    SET VF, 0                   ; In unsigned mode, VF is cleared to 0
 
 MUL_32_PUSH:
     HALT AL                     ; Push low 32 bits of product
@@ -98,6 +98,6 @@ USER_MUL_U64:
 
     OR DL, FL                   ; Combine carries and high-word terms
     JZ ZERO, .mul_u64_done
-    LDI CARRY, 1                ; Overflow occurred: set CARRY = 1
+    SET CARRY, 1                ; Overflow occurred: set CARRY = 1
 .mul_u64_done:
     HALT AX                     ; Push 64-bit product {AH, AL} and halt

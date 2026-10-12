@@ -32,7 +32,7 @@ def test_assemble_sample_program():
     assert u0.op == MicroOp.ADD
     assert u0.w == IW.W32
     assert u0.dst == Reg.AL
-    assert u0.src == Reg.BL
+    assert u0.src2 == Reg.BL
     assert u0.src1 == Reg.NONE
     assert u0.imm == 0
 
@@ -42,20 +42,21 @@ def test_assemble_sample_program():
     assert u1.w == IW.W64
     assert u1.dst == Reg.AL
     assert u1.src1 == Reg.BL
-    assert u1.src == Reg.DL
+    assert u1.src2 == Reg.DL
 
     # [2] LDC AL, CONST, 0x02
     u2 = prog_dict[2]
     assert u2.op == MicroOp.LDC
     assert u2.w == IW.W32
     assert u2.dst == Reg.AL
-    assert u2.src == FpuTable.CONST
+    assert u2.src1 == FpuTable.CONST
+    assert u2.src2 == Reg.IMM
     assert u2.imm == 2
 
     # [3] JNZ ERR, start (start == 0)
     u3 = prog_dict[3]
     assert u3.op == MicroOp.JNZ
-    assert u3.flag == StatusFlag.ERR
+    assert u3.dst == StatusFlag.ERR
     assert u3.imm == 0
 
     # [4] HALT
@@ -81,7 +82,7 @@ def test_forward_and_backward_labels():
     prog_dict = dict(prog)
 
     assert prog_dict[0x010].imm == 1
-    assert prog_dict[0x010].src == Reg.IMM
+    assert prog_dict[0x010].src2 == Reg.IMM
     assert prog_dict[0x011].op == MicroOp.CMP
     assert prog_dict[0x011].imm == 10
     # JZ jumps to loop_end (0x014)
@@ -129,10 +130,10 @@ def test_symbolic_constants():
     prog_dict = dict(prog)
 
     assert prog_dict[0].op == MicroOp.LDC
-    assert prog_dict[0].src == FpuTable.CONST
+    assert prog_dict[0].src1 == FpuTable.CONST
     assert prog_dict[0].imm == FpuConst.PI_F32.value
     assert prog_dict[1].op == MicroOp.PUSH
-    assert prog_dict[1].src == Reg.FL
+    assert prog_dict[1].src2 == Reg.FL
 
 
 def test_undefined_symbol_raises():
@@ -158,7 +159,7 @@ def test_shift_instructions_assemble():
     assert prog_dict[0].op == MicroOp.ASL
     assert prog_dict[0].w == IW.W32
     assert prog_dict[0].dst == Reg.AL
-    assert prog_dict[0].src == Reg.C
+    assert prog_dict[0].src2 == Reg.C
 
     assert prog_dict[1].op == MicroOp.ASL
     assert prog_dict[1].w == IW.W64
@@ -168,7 +169,7 @@ def test_shift_instructions_assemble():
     assert prog_dict[2].op == MicroOp.ASR
     assert prog_dict[2].w == IW.W32
     assert prog_dict[2].dst == Reg.BL
-    assert prog_dict[2].src == Reg.C
+    assert prog_dict[2].src2 == Reg.C
 
     assert prog_dict[3].op == MicroOp.ASR
     assert prog_dict[3].w == IW.W64
@@ -222,28 +223,28 @@ def test_ld_and_sto_instructions_assemble():
     # STO 12, AL
     assert prog_dict[4].op == MicroOp.STO
     assert prog_dict[4].w == IW.W32
-    assert prog_dict[4].src == Reg.AL
+    assert prog_dict[4].src2 == Reg.AL
     assert prog_dict[4].src1 == Reg.IMM
     assert prog_dict[4].imm == 12
 
     # STO [C], AL
     assert prog_dict[5].op == MicroOp.STO
     assert prog_dict[5].w == IW.W32
-    assert prog_dict[5].src == Reg.AL
+    assert prog_dict[5].src2 == Reg.AL
     assert prog_dict[5].src1 == Reg.C
     assert prog_dict[5].imm == 0
 
     # STO.64 8, AX
     assert prog_dict[6].op == MicroOp.STO
     assert prog_dict[6].w == IW.W64
-    assert prog_dict[6].src == Reg.AL
+    assert prog_dict[6].src2 == Reg.AL
     assert prog_dict[6].src1 == Reg.IMM
     assert prog_dict[6].imm == 8
 
     # STO.64 [BL], AX
     assert prog_dict[7].op == MicroOp.STO
     assert prog_dict[7].w == IW.W64
-    assert prog_dict[7].src == Reg.AL
+    assert prog_dict[7].src2 == Reg.AL
     assert prog_dict[7].src1 == Reg.BL
     assert prog_dict[7].imm == 0
 
@@ -264,30 +265,30 @@ def test_cl_ch_cx_instructions():
 
     # MOV CL, AL
     assert prog_dict[0].dst == Reg.CL
-    assert prog_dict[0].src == Reg.AL
+    assert prog_dict[0].src2 == Reg.AL
 
     # MOV CH, AH
     assert prog_dict[1].dst == Reg.CH
-    assert prog_dict[1].src == Reg.AH
+    assert prog_dict[1].src2 == Reg.AH
 
     # ADD CX, DX
     assert prog_dict[2].op == MicroOp.ADD
     assert prog_dict[2].w == IW.W64
     assert prog_dict[2].dst == Reg.CL
-    assert prog_dict[2].src == Reg.DL
+    assert prog_dict[2].src2 == Reg.DL
 
     # ADD CL, CH
     assert prog_dict[3].op == MicroOp.ADD
     assert prog_dict[3].w == IW.W32
     assert prog_dict[3].dst == Reg.CL
-    assert prog_dict[3].src == Reg.CH
+    assert prog_dict[3].src2 == Reg.CH
 
     # SUB.64 CX, AX, BX
     assert prog_dict[4].op == MicroOp.SUB
     assert prog_dict[4].w == IW.W64
     assert prog_dict[4].dst == Reg.CL
     assert prog_dict[4].src1 == Reg.AL
-    assert prog_dict[4].src == Reg.BL
+    assert prog_dict[4].src2 == Reg.BL
 
     # POP CX
     assert prog_dict[5].op == MicroOp.POP
@@ -297,7 +298,7 @@ def test_cl_ch_cx_instructions():
     # PUSH CX
     assert prog_dict[6].op == MicroOp.PUSH
     assert prog_dict[6].w == IW.W64
-    assert prog_dict[6].src == Reg.CL
+    assert prog_dict[6].src2 == Reg.CL
 
 
 def test_stacked_labels():
@@ -340,25 +341,25 @@ def test_mulu_divu_assembly():
     assert prog_dict[0].op == MicroOp.MULU
     assert prog_dict[0].w == IW.W32
     assert prog_dict[0].dst == Reg.AL
-    assert prog_dict[0].src == Reg.BL
+    assert prog_dict[0].src2 == Reg.BL
 
     # MULU AX, BX
     assert prog_dict[1].op == MicroOp.MULU
     assert prog_dict[1].w == IW.W64
     assert prog_dict[1].dst == Reg.AL
-    assert prog_dict[1].src == Reg.BL
+    assert prog_dict[1].src2 == Reg.BL
 
     # DIVU AL, BL
     assert prog_dict[2].op == MicroOp.DIVU
     assert prog_dict[2].w == IW.W32
     assert prog_dict[2].dst == Reg.AL
-    assert prog_dict[2].src == Reg.BL
+    assert prog_dict[2].src2 == Reg.BL
 
     # DIVU AX, BX
     assert prog_dict[3].op == MicroOp.DIVU
     assert prog_dict[3].w == IW.W64
     assert prog_dict[3].dst == Reg.AL
-    assert prog_dict[3].src == Reg.BL
+    assert prog_dict[3].src2 == Reg.BL
 
 
 def test_status_flag_encodings():
@@ -385,59 +386,68 @@ def test_status_flag_encodings():
         JZ BUSY, 0x10
         JZ BF, 0x10
         JZ BSY, 0x10
-        LDI ERR, 1
-        LDI DF, 0
+        SET ERR, 1
+        SET DF, 0
+        SET CF, AL
     """
     asm = Assembler()
     prog = dict(asm.assemble(code))
 
     # ZERO (0)
-    assert prog[0].flag == StatusFlag.ZERO == 0
-    assert prog[1].flag == StatusFlag.ZERO == 0
-    assert prog[2].flag == StatusFlag.ZERO == 0
+    assert prog[0].dst == StatusFlag.ZERO == 0
+    assert prog[1].dst == StatusFlag.ZERO == 0
+    assert prog[2].dst == StatusFlag.ZERO == 0
 
     # DIFF_SIGN (1)
-    assert prog[3].flag == StatusFlag.DIFF_SIGN == 1
-    assert prog[4].flag == StatusFlag.DIFF_SIGN == 1
-    assert prog[5].flag == StatusFlag.DIFF_SIGN == 1
+    assert prog[3].dst == StatusFlag.DIFF_SIGN == 1
+    assert prog[4].dst == StatusFlag.DIFF_SIGN == 1
+    assert prog[5].dst == StatusFlag.DIFF_SIGN == 1
 
     # UNDERFLOW (2)
-    assert prog[6].flag == StatusFlag.UNDERFLOW == 2
-    assert prog[7].flag == StatusFlag.UNDERFLOW == 2
-    assert prog[8].flag == StatusFlag.UNDERFLOW == 2
+    assert prog[6].dst == StatusFlag.UNDERFLOW == 2
+    assert prog[7].dst == StatusFlag.UNDERFLOW == 2
+    assert prog[8].dst == StatusFlag.UNDERFLOW == 2
 
     # OVERFLOW (3)
-    assert prog[9].flag == StatusFlag.OVERFLOW == 3
-    assert prog[10].flag == StatusFlag.OVERFLOW == 3
-    assert prog[11].flag == StatusFlag.OVERFLOW == 3
+    assert prog[9].dst == StatusFlag.OVERFLOW == 3
+    assert prog[10].dst == StatusFlag.OVERFLOW == 3
+    assert prog[11].dst == StatusFlag.OVERFLOW == 3
 
     # CARRY (4)
-    assert prog[12].flag == StatusFlag.CARRY == 4
-    assert prog[13].flag == StatusFlag.CARRY == 4
+    assert prog[12].dst == StatusFlag.CARRY == 4
+    assert prog[13].dst == StatusFlag.CARRY == 4
 
     # SIGN (5)
-    assert prog[14].flag == StatusFlag.SIGN == 5
-    assert prog[15].flag == StatusFlag.SIGN == 5
-    assert prog[16].flag == StatusFlag.SIGN == 5
+    assert prog[14].dst == StatusFlag.SIGN == 5
+    assert prog[15].dst == StatusFlag.SIGN == 5
+    assert prog[16].dst == StatusFlag.SIGN == 5
 
     # ERR (6)
-    assert prog[17].flag == StatusFlag.ERR == 6
-    assert prog[18].flag == StatusFlag.ERR == 6
+    assert prog[17].dst == StatusFlag.ERR == 6
+    assert prog[18].dst == StatusFlag.ERR == 6
 
     # BUSY (7)
-    assert prog[19].flag == StatusFlag.BUSY == 7
-    assert prog[20].flag == StatusFlag.BUSY == 7
-    assert prog[21].flag == StatusFlag.BUSY == 7
+    assert prog[19].dst == StatusFlag.BUSY == 7
+    assert prog[20].dst == StatusFlag.BUSY == 7
+    assert prog[21].dst == StatusFlag.BUSY == 7
 
-    # LDI ERR (6), 1
-    assert prog[22].op == MicroOp.LDI
-    assert prog[22].flag == StatusFlag.ERR == 6
+    # SET ERR (6), 1
+    assert prog[22].op == MicroOp.SET
+    assert prog[22].dst == StatusFlag.ERR == 6
+    assert prog[22].src1 == Reg.IMM
     assert prog[22].imm == 1
 
-    # LDI DF (1), 0
-    assert prog[23].op == MicroOp.LDI
-    assert prog[23].flag == StatusFlag.DIFF_SIGN == 1
+    # SET DF (1), 0
+    assert prog[23].op == MicroOp.SET
+    assert prog[23].dst == StatusFlag.DIFF_SIGN == 1
+    assert prog[23].src1 == Reg.IMM
     assert prog[23].imm == 0
+
+    # SET CF (4), AL
+    assert prog[24].op == MicroOp.SET
+    assert prog[24].dst == StatusFlag.CARRY == 4
+    assert prog[24].src1 == Reg.AL
+    assert prog[24].imm == 0
 
 
 def test_test_instruction_assemble():
@@ -453,23 +463,23 @@ def test_test_instruction_assemble():
     assert prog[0].op == MicroOp.TEST
     assert prog[0].w == IW.W32
     assert prog[0].dst == Reg.AL
-    assert prog[0].src == Reg.BL
+    assert prog[0].src2 == Reg.BL
 
     assert prog[1].op == MicroOp.TEST
     assert prog[1].w == IW.W64
     assert prog[1].dst == Reg.AL
-    assert prog[1].src == Reg.BL
+    assert prog[1].src2 == Reg.BL
 
     assert prog[2].op == MicroOp.TEST
     assert prog[2].w == IW.W32
     assert prog[2].dst == Reg.AL
-    assert prog[2].src == Reg.IMM
+    assert prog[2].src2 == Reg.IMM
     assert prog[2].imm == 0x10
 
     assert prog[3].op == MicroOp.TEST
     assert prog[3].w == IW.W64
     assert prog[3].dst == Reg.AL
-    assert prog[3].src == Reg.BL
+    assert prog[3].src2 == Reg.BL
 
 
 def test_pack_unpack_binary_and_ternary_assemble():
@@ -493,70 +503,70 @@ def test_pack_unpack_binary_and_ternary_assemble():
     assert prog[0].w == IW.W32
     assert prog[0].dst == Reg.AL
     assert prog[0].src1 == Reg.EA
-    assert prog[0].src == Reg.AL
+    assert prog[0].src2 == Reg.AL
 
     # PACK AL, EA, BL (ternary: dst=AL, src1=EA, src=BL)
     assert prog[1].op == MicroOp.PACK
     assert prog[1].w == IW.W32
     assert prog[1].dst == Reg.AL
     assert prog[1].src1 == Reg.EA
-    assert prog[1].src == Reg.BL
+    assert prog[1].src2 == Reg.BL
 
     # PACK AX, EA (binary 64-bit: dst=AL, src1=EA, src=AL)
     assert prog[2].op == MicroOp.PACK
     assert prog[2].w == IW.W64
     assert prog[2].dst == Reg.AL
     assert prog[2].src1 == Reg.EA
-    assert prog[2].src == Reg.AL
+    assert prog[2].src2 == Reg.AL
 
     # PACK AX, EA, BX (ternary 64-bit: dst=AL, src1=EA, src=BL)
     assert prog[3].op == MicroOp.PACK
     assert prog[3].w == IW.W64
     assert prog[3].dst == Reg.AL
     assert prog[3].src1 == Reg.EA
-    assert prog[3].src == Reg.BL
+    assert prog[3].src2 == Reg.BL
 
     # PACK.64 AL, EA, BL (ternary 64-bit: dst=AL, src1=EA, src=BL)
     assert prog[4].op == MicroOp.PACK
     assert prog[4].w == IW.W64
     assert prog[4].dst == Reg.AL
     assert prog[4].src1 == Reg.EA
-    assert prog[4].src == Reg.BL
+    assert prog[4].src2 == Reg.BL
 
     # UNPACK AL, EA (binary: dst=AL, src1=EA, src=AL)
     assert prog[5].op == MicroOp.UNPACK
     assert prog[5].w == IW.W32
     assert prog[5].dst == Reg.AL
     assert prog[5].src1 == Reg.EA
-    assert prog[5].src == Reg.AL
+    assert prog[5].src2 == Reg.AL
 
     # UNPACK AL, EA, BL (ternary: dst=AL, src1=EA, src=BL)
     assert prog[6].op == MicroOp.UNPACK
     assert prog[6].w == IW.W32
     assert prog[6].dst == Reg.AL
     assert prog[6].src1 == Reg.EA
-    assert prog[6].src == Reg.BL
+    assert prog[6].src2 == Reg.BL
 
     # UNPACK AX, EA (binary 64-bit: dst=AL, src1=EA, src=AL)
     assert prog[7].op == MicroOp.UNPACK
     assert prog[7].w == IW.W64
     assert prog[7].dst == Reg.AL
     assert prog[7].src1 == Reg.EA
-    assert prog[7].src == Reg.AL
+    assert prog[7].src2 == Reg.AL
 
     # UNPACK AX, EA, BX (ternary 64-bit: dst=AL, src1=EA, src=BL)
     assert prog[8].op == MicroOp.UNPACK
     assert prog[8].w == IW.W64
     assert prog[8].dst == Reg.AL
     assert prog[8].src1 == Reg.EA
-    assert prog[8].src == Reg.BL
+    assert prog[8].src2 == Reg.BL
 
     # UNPACK.64 AL, EA, BL (ternary 64-bit: dst=AL, src1=EA, src=BL)
     assert prog[9].op == MicroOp.UNPACK
     assert prog[9].w == IW.W64
     assert prog[9].dst == Reg.AL
     assert prog[9].src1 == Reg.EA
-    assert prog[9].src == Reg.BL
+    assert prog[9].src2 == Reg.BL
 
 
 def test_logic_unary_and_binary_assemble():
@@ -662,19 +672,19 @@ def test_ternary_shift_assemble():
     assert prog[0].op == MicroOp.LSL
     assert prog[0].w == IW.W32
     assert prog[0].dst == Reg.AL
-    assert prog[0].src == Reg.C
+    assert prog[0].src2 == Reg.C
 
     # Binary: LSL AL, C
     assert prog[1].op == MicroOp.LSL
     assert prog[1].w == IW.W32
     assert prog[1].dst == Reg.AL
-    assert prog[1].src == Reg.C
+    assert prog[1].src2 == Reg.C
 
     # Binary imm: LSL AL, 8
     assert prog[2].op == MicroOp.LSL
     assert prog[2].w == IW.W32
     assert prog[2].dst == Reg.AL
-    assert prog[2].src == Reg.IMM
+    assert prog[2].src2 == Reg.IMM
     assert prog[2].imm == 8
 
     # Ternary reg count: LSL AL, C, BL
@@ -682,14 +692,14 @@ def test_ternary_shift_assemble():
     assert prog[3].w == IW.W32
     assert prog[3].dst == Reg.AL
     assert prog[3].src1 == Reg.C
-    assert prog[3].src == Reg.BL
+    assert prog[3].src2 == Reg.BL
 
     # Ternary imm count: LSL AL, 8, BL
     assert prog[4].op == MicroOp.LSL
     assert prog[4].w == IW.W32
     assert prog[4].dst == Reg.AL
     assert prog[4].src1 == Reg.IMM
-    assert prog[4].src == Reg.BL
+    assert prog[4].src2 == Reg.BL
     assert prog[4].imm == 8
 
     # Ternary 64-bit reg count: LSL AX, C, BX
@@ -697,14 +707,14 @@ def test_ternary_shift_assemble():
     assert prog[5].w == IW.W64
     assert prog[5].dst == Reg.AL
     assert prog[5].src1 == Reg.C
-    assert prog[5].src == Reg.BL
+    assert prog[5].src2 == Reg.BL
 
     # Ternary 64-bit imm count: ASL AX, 4, BX
     assert prog[6].op == MicroOp.ASL
     assert prog[6].w == IW.W64
     assert prog[6].dst == Reg.AL
     assert prog[6].src1 == Reg.IMM
-    assert prog[6].src == Reg.BL
+    assert prog[6].src2 == Reg.BL
     assert prog[6].imm == 4
 
     # Ternary reg count: ASR BL, C, DL
@@ -712,7 +722,7 @@ def test_ternary_shift_assemble():
     assert prog[7].w == IW.W32
     assert prog[7].dst == Reg.BL
     assert prog[7].src1 == Reg.C
-    assert prog[7].src == Reg.DL
+    assert prog[7].src2 == Reg.DL
 
 
 def test_swap_64_assemble():
@@ -727,17 +737,17 @@ def test_swap_64_assemble():
     assert prog[0].op == MicroOp.SWAP
     assert prog[0].w == IW.W32
     assert prog[0].dst == Reg.AL
-    assert prog[0].src == Reg.BL
+    assert prog[0].src2 == Reg.BL
 
     assert prog[1].op == MicroOp.SWAP
     assert prog[1].w == IW.W64
     assert prog[1].dst == Reg.AL
-    assert prog[1].src == Reg.BL
+    assert prog[1].src2 == Reg.BL
 
     assert prog[2].op == MicroOp.SWAP
     assert prog[2].w == IW.W64
     assert prog[2].dst == Reg.AL
-    assert prog[2].src == Reg.BL
+    assert prog[2].src2 == Reg.BL
 
 
 def test_halt_syntax_variants():

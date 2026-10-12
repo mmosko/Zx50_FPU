@@ -98,12 +98,12 @@ class AdderBlock(FunctionalBlock):
 
         dst <- (src1 or dst) +/- src +/- cin
         """
-        assert instr.src is not Reg.NONE
+        assert instr.src2 is not Reg.NONE
         assert instr.dst is not Reg.NONE
         src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
 
         self._ha_mux.select(src1.value)
-        self._inputs.hb_mux.select(instr.src.value)
+        self._inputs.hb_mux.select(instr.src2.value)
         adder_result = self._combinatorial_add(cin=cin, sub=sub)
 
         # Writeback dst (edge-triggered tick in writeback)
@@ -118,18 +118,18 @@ class AdderBlock(FunctionalBlock):
 
         dst_64 <- (src1_64 or dst_64) +/- src2_64 +/- cin
         """
-        assert instr.src is not Reg.NONE
-        assert isinstance(instr.src, Reg)
+        assert instr.src2 is not Reg.NONE
+        assert isinstance(instr.src2, Reg)
         assert instr.dst is not Reg.NONE
         src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
 
         self._validate_src64(instr.dst)
         self._validate_src64(src1)
-        self._validate_src64(instr.src)
+        self._validate_src64(instr.src2)
 
         # Low word
         self._ha_mux.select(src1.value)
-        self._inputs.hb_mux.select(instr.src.value)
+        self._inputs.hb_mux.select(instr.src2.value)
         low_result = self._combinatorial_add(cin=cin, sub=sub)
 
         # Writeback low word (status write disabled for intermediate low word)
@@ -141,7 +141,7 @@ class AdderBlock(FunctionalBlock):
         # Upper word with carry from lower word
         cin_high = 1 if low_result.cf else 0
         self._ha_mux.select(src1.value | 0b0001)
-        src_h = instr.src.value | 0b0001
+        src_h = instr.src2.value | 0b0001
         self._inputs.hb_mux.select(src_h)
         high_result = self._combinatorial_add(cin=cin_high, sub=sub)
 
@@ -172,12 +172,12 @@ class AdderBlock(FunctionalBlock):
 
     def _cmp_32(self, instr: MicroInstruction):
         """CMP src1, src2: 32-bit compare src1 - src2 without modifying dst (1 cycle)."""
-        assert instr.src is not Reg.NONE
+        assert instr.src2 is not Reg.NONE
         assert instr.dst is not Reg.NONE
         src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
 
         self._ha_mux.select(src1.value)
-        self._inputs.hb_mux.select(instr.src.value)
+        self._inputs.hb_mux.select(instr.src2.value)
         adder_result = self._combinatorial_add(cin=0, sub=True)
 
         self._outputs.block_res_sel.set(Reg.NONE.value)  # No register writeback
@@ -187,16 +187,16 @@ class AdderBlock(FunctionalBlock):
 
     def _cmp_64(self, instr: MicroInstruction):
         """CMP src1_64, src2_64: 64-bit compare src1_64 - src2_64 without modifying registers (2 cycles)."""
-        assert instr.src is not Reg.NONE
-        assert isinstance(instr.src, Reg)
+        assert instr.src2 is not Reg.NONE
+        assert isinstance(instr.src2, Reg)
         assert instr.dst is not Reg.NONE
         src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
-        self._validate_src64(instr.src)
+        self._validate_src64(instr.src2)
         self._validate_src64(src1)
 
         # Low word (Cycle 1)
         self._ha_mux.select(src1.value)
-        self._inputs.hb_mux.select(instr.src.value)
+        self._inputs.hb_mux.select(instr.src2.value)
         low_result = self._combinatorial_add(cin=0, sub=True)
 
         # Status write disabled for intermediate low word, no register writeback
@@ -208,7 +208,7 @@ class AdderBlock(FunctionalBlock):
         # Upper word with borrow from lower word (Cycle 2)
         cin_high = 1 if low_result.cf else 0
         self._ha_mux.select(src1.value | 0b0001)
-        src_h = instr.src.value | 0b0001
+        src_h = instr.src2.value | 0b0001
         self._inputs.hb_mux.select(src_h)
         high_result = self._combinatorial_add(cin=cin_high, sub=True)
 
@@ -268,12 +268,12 @@ class AdderBlock(FunctionalBlock):
         self._exp_op(instr, sub=True)
 
     def _exp_op(self, instr: MicroInstruction, sub: bool) -> None:
-        assert instr.src is not Reg.NONE
+        assert instr.src2 is not Reg.NONE
         assert instr.dst is not Reg.NONE
         src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
 
         self._ha_mux.select(src1.value)
-        self._inputs.hb_mux.select(instr.src.value)
+        self._inputs.hb_mux.select(instr.src2.value)
         adder_result = self._combinatorial_add(cin=0, sub=sub)
 
         # Result is computed entirely by adder_core on sign-extended inputs
@@ -329,7 +329,7 @@ class AdderBlock(FunctionalBlock):
 
         dst_reg = instr.dst
         exp_reg = instr.src1
-        src_reg = instr.src if instr.src is not Reg.NONE else instr.dst
+        src_reg = instr.src2 if instr.src2 is not Reg.NONE else instr.dst
         assert isinstance(src_reg, Reg)
 
         return dst_reg, exp_reg, src_reg
@@ -562,7 +562,7 @@ class AdderBlock(FunctionalBlock):
 
     def _mul(self, instr: MicroInstruction, signed: bool = True) -> None:
         """MUL dst, src (or dst, src1, src): 32-bit multiply yielding 64-bit product in {AH, AL} (16 cycles)."""
-        assert instr.src is not Reg.NONE
+        assert instr.src2 is not Reg.NONE
         assert instr.dst is not Reg.NONE
         src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
 
@@ -578,7 +578,7 @@ class AdderBlock(FunctionalBlock):
 
         # Step 1: Combinatorial latch of inputs from HA_MUX and HB_MUX
         self._ha_mux.select(src1.value)
-        self._inputs.hb_mux.select(instr.src.value)
+        self._inputs.hb_mux.select(instr.src2.value)
         ha_val = self._inputs.ha_mux.read()
         hb_val = self._inputs.hb_mux.read()
 
@@ -602,7 +602,7 @@ class AdderBlock(FunctionalBlock):
 
     def _div(self, instr: MicroInstruction, signed: bool = True) -> None:
         """DIV dst, src (or dst, src1, src): 32-bit division yielding quotient in AL and remainder in DL (32 cycles)."""
-        assert instr.src is not Reg.NONE
+        assert instr.src2 is not Reg.NONE
         assert instr.dst is not Reg.NONE
         src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
 
@@ -616,7 +616,7 @@ class AdderBlock(FunctionalBlock):
 
         # Step 1: Combinatorial latch of inputs from HA_MUX and HB_MUX
         self._ha_mux.select(src1.value)
-        self._inputs.hb_mux.select(instr.src.value)
+        self._inputs.hb_mux.select(instr.src2.value)
         ha_val = self._inputs.ha_mux.read()
         hb_val = self._inputs.hb_mux.read()
 

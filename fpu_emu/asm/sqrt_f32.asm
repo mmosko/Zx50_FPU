@@ -71,5 +71,5 @@ SQRT_F32_RET_BH:
     RET
 
 SQRT_F32_DOMAIN_ERR:
-    LDI ERR, 1
+    SET ERR, 1
     RET

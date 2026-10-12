@@ -196,13 +196,13 @@ TRIG_F32_ENTRY:
     JZ ZERO, .trig_inf_err      ; If fraction == 0: Infinity -> Domain Error!
 
     ; NaN: Return NaN as-is with ERR=1
-    LDI ERR, 1
+    SET ERR, 1
     HALT AL
 
 .trig_inf_err:
     ; Return Quiet NaN (0x7FC00000) with ERR=1
     LDC AL, CONST, 35           ; AL <- NAN_F32
-    LDI ERR, 1
+    SET ERR, 1
     HALT AL
 
 ; ==============================================================================
