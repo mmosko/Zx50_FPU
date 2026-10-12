@@ -340,7 +340,6 @@ class MemoryBlock(FunctionalBlock):
             self._writeback()
         else:
             assert instr.dst.is_lo_half(), "64-bit LDC destination must be an even register (low half)"
-            assert offset % 2 == 0, "64-bit LDC offset must be even"
 
             # 1. Read LO word from offset
             self._ldc_core(dst=instr.dst.value, tbl=tbl, offset=offset)

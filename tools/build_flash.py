@@ -184,12 +184,14 @@ CONSTANTS_DEF = [
     ("LOG10_2_F64", 22, 0x3FD34413509F79FF, 8, "log10(2) in IEEE-754 double precision"),
     ("SQRT2_F32", 24, 0x3FB504F3, 4, "sqrt(2) in IEEE-754 single precision"),
     ("SQRT2_F64", 26, 0x3FF6A09E667F3BCD, 8, "sqrt(2) in IEEE-754 double precision"),
+    ("SQRT2_F64_HI", 27, 0x3FF6A09E, 4, "high 32-bit word of sqrt(2) in IEEE-754 double precision"),
     ("INV_SQRT2_F32", 28, 0x3F3504F3, 4, "1/sqrt(2) in IEEE-754 single precision"),
     ("INV_SQRT2_F64", 30, 0x3FE6A09E667F3BCD, 8, "1/sqrt(2) in IEEE-754 double precision"),
 
     # IEEE-754 Special Constants
     ("ONE_F32", 32, 0x3F800000, 4, "1.0 in IEEE-754 single precision"),
     ("ONE_F64", 33, 0x3FF0000000000000, 8, "1.0 in IEEE-754 double precision"),
+    ("ONE_F64_HI", 34, 0x3FF00000, 4, "high 32-bit word of 1.0 in IEEE-754 double precision"),
     ("NAN_F32", 35, 0x7FC00000, 4, "Quiet NaN in IEEE-754 single precision"),
     ("NAN_F64", 36, 0x7FF8000000000000, 8, "Quiet NaN in IEEE-754 double precision"),
     ("POS_INF_F32", 38, 0x7F800000, 4, "+Infinity in IEEE-754 single precision"),
@@ -208,13 +210,17 @@ CONSTANTS_DEF = [
     ("CW_C2_F64", 51, 0x3DD0B4611A626331, 8, "Cody-Waite C2 in IEEE-754 double precision"),
     ("CW_C3_F64", 53, 0x3BA3198A2E037073, 8, "Cody-Waite C3 in IEEE-754 double precision"),
 
-    # CORDIC Constants
-    ("CORDIC_INV_K_32", 55, 0x26DD3B6A, 4, "CORDIC 1/K scale factor in Q2.30"),
-    ("CORDIC_INV_K_64", 56, 0x26DD3B6A10D7969A, 8, "CORDIC 1/K scale factor in Q2.62"),
+    # Half and Scale Constants
+    ("HALF_F64", 56, 0x3FE0000000000000, 8, "0.5 in IEEE-754 double precision"),
+    ("HALF_F64_HI", 57, 0x3FE00000, 4, "high 32-bit word of 0.5 in IEEE-754 double precision"),
 
     # Natural Log of 10 Constants
     ("LN10_F32", 58, 0x40135D8E, 4, "ln(10) in IEEE-754 single precision"),
     ("LN10_F64", 60, 0x40026BB1BBB55516, 8, "ln(10) in IEEE-754 double precision"),
+
+    # Magic Add Constant for Range Reduction (1.5 * 2^52)
+    ("MAGIC_F64", 62, 0x4338000000000000, 8, "1.5 * 2^52 magic constant in IEEE-754 double precision"),
+    ("MAGIC_F64_HI", 63, 0x43380000, 4, "high 32-bit word of MAGIC in IEEE-754 double precision"),
 ]
 
 CHEB_DEF = [

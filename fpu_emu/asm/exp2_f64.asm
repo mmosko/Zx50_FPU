@@ -62,14 +62,6 @@ USER_EXP2_F64:
 EXP2_F64_CORE:
     STO 0, AX                   ; SCR[0..1] <- X
 
-    ; Construct MAGIC constant = 0x43380000_00000000 in BX
-    XOR BL, BL
-    LDI BH, 0x43
-    LSL BH, 8
-    OR BH, 0x38
-    LSL BH, 16                  ; BH <- 0x43380000
-    STO 2, BX                   ; SCR[2..3] <- MAGIC
-
     UNPACK AX, EA               ; EA <- biased exp, AX <- mantissa, sets ZERO, SIGN
     JZ ZERO, EXP2_F64_RET_ONE   ; 2^0 == 1.0
 
@@ -95,7 +87,7 @@ EXP2_F64_CORE:
 
     ; --- Compute Y = X + MAGIC ---
     LD AX, 0                    ; AX <- X
-    LD BX, 2                    ; BX <- MAGIC
+    LDC BX, CONST, MAGIC_F64    ; BX <- MAGIC
     CALL ADD_F64_CORE           ; AX <- Y = X + MAGIC
 
     ; Extract k = Y.lo (signed 32-bit integer)
@@ -124,7 +116,7 @@ EXP2_F64_CORE:
 .exp2_k_in_bounds:
 
     ; --- Compute k_float = Y - MAGIC ---
-    LD BX, 2                    ; BX <- MAGIC
+    LDC BX, CONST, MAGIC_F64    ; BX <- MAGIC
     CALL SUB_F64_CORE           ; AX <- k_float = Y - MAGIC
 
     ; --- Compute r = X - k_float ---
@@ -152,9 +144,7 @@ EXP2_F64_CORE:
 EXP2_F64_HORNER_LOOP:
     ; Term: 1.0 + S
     LD AX, 8                    ; AX <- S
-    XOR BL, BL
-    LDI BH, 1023
-    LSL BH, 20                  ; BX <- 1.0 float64
+    LDC BX, CONST, ONE_F64      ; BX <- 1.0 float64
     CALL ADD_F64_CORE           ; AX <- 1.0 + S
 
     ; Multiply: u * (1.0 + S)
@@ -184,9 +174,7 @@ EXP2_F64_HORNER_LOOP:
 
     ; --- Final addition: e^u = 1.0 + S ---
     LD AX, 8                    ; AX <- S
-    XOR BL, BL
-    LDI BH, 1023
-    LSL BH, 20                  ; BX <- 1.0 float64
+    LDC BX, CONST, ONE_F64      ; BX <- 1.0 float64
     CALL ADD_F64_CORE           ; AX <- e^u
 
 EXP2_F64_APPLY_EXPONENT:
@@ -225,16 +213,12 @@ EXP2_F64_SUBNORMAL:
 
 EXP2_F64_R_ZERO:
     ; When r == 0: e^u = 1.0 packed float64 (0x3FF00000_00000000)
-    XOR AL, AL
-    LDI AH, 1023
-    LSL AH, 20
+    LDC AX, CONST, ONE_F64
     JMP EXP2_F64_APPLY_EXPONENT
 
 EXP2_F64_RET_ONE:
     ; Return 1.0: 0x3FF00000_00000000
-    XOR AL, AL
-    LDI AH, 1023
-    LSL AH, 20
+    LDC AX, CONST, ONE_F64
     RET
 
 EXP2_F64_SPECIAL:

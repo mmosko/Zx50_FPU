@@ -71,10 +71,12 @@ class FpuConst(IntEnum):
     LOG10_2_F64 = 22  # log10(2) in IEEE-754 double precision
     SQRT2_F32 = 24  # sqrt(2) in IEEE-754 single precision
     SQRT2_F64 = 26  # sqrt(2) in IEEE-754 double precision
+    SQRT2_F64_HI = 27  # high 32-bit word of sqrt(2) in IEEE-754 double precision
     INV_SQRT2_F32 = 28  # 1/sqrt(2) in IEEE-754 single precision
     INV_SQRT2_F64 = 30  # 1/sqrt(2) in IEEE-754 double precision
     ONE_F32 = 32  # 1.0 in IEEE-754 single precision
     ONE_F64 = 33  # 1.0 in IEEE-754 double precision
+    ONE_F64_HI = 34  # high 32-bit word of 1.0 in IEEE-754 double precision
     NAN_F32 = 35  # Quiet NaN in IEEE-754 single precision
     NAN_F64 = 36  # Quiet NaN in IEEE-754 double precision
     POS_INF_F32 = 38  # +Infinity in IEEE-754 single precision
@@ -88,9 +90,11 @@ class FpuConst(IntEnum):
     CW_C1_F64 = 49  # Cody-Waite C1 in IEEE-754 double precision
     CW_C2_F64 = 51  # Cody-Waite C2 in IEEE-754 double precision
     CW_C3_F64 = 53  # Cody-Waite C3 in IEEE-754 double precision
-    CORDIC_INV_K_32 = 55  # CORDIC 1/K scale factor in Q2.30
-    CORDIC_INV_K_64 = 56  # CORDIC 1/K scale factor in Q2.62
+    HALF_F64 = 56  # 0.5 in IEEE-754 double precision
+    HALF_F64_HI = 57  # high 32-bit word of 0.5 in IEEE-754 double precision
     LN10_F32 = 58  # ln(10) in IEEE-754 single precision
     LN10_F64 = 60  # ln(10) in IEEE-754 double precision
+    MAGIC_F64 = 62  # 1.5 * 2^52 magic constant in IEEE-754 double precision
+    MAGIC_F64_HI = 63  # high 32-bit word of MAGIC in IEEE-754 double precision
 
 

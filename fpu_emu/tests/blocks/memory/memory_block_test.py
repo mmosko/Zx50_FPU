@@ -698,6 +698,33 @@ def test_ldc_immediate_const_64bit(fpga: FpgaModel):
     assert fpga.reg_file.ah.read_int() == hi_word
 
 
+def test_ldc_immediate_const_one_and_magic_f64(fpga: FpgaModel):
+    """LDC with ONE_F64 and MAGIC_F64 loads correct 64-bit float values."""
+    from fpu_emu.rom.fpu_const_map import FpuTable, FpuConst
+
+    microcode = [
+        MicroInstruction(
+            op=MicroOp.LDC,
+            w=IW.W64,
+            dst=Reg.AL,
+            src=FpuTable.CONST,
+            imm=FpuConst.ONE_F64,
+        ),
+        MicroInstruction(
+            op=MicroOp.LDC,
+            w=IW.W64,
+            dst=Reg.BL,
+            src=FpuTable.CONST,
+            imm=FpuConst.MAGIC_F64,
+        ),
+    ]
+    fpga.dispatcher._run(microcode)
+    assert fpga.reg_file.al.read_int() == 0x00000000
+    assert fpga.reg_file.ah.read_int() == 0x3FF00000
+    assert fpga.reg_file.bl.read_int() == 0x00000000
+    assert fpga.reg_file.bh.read_int() == 0x43380000
+
+
 def test_ldc_dynamic_reg_sqrt_c(fpga: FpgaModel):
     """LDC AH, SQRT, C loads zero-extended 16-bit seed from EBR 4 at offset 0x100 + C using 6-bit counter C."""
     from fpu_emu.rom.fpu_const_map import FpuTable

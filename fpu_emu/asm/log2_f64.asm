@@ -72,12 +72,7 @@ LOG2_F64_CORE:
     CALL NORMALIZE_F64          ; AX <- M as float64
 
     ; Range reduction: Compare high word AH with sqrt(2) threshold (0x3FF6A09E)
-    ; Construct 0x3FF6A09E in BL: (1023 << 20) | (424 << 10) | 158
-    LDI BL, 1023
-    LSL BL, 10
-    OR BL, 424
-    LSL BL, 10
-    OR BL, 158
+    LDC BL, CONST, SQRT2_F64_HI
     CMP AH, BL                  ; Compare AH with sqrt(2) threshold
     JNZ CARRY, LOG2_F64_NO_REDUCE ; If AH < BL (CARRY=1): M < sqrt(2), skip reduction
 
@@ -93,17 +88,13 @@ LOG2_F64_NO_REDUCE:
     STO 0, AX                   ; SCR[0..1] <- M
 
     ; Numerator: M - 1.0
-    XOR BL, BL
-    LDI BH, 1023
-    LSL BH, 20                  ; BX <- 1.0 float64
+    LDC BX, CONST, ONE_F64      ; BX <- 1.0 float64
     CALL SUB_F64_CORE           ; AX <- M - 1.0
     STO 2, AX                   ; SCR[2..3] <- M - 1.0
 
     ; Denominator: M + 1.0
     LD AX, 0                    ; AX <- M
-    XOR BL, BL
-    LDI BH, 1023
-    LSL BH, 20                  ; BX <- 1.0 float64
+    LDC BX, CONST, ONE_F64      ; BX <- 1.0 float64
     CALL ADD_F64_CORE           ; AX <- M + 1.0
 
     ; z = (M - 1.0) / (M + 1.0)
@@ -143,9 +134,7 @@ LOG2_SERIES_LOOP:
     CALL NORMALIZE_F64          ; AX <- float64(D)
 
     MOV BX, AX                  ; BX <- float64(D)
-    XOR AL, AL
-    LDI AH, 1023
-    LSL AH, 20                  ; AX <- 1.0 float64
+    LDC AX, CONST, ONE_F64      ; AX <- 1.0 float64
     CALL DIV_F64_CORE           ; AX <- 1.0 / D
 
     ; S <- S + term

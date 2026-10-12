@@ -65,6 +65,7 @@ TRIG_F32_ENTRY:
     JNZ CARRY, .trig_small_angle ; Biased exp < 115 (|theta| < 2^-12)
 
     ; Clear sign bit of theta to obtain y = |theta|
+    LD AL, 6                    ; Reload original theta (AL was overwritten by UNPACK)
     LSL AL, 1
     LSR AL, 1
     STO 8, AL                   ; SCR[8] <- y = |theta|

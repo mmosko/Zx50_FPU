@@ -106,19 +106,12 @@ TRIG_F64_ENTRY:
     LDC BH, CONST, 46
     CALL MUL_F64_CORE
 
-    ; Add 0.5: 0x3FE00000_00000000 (biased exp 1022 << 20)
-    XOR BL, BL
-    LDI BH, 1022
-    LSL BH, 20
+    ; Add 0.5: 0x3FE00000_00000000
+    LDC BX, CONST, HALF_F64
     CALL ADD_F64_CORE
 
     ; Add MAGIC constant: 1.5 * 2^52 = 0x43380000_00000000
-    XOR BL, BL
-    LDI BH, 0x43
-    LSL BH, 8
-    OR BH, 0x38
-    LSL BH, 16
-    STO 2, BX                   ; SCR[2..3] <- MAGIC
+    LDC BX, CONST, MAGIC_F64
     CALL ADD_F64_CORE
 
     ; Extract integer k and quadrant q = k & 3
@@ -127,7 +120,7 @@ TRIG_F64_ENTRY:
     STO 14, DL                  ; SCR[14] <- q = k & 3
 
     ; Subtract MAGIC to get float64 k_f64
-    LD BX, 2
+    LDC BX, CONST, MAGIC_F64
     CALL SUB_F64_CORE
     STO 10, AX                  ; SCR[10..11] <- k_f64
 
@@ -282,9 +275,7 @@ TRIG_F64_ENTRY:
     HALT AX
 
 .trig_ret_one:
-    XOR AL, AL
-    LDI AH, 1023
-    LSL AH, 20                  ; AX <- 1.0
+    LDC AX, CONST, ONE_F64
     HALT AX
 
 .trig_nan_or_inf:
@@ -299,11 +290,7 @@ TRIG_F64_ENTRY:
 
 .trig_inf_err:
     ; Return Quiet NaN (0x7FF80000_00000000) with ERR=1
-    XOR AL, AL
-    LDI AH, 0x7F
-    LSL AH, 8
-    OR AH, AH, 0xF8
-    LSL AH, 16                  ; AH <- 0x7FF80000
+    LDC AX, CONST, NAN_F64
     LDI ERR, 1
     HALT AX
 
@@ -325,9 +312,7 @@ TRIG_POLY_CORE:
     STO 2, AX                   ; SCR[2..3] <- x = r^2
 
     ; Initialize S = 1.0
-    XOR AL, AL
-    LDI AH, 1023
-    LSL AH, 20
+    LDC AX, CONST, ONE_F64
     STO 4, AX                   ; SCR[4..5] <- S = 1.0
 
     LDI CL, 8
@@ -361,9 +346,7 @@ TRIG_POLY_LOOP:
 
     ; S = 1.0 - term
     MOV BX, AX                  ; BX <- term
-    XOR AL, AL
-    LDI AH, 1023
-    LSL AH, 20                  ; AX <- 1.0
+    LDC AX, CONST, ONE_F64      ; AX <- 1.0
     CALL SUB_F64_CORE           ; AX <- 1.0 - term
     STO 4, AX                   ; SCR[4..5] <- S
 

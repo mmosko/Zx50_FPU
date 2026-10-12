@@ -71,31 +71,32 @@ USER_MUL_I64:
 
 USER_MUL_U64:
     CALL POP_TWO_64             ; AX <- A (NOS), BX <- B (TOS)
-    XOR DL, DL                  ; DL <- 0 (overflow accumulator)
+    XOR DL, DL                  ; DL <- 0 (carry accumulator: 0..2)
+    XOR FL, FL                  ; FL <- 0 (overflow term accumulator)
 
     ; Check if both A_hi and B_hi are non-zero:
     OR AH, AH
     JZ ZERO, .mul_u64_cross
-    OR DL, BH                   ; If AH != 0 and BH != 0: A * B >= 2^64 (overflow)
+    OR FL, BH                   ; If AH != 0 and BH != 0: A * B >= 2^64 (overflow)
 
 .mul_u64_cross:
     MOV CX, AX                  ; CX <- A (CL = A_lo, CH = A_hi)
     MULU AL, CH, BL             ; {AH, AL} <- A_hi * B_lo
-    OR DL, AH                   ; Accumulate high word non-zero into DL
+    OR FL, AH                   ; Accumulate high word non-zero into FL
     MOV CH, AL                  ; CH <- T2 = (A_hi * B_lo)_lo
 
     MULU AL, CL, BH             ; {AH, AL} <- A_lo * B_hi
-    OR DL, AH                   ; Accumulate high word non-zero into DL
+    OR FL, AH                   ; Accumulate high word non-zero into FL
     MOV DH, AL                  ; DH <- T1 = (A_lo * B_hi)_lo
 
     ADD CH, CH, DH              ; CH <- T2 + T1
-    ADC DL, 0                   ; Accumulate carry into DL
+    ADC DL, 0                   ; Accumulate carry into DL (DL <= 1)
 
     MULU AL, CL, BL             ; {AH, AL} <- A_lo * B_lo
     ADD AH, AH, CH              ; AH <- (A_lo * B_lo)_hi + (T2 + T1)
-    ADC DL, 0                   ; Accumulate carry into DL
+    ADC DL, 0                   ; Accumulate carry into DL (DL <= 2)
 
-    OR DL, DL                   ; Test if overflow occurred (clears CARRY & OVERFLOW to 0)
+    OR DL, FL                   ; Combine carries and high-word terms
     JZ ZERO, .mul_u64_done
     LDI CARRY, 1                ; Overflow occurred: set CARRY = 1
 .mul_u64_done:

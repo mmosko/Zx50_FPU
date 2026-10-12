@@ -8,8 +8,8 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 
 ## Current Status & Capacity
 
-- **Test Suite Status:** 100% pass rate (**2,182 / 2,182 tests passing**).
-- **Microcode Size:** **1,646 words** across unified single- and double-precision math, transcendentals, and polynomials (down from initial 1,749 baseline; target is $\le 1,536$ words to fit 6 EBR blocks).
+- **Test Suite Status:** 100% pass rate (**2,128 / 2,128 tests passing**).
+- **Microcode Size:** **1,600 words** across unified single- and double-precision math, transcendentals, and polynomials (down from initial 1,749 baseline; target is $\le 1,536$ words to fit 6 EBR blocks).
 - **Hardware Call Stack:** 16-deep $\times$ 10-bit return-address stack in distributed LUT RAM (`RAM16X1S`) with 4-bit `CSP` pointer fully implemented and verified.
 - **Datapath Bus Symmetry:** `HA_MUX` and `HB_MUX` widened to full 4-bit symmetry (14:1 32-bit muxing across all 10 registers `AL`..`FH`, `EA`, `EB`, `C`, and `IMM`), allowing any register as `src1` without register shuffling.
 - **Completed 32-Bit Math Operations:**
@@ -389,7 +389,7 @@ Loading from CONST ROM with `LDC` replaces 3- to 6-instruction blocks with a sin
 | — | *Initial baseline* | `ucode_f64.asm` | — | **1,749 words** | Baseline |
 | **1** | Implement `HALT <reg>` (push and halt) in Memory Block | Assembler, emulator, all 58 `.asm` files | **-76 words** | 1,673 words | **COMPLETE** |
 | **1b** | Consolidate `LDI DL, 1` in `USER_MUL_U64` | `mul_int.asm` | **-12 words** | 1,661 words | **COMPLETE** |
-| **2** | Replace F32 CORDIC with Horner polynomial | `trig_f32.asm`, `build_flash.py` | **-15 words** | **1,646 words** | **COMPLETE** |
-| **3** | Deduplicate Quiet NaN, domain error, and 1.0 exit trampolines | `trig_f64`, `exp2_f64`, `log2_f64`, `pow_f64`, `sqrt_f64` | **-50 words** | 1,596 words | Planned |
-| **4** | Make `UNPACK` set `OVERFLOW` flag on NaN/Inf | `add_f64`, `mul_f64`, `div_f64`, `trig_f64`, `exp2_f64`, `sqrt_f64` | **-50 words** | **1,546 words** | Planned |
-| **5** | Use `LDC` from CONST ROM for `1.0`, `MAGIC`, $\sqrt{2}$ | `log2_f64`, `exp2_f64`, `trig_f64`, `floor_ceil_f64` | **-35 words** | **1,511 words** *(< 1,536 limit!)* | Planned |
+| **2** | Replace F32 CORDIC with Horner polynomial | `trig_f32.asm`, `build_flash.py` | **-15 words** | 1,646 words | **COMPLETE** |
+| **3** | Use `LDC` from CONST ROM for `1.0`, `MAGIC`, $\sqrt{2}$ | `build_flash.py`, `log2_f64`, `exp2_f64`, `pow_f64`, `trig_f64` | **-46 words** | **1,600 words** | **COMPLETE** |
+| **4** | Deduplicate Quiet NaN, domain error, and 1.0 exit trampolines | `trig_f64`, `exp2_f64`, `log2_f64`, `pow_f64`, `sqrt_f64` | **-50 words** | **1,550 words** | Planned |
+| **5** | Make `UNPACK` set `OVERFLOW` flag on NaN/Inf | `add_f64`, `mul_f64`, `div_f64`, `trig_f64`, `exp2_f64`, `sqrt_f64` | **-50 words** | **1,500 words** *(< 1,536 limit!)* | Planned |

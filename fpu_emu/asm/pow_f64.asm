@@ -39,8 +39,7 @@ USER_POW_F64:
     ; 1.0 in float64 is AH = 0x3FF00000, AL = 0
     OR AL, AL
     JNZ ZERO, .pow_f64_not_one
-    LDI DL, 1023
-    LSL DL, 20
+    LDC DL, CONST, ONE_F64_HI
     CMP AH, DL
     JZ ZERO, POW_F64_RET_ONE
 .pow_f64_not_one:
@@ -74,9 +73,7 @@ USER_POW_F64:
     HALT AX
 
 POW_F64_RET_ONE:
-    XOR AL, AL
-    LDI AH, 1023
-    LSL AH, 20                  ; AX <- 1.0 (0x3FF00000_00000000)
+    LDC AX, CONST, ONE_F64
     HALT AX
 
 POW_F64_BASE_ZERO:
@@ -86,11 +83,7 @@ POW_F64_BASE_ZERO:
     HALT AX
 
 POW_F64_ZERO_NEG_EXP:
-    XOR AL, AL
-    LDI AH, 1023
-    LSL AH, 1
-    ADD AH, 1
-    LSL AH, 20                  ; AH <- 0x7FF00000 (+inf)
+    LDC AX, CONST, POS_INF_F64
     LDI ERR, 1
     LDI VF, 1
     HALT AX

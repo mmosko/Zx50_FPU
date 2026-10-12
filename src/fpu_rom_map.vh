@@ -32,10 +32,12 @@
   `define CONST_SLOT_LOG10_2_F64        6'd22
   `define CONST_SLOT_SQRT2_F32          6'd24
   `define CONST_SLOT_SQRT2_F64          6'd26
+  `define CONST_SLOT_SQRT2_F64_HI       6'd27
   `define CONST_SLOT_INV_SQRT2_F32      6'd28
   `define CONST_SLOT_INV_SQRT2_F64      6'd30
   `define CONST_SLOT_ONE_F32            6'd32
   `define CONST_SLOT_ONE_F64            6'd33
+  `define CONST_SLOT_ONE_F64_HI         6'd34
   `define CONST_SLOT_NAN_F32            6'd35
   `define CONST_SLOT_NAN_F64            6'd36
   `define CONST_SLOT_POS_INF_F32        6'd38
@@ -49,10 +51,12 @@
   `define CONST_SLOT_CW_C1_F64          6'd49
   `define CONST_SLOT_CW_C2_F64          6'd51
   `define CONST_SLOT_CW_C3_F64          6'd53
-  `define CONST_SLOT_CORDIC_INV_K_32    6'd55
-  `define CONST_SLOT_CORDIC_INV_K_64    6'd56
+  `define CONST_SLOT_HALF_F64           6'd56
+  `define CONST_SLOT_HALF_F64_HI        6'd57
   `define CONST_SLOT_LN10_F32           6'd58
   `define CONST_SLOT_LN10_F64           6'd60
+  `define CONST_SLOT_MAGIC_F64          6'd62
+  `define CONST_SLOT_MAGIC_F64_HI       6'd63
 
   // Chebyshev & Polynomial Coefficients Word Slot Map (32-bit words from DATA_RAM_CHEB_BASE)
   `define CHEB_SLOT_EXP2_C1            6'd1
