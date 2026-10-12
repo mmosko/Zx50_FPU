@@ -89,8 +89,8 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 - [ ] Implement `CONV_F64_I64` (`0xCF`): IEEE-754 double float to signed 64-bit int (truncate toward zero, $V=1$ on range overflow, ~18–22 words).
 
 ### 3. Floating-Point Conversions & Utilities
-- [ ] Implement `CONV_F32_F64` (`0xC9`): Expand IEEE single float to double float (net $+4$ bytes on stack, ~12–16 words).
-- [ ] Implement `CONV_F64_F32` (`0xCB`): Narrow IEEE double float to single float (net $-4$ bytes on stack, $V=1$ on exponent overflow, $U=1$ on underflow, ~14–18 words).
+- [x] Implement `CONV_F32_F64` (`0xC9`): Expand IEEE single float to double float (net $+4$ bytes on stack, 100% complete, 40 integration tests passing, 36 words).
+- [x] Implement `CONV_F64_F32` (`0xCB`): Narrow IEEE double float to single float (net $-4$ bytes on stack, $V=1$ on exponent overflow, $U=1$ on underflow, 100% complete, 52 integration tests passing, 40 words).
 - [x] Implement `FLOOR_F32` (`0x61`): Mathematical floor toward $-\infty$.
 - [x] Implement `FLOOR_F64` (`0x63`): Mathematical floor toward $-\infty$ (100% complete, 41 integration tests passing, shared implementation with `CEIL_F64`).
 - [x] Implement `CEIL_F32` (`0x69`): Mathematical ceiling toward $+\infty$.
@@ -114,12 +114,12 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 | **Sign / Magnitude Utilities** | `CHS_F64`, `ABS_F64`, `DUP8` | **Done** | **11 words (actual)** |
 | **Math Constants** | `PUSH_PI_64` .. `PUSH_INV_SQRT2_64` (8) | **Done** | **22 words (actual)** |
 | **Rounding Operations** | `FLOOR_F64`, `CEIL_F64` | **Done** | **42 words (actual)** |
-| **Pure Float Conversions** | `CONV_F32_F64`, `CONV_F64_F32` | Pending | **~26 – 34 words** |
+| **Pure Float Conversions** | `CONV_F32_F64`, `CONV_F64_F32` | **Done** | **76 words (actual)** |
 | **Integer $\leftrightarrow$ Float Conversions** | `CONV_U64_F64`, `CONV_I64_F64`, `CONV_F64_I64` | Pending | **~42 – 54 words** |
 | **Square Root** | `SQRT_F64` | Pending | **~35 – 45 words** |
 | **Transcendentals** | `LOG2_F64`, `EXP2_F64`, `POW_F64` | Pending | **~190 – 270 words** |
 | **CORDIC Trigonometrics** | `SIN_F64`, `COS_F64`, `TAN_F64` | Pending | **~180 – 240 words** |
-| **TOTAL REMAINING F64 INSTRUCTIONS** | **12 remaining operations** | Pending | **~440 – 546 words** |
+| **TOTAL REMAINING F64 INSTRUCTIONS** | **10 remaining operations** | Pending | **~395 – 495 words** |
 
 > [!IMPORTANT]
 > ### Microcode ROM Expansion & Architecture Refactor Plan (80–120 MHz)
@@ -150,13 +150,14 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 >    - **Standalone Assembly Files:** Author each of the remaining 12 F64 operations in standalone `.asm` files under `fpu_emu/asm/`.
 >    - **Exclude from `ucode.asm`:** Do **not** `.include` these new files into `ucode.asm` yet. The existing 1,023-word ROM remains green with all 1,473 tests passing.
 >    - **In-Memory Assembly:** In tests, assemble the `.asm` files dynamically via `fpu_asm.Assembler().assemble_file(path)` directly into `List[MicroInstruction]` in memory (zero filesystem object artifacts).
+>    - **Cumulative Size Tracking:** Track cumulative total size in `fpu_emu/ucode_f64.asm` (currently at 1,099 words).
 >    - **Unit / Verification Testing:** Run tests against a fresh `FpgaModel` by executing `fpga.dispatcher._run(assembled_instructions)` directly on pushed stack inputs.
 >    - **Instruction Word Accounting:** Measure and log the exact static instruction word count for each routine.
 >    - **Refactor Execution:** Once all 12 routines pass unit testing and the total instruction count is verified, execute the machine word rearrangement and EBR 0–5 expansion refactor.
 >
 > #### F64 Pre-Refactor Implementation Checklist
-> - [ ] **1. `CONV_F32_F64` (`0xC9`)**: Widens IEEE-754 32-bit float to 64-bit float.
-> - [ ] **2. `CONV_F64_F32` (`0xCB`)**: Narrows IEEE-754 64-bit float to 32-bit float ($V=1$ on overflow, $U=1$ on underflow).
+> - [x] **1. `CONV_F32_F64` (`0xC9`)**: Widens IEEE-754 32-bit float to 64-bit float (100% complete, 40 integration tests passing, 36 words).
+> - [x] **2. `CONV_F64_F32` (`0xCB`)**: Narrows IEEE-754 64-bit float to 32-bit float (100% complete, 52 integration tests passing, 40 words, $V=1$ on overflow, $U=1$ on underflow).
 > - [ ] **3. `CONV_U64_F64` (`0xC5`)**: Unsigned 64-bit integer $\to$ Double float.
 > - [ ] **4. `CONV_I64_F64` (`0xCE`)**: Signed 64-bit integer $\to$ Double float (shares unsigned core).
 > - [ ] **5. `CONV_F64_I64` (`0xCF`)**: Double float $\to$ Signed 64-bit integer.
