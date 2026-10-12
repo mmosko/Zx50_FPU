@@ -8,8 +8,9 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 
 ## Current Status & Capacity
 
-- **Test Suite Status:** 100% pass rate (**2,128 / 2,128 tests passing**).
-- **Microcode Size:** **1,600 words** across unified single- and double-precision math, transcendentals, and polynomials (down from initial 1,749 baseline; target is $\le 1,536$ words to fit 6 EBR blocks).
+- **Test Suite Status:** 100% pass rate (**2,183 / 2,183 tests passing**).
+- **Microcode Size:** **1,563 words** across unified single- and double-precision math, transcendentals, and polynomials (down from initial 1,749 baseline; target is $\le 1,536$ words to fit 6 EBR blocks).
+- **Machine Word Format (Rev 2):** Fully transitioned to 13-bit immediate format (`[31:26]` OPCODE, `[25]` W, `[24:21]` DST/FLAG, `[20:17]` SRC1, `[16:13]` SRC2, `[12:0]` IMM/ADDR) with `SET <flag>, <src1>` instruction.
 - **Hardware Call Stack:** 16-deep $\times$ 10-bit return-address stack in distributed LUT RAM (`RAM16X1S`) with 4-bit `CSP` pointer fully implemented and verified.
 - **Datapath Bus Symmetry:** `HA_MUX` and `HB_MUX` widened to full 4-bit symmetry (14:1 32-bit muxing across all 10 registers `AL`..`FH`, `EA`, `EB`, `C`, and `IMM`), allowing any register as `src1` without register shuffling.
 - **Completed 32-Bit Math Operations:**
@@ -191,12 +192,13 @@ To fit all microcode within the 1,536-word limit of EBR 0–5 (expanding down fr
 | **1. Hardware Macro / Fused Opcode** | `HALT <reg>` (push and halt in memory block) | **-76 words** | Very Low (Hardware/Decoder) | **COMPLETE** |
 | **1b. Mul Loop Consolidate** | Consolidate `LDI DL, 1` in `USER_MUL_U64` | **-12 words** | None (Assembly only) | **COMPLETE** |
 | **2. Algorithmic Overhaul** | Replace F32 CORDIC with Horner in `trig_f32.asm` | **-15 words** | Low (Proven math) | **COMPLETE** |
-| **3. Common Shared Subroutines** | Deduplicate Quiet NaN / Domain Error / Return 1.0 | **50 words** | None (Assembly only) | Planned |
-| **4. Hardware Flag Enhancement** | `UNPACK` sets `OVERFLOW` (or `SPECIAL`) on NaN/Inf | **50 words** | Very Low (Datapath flag) | Planned |
-| **5. ROM Constant Offloading** | Load `1.0`, `MAGIC`, $\sqrt{2}$ from CONST ROM instead of synthesizing | **35 words** | None (Assembly only) | Planned |
-| **CURRENT PROGRESS** | **Initial: 1,749 words $\to$ Current: 1,646 words** | **-103 words saved** | **Target: $\le 1,536$ words** | **110 words to go** |
+| **3. ROM Constant Offloading** | Load `1.0`, `MAGIC`, $\sqrt{2}$ from CONST ROM instead of synthesizing | **-46 words** | None (Assembly only) | **COMPLETE** |
+| **4. 13-Bit Immediate Optimization** | Direct exponent and bound checks (2047, 1075, 1034) | **-37 words** | None (Assembly only) | **COMPLETE** |
+| **5. Common Shared Subroutines** | Deduplicate Quiet NaN / Domain Error / Return 1.0 | **~35 words** | None (Assembly only) | Planned |
+| **6. Hardware Flag Enhancement** | `UNPACK` sets `OVERFLOW` (or `SPECIAL`) on NaN/Inf | **~30 words** | Very Low (Datapath flag) | Planned |
+| **CURRENT PROGRESS** | **Initial: 1,749 words $\to$ Current: 1,563 words** | **-186 words saved** | **Target: $\le 1,536$ words** | **Only 27 words to go!** |
 
-Adopting Strategies 1, 1b, and 2 has already saved **103 words** (bringing microcode down from 1,749 to 1,646 words). Completing Strategies 3, 4, or 5 will comfortably achieve the target of $\le 1,536$ words (leaving ample headroom in EBR 0–5).
+Adopting Strategies 1, 1b, 2, 3, and 4 has already saved **186 words** (bringing microcode down from 1,749 to 1,563 words). Completing either Strategy 5 or Strategy 6 will comfortably achieve the target of $\le 1,536$ words (fitting inside the 6 EBR blocks).
 
 ---
 
@@ -390,6 +392,7 @@ Loading from CONST ROM with `LDC` replaces 3- to 6-instruction blocks with a sin
 | **1** | Implement `HALT <reg>` (push and halt) in Memory Block | Assembler, emulator, all 58 `.asm` files | **-76 words** | 1,673 words | **COMPLETE** |
 | **1b** | Consolidate `LDI DL, 1` in `USER_MUL_U64` | `mul_int.asm` | **-12 words** | 1,661 words | **COMPLETE** |
 | **2** | Replace F32 CORDIC with Horner polynomial | `trig_f32.asm`, `build_flash.py` | **-15 words** | 1,646 words | **COMPLETE** |
-| **3** | Use `LDC` from CONST ROM for `1.0`, `MAGIC`, $\sqrt{2}$ | `build_flash.py`, `log2_f64`, `exp2_f64`, `pow_f64`, `trig_f64` | **-46 words** | **1,600 words** | **COMPLETE** |
-| **4** | Deduplicate Quiet NaN, domain error, and 1.0 exit trampolines | `trig_f64`, `exp2_f64`, `log2_f64`, `pow_f64`, `sqrt_f64` | **-50 words** | **1,550 words** | Planned |
-| **5** | Make `UNPACK` set `OVERFLOW` flag on NaN/Inf | `add_f64`, `mul_f64`, `div_f64`, `trig_f64`, `exp2_f64`, `sqrt_f64` | **-50 words** | **1,500 words** *(< 1,536 limit!)* | Planned |
+| **3** | Use `LDC` from CONST ROM for `1.0`, `MAGIC`, $\sqrt{2}$ | `build_flash.py`, `log2_f64`, `exp2_f64`, `pow_f64`, `trig_f64` | **-46 words** | 1,600 words | **COMPLETE** |
+| **4** | 13-bit immediate optimizations (direct 2047, 1075, bounds) | `conv_f64_f32`, `exp2_f64`, `log2_f64`, `sqrt_f64`, `trig_f64`, `conv_f32_f64` | **-37 words** | **1,563 words** | **COMPLETE** |
+| **5** | Deduplicate Quiet NaN, domain error, and 1.0 exit trampolines | `trig_f64`, `exp2_f64`, `log2_f64`, `pow_f64`, `sqrt_f64` | **~35 words** | **1,528 words** *(< 1,536 limit!)* | Planned |
+| **6** | Make `UNPACK` set `OVERFLOW` flag on NaN/Inf | `add_f64`, `mul_f64`, `div_f64`, `trig_f64`, `exp2_f64`, `sqrt_f64` | **~30 words** | **1,498 words** | Planned |
