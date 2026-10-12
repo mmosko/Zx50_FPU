@@ -104,9 +104,10 @@ trigonometrics are implemented as thin wrappers calling the verified 64-bit core
   - Replaced the 56-word Horner algorithm with the delegation wrapper calling `CONV_F32_F64_CORE` $\to$ `EXP2_F64_CORE` $\to$ `CONV_F64_F32_CORE`.
   - Updated hardware models (`UpcAdder`, `registers.py`, `control_block.py` call stack, `dispatcher.py`) and budget validation in `micro_code.py` to 11-bit UPC (1,536-word / 6-EBR Code ROM limit).
   - Verified all 35 `exp2_f32` tests and edge cases pass, and full test suite (2,183 tests) passes with 0 regressions.
-- [ ] **Step 5: Implement Delegation Wrapper in `log2_f32.asm`**
-  - Replace the 81-word odd-series algorithm with the 5-word wrapper calling `CONV_F32_F64_CORE` $\to$ `LOG2_F64_CORE` $\to$ `CONV_F64_F32_CORE`.
-  - Verify all `log2_f32` tests and domain error checks pass.
+- [x] **Step 5: Implement Delegation Wrapper in `log2_f32.asm`**
+  - Replaced the 81-word odd-series algorithm with the delegation wrapper calling `CONV_F32_F64_CORE` $\to$ `LOG2_F64_CORE` $\to$ `CONV_F64_F32_CORE`.
+  - Microcode total footprint reduced from 1,518 words to **1,447 words** (71 words saved).
+  - Verified all 34 `log2_f32` tests, domain error checks, and full 2,183 test suite pass.
 - [ ] **Step 6: Implement Delegation Wrapper in `pow_f32.asm`**
   - Replace `USER_POW_F32` with a wrapper that pops both operands, widens to float64, calls `POW_F64_CORE`, and narrows back via `CONV_F64_F32_CORE`.
   - Verify all `pow_f32` tests pass.

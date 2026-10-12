@@ -48,14 +48,14 @@ USER_POW_F32:
     OR AL, AL
     JNZ SIGN, POW_DOMAIN_ERR
 
-    ; Save exp (BL) to scratchpad slot 0
-    STO 0, BL
+    ; Save exp (BL) to scratchpad slot 16 (avoiding SCR[0..11] clobber by LOG2_CORE)
+    STO 16, BL
 
     ; AL holds base (Y > 0)
     CALL LOG2_CORE              ; AL <- log2(Y)
 
-    ; Load exp (X) from scratchpad slot 0 into BL
-    LD BL, 0
+    ; Load exp (X) from scratchpad slot 16 into BL
+    LD BL, 16
 
     ; Multiply: AL (log2(Y)) * BL (X)
     CALL MUL_F32_CORE           ; AL <- X * log2(Y)
