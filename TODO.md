@@ -33,41 +33,14 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 
 ---
 
-## Architectural Optimizations
+### Completed Architectural Enhancements
 
-### 1. Widen `HA_MUX` to Full 4-Bit Symmetry (~20–30 Words Saved)
-- [x] **Expand `HA_MUX` from 3 Bits to 4 Bits (Completed)**:
-  - `HA_MUX` and `HB_MUX` both support full 4-bit addressing across `{AL, AH, BL, BH, CL, CH, DL, DH, FL, FH, EA, EB, C, IMM}`.
-  - Eliminates redundant register shuffling (`MOV AL, FL; ADD AL, BL; MOV FL, AL`), allowing any register as `src1`.
-
-### 2. Populate Range Reduction Constants in `CONST` ROM (Low Priority - Minimal Savings)
-- [ ] **Add Cody-Waite Constants to `CONST` ROM (Low Priority)**:
-  - Add $C_1 = 102943$ and $C_2 = 11601$ into unused slots of `CONST` ROM.
-  - Low priority: saves very little microcode space (~8 words) and is deferred in favor of functional features.
-
-### 3. Implement 64-Bit Hardware Support for `CMP` and `SWAP` (`_cmp64` & `_swap64`)
-- [x] **Hardware 64-Bit Comparison (`_cmp64` in `AdderBlock`)**:
-  - Implement full 64-bit compare `CMP AX, BX` (`W=1`, 2 cycles) evaluating 64-bit `{src1_h, src1_l} - {src2_h, src2_l}` without register writeback, setting `CF`, `ZF`, `SF`, and `VF` according to the full 64-bit comparison.
-  - Shrinks `ALIGN_F64` mantissa comparison from 5 microcode instructions to 1 (`CMP AX, BX`).
-- [x] **Hardware 64-Bit Register Exchange (`_swap64` in `MemoryBlock`)**:
-  - Implement full 64-bit register exchange `SWAP AX, BX` (`W=1`, 4 cycles) exchanging `{AH, AL} <-> {BH, BL}` using internal staging registers `{FH, FL}`.
-  - Shrinks `ALIGN_F64` operand swap from 3 microcode instructions to 1 (`SWAP AX, BX`).
-
-### 4. Microcode Compaction & ISA Optimization (36 Words Saved, 100 Words Headroom Opened)
-- [x] **Dynamic Constant Table Loading (`push_const.asm`)**:
-  - Replaced individual constant loaders with dynamic lookup using `LSL C, 1` into the `CONST` table for all 16 float32/float64 constants.
-  - Saved **24 words** of microcode ROM.
-- [x] **64-Bit Alignment Optimization (`align_f64.asm`)**:
-  - Leveraged 64-bit `CMP AX, BX` (replacing 5-word comparison) and 64-bit `SWAP AX, BX` (replacing 3-word register juggling).
-  - Saved **5 words** of microcode ROM.
-- [x] **Integer Division Optimizations (`div_int.asm`)**:
-  - Ternary sign setup: `XOR DL, AH, BH` (saved 1 word).
-  - Consolidated restoring loop branches Path 1 & Path 2 at `.restoring_step` (saved 3 words).
-  - Shared exit tails across 64-bit division paths (saved 2 words).
-  - Saved **6 words** of microcode ROM total.
-- [x] **64-Bit Integer Negation Optimization (`chs_i64.asm`)**:
-  - Replaced `MOV FX, AX` + `XOR AX, AX` + `SUB AX, FX` with `XOR FX, FX` + `SUB AX, FX, AX`.
-  - Saved **1 word** of microcode ROM and **2 clock cycles** of execution latency.
+- [x] **Machine Word Rearrangement (Rev 2, 13-Bit Immediate):** Fully implemented and verified. Fixed 32-bit layout with `OPCODE[31:26]`, `W[25]`, `DST/FLAG[24:21]`, `SRC1[20:17]`, `SRC2[16:13]`, `IMM[12:0]`. Added `SET <flag>, <src1>` instruction. Exponent bounds (2047, 1075, 1034) directly evaluated via 13-bit immediates.
+- [x] **Hardware Macro Opcode (`HALT <reg>`):** Fused stack push + halt opcode saving 76 microcode words.
+- [x] **Hardware Call Stack:** 16-deep $\times$ 10-bit return-address stack in distributed LUT RAM (`RAM16X1S`) with 4-bit `CSP` pointer.
+- [x] **Full 4-Bit Bus Symmetry:** `HA_MUX` and `HB_MUX` widened to 14:1 32-bit muxing across all registers (`AL`..`FH`, `EA`, `EB`, `C`, `IMM`).
+- [x] **Hardware 64-Bit Arithmetic Extensions:** 64-bit comparison (`_cmp64`, `CMP AX, BX`) and 64-bit register swap (`_swap64`, `SWAP AX, BX`).
+- [x] **Microcode Compaction & ISA Tuning:** Dynamic constant loading (`push_const.asm`), restoring division loop shared tails, ternary sign setup. Saved 36 words.
 
 ---
 
@@ -125,52 +98,54 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 | **ALL F64 PRE-REFACTOR OPERATIONS** | **12 operations complete** | **100% DONE** | **873 words total** |
 
 > [!IMPORTANT]
-> ### Microcode ROM Expansion & Architecture Refactor Plan (80–120 MHz)
-> To comfortably host the complete 64-bit floating-point, transcendental, and trigonometric suite without compromise, the FPU architecture is being upgraded from 1,024 words to **1,536 words**:
+> ### 100% On-Chip EBR Memory Architecture (MachXO2-2000: 8 EBRs Total, Zero External SRAM)
+> By delegating 32-bit transcendentals to 64-bit cores and eliminating obsolete tables, the entire FPU (Code, Stack, Scratchpad, and ROM Tables) fits **100% within the 8 on-chip EBR blocks of the MachXO2-2000**, completely eliminating external 10ns byte SRAM, bus turnarounds, wait-state generators, and 26+ external PCB pins.
 >
-> 1. **EBR Memory Re-partitioning (MachXO2-2000, 8 EBRs Total):**
->    - **EBR 0–5 (Microcode Store):** 6 EBR blocks configured as **1,536 words $\times$ 32 bits** (expanding microcode capacity by 512 words).
->    - **EBR 6–7 (Data RAM & Stack):** 2 EBR blocks configured as **512 words $\times$ 32 bits** (dedicated to math stack [128 words], scratchpad [64 words], user storage [16 words], and core constants [304 words]).
->    - **Zero-Contention Parallel Access:** Microcode fetching (EBR 0–5) and Stack/Scratchpad read/write (EBR 6–7) operate on physically isolated EBR blocks, guaranteeing single-cycle concurrent execution without pipeline stalls.
->    - **External 10ns Fast SRAM:** Large lookup tables (CORDIC angle tables, Chebyshev polynomial coefficients, Newton-Raphson seeds) are offloaded to external 10ns SRAM. At 80–120 MHz ($T_{\text{clk}} = 8.3\text{ – }12.5\text{ ns}$), SRAM accesses execute with 1–2 NOPs / wait cycles, which is negligible for multi-cycle transcendental routines.
+> ```text
+> +-----------------------------------------------------------------------------------+
+> |                           MACHXO2-2000 (8 EBR BLOCKS)                             |
+> +---------------------------------------------------+-------------------------------+
+> |             EBR 0 .. 5: CODE_ROM                  |       EBR 6 .. 7: DATA_RAM    |
+> |             (1,536 Words x 32-bit)                |       (512 Words x 32-bit)    |
+> +---------------------------------------------------+-------------------------------+
+> |  Microcode Store (All 32-bit & 64-bit operations): | - Math Stack:     128 words   |
+> |    - Current Baseline: 1,563 words                | - Scratchpad:      64 words   |
+> |    - After F32 Delegation: ~1,287 words           | - User Storage:    16 words   |
+> |    - Free Headroom:    ~249 words in EBR 0..5     | - CONST ROM:       64 words   |
+> |                                                   |   (Total Used:    272 words)  |
+> |                                                   | - Free Headroom:  240 words   |
+> +---------------------------------------------------+-------------------------------+
+> ```
 >
-> 2. **Machine Word Rearrangement (Fixed 32-Bit Word):**
->    - Retains fixed 32-bit instructions (avoiding variable-length/16-bit decoding penalties, alignment logic, and timing degradation at 80–120 MHz).
->    - Reuses bits `[24:21]` as a shared `DST/FLAG` field (since branches evaluate condition flags without a destination register, while datapath ops write to a destination register without condition flags).
->    ```text
->     31        26 25 24        21 20        17 16        13 12                                 0
->    +------------+--+------------+------------+------------+------------------------------------+
->    |   OPCODE   |W |  DST/FLAG  |    SRC1    |    SRC2    |          IMMEDIATE / ADDR          |
->    |   [31:26]  |  |  [24:21]   |  [20:17]   |  [16:13]   |              [12:0]                |
->    |   (6 bits) |  |  (4 bits)  |  (4 bits)  |  (4 bits)  |             (13 bits)              |
->    +------------+--+------------+------------+------------+------------------------------------+
->    ```
->    - **13-Bit Immediate / Address Reach (`[12:0]`, 0 .. 8,191):** Directly addresses up to 8,192 words of microcode and allows full IEEE-754 double-precision exponent and constant immediates (like 1023, 1075, 2047) without masking workarounds.
->    - **Full 3-Address Ternary Operations:** Preserves `DST`, `SRC1`, and `SRC2` for single-cycle ternary ALU arithmetic (`EXP_SUB`, `SUB`, `ADD`, `MULU`).
+> ### F32 $\to$ F64 $\to$ F32 Transcendental Delegation Architecture
 >
-> 3. **F64 Pre-Refactor Plan (In-Memory Assembly & Verification):**
->    To avoid polluting the repository with binary/object files and prevent blowing past the 1,024-word ROM limit before the hardware refactor:
->    - **Standalone Assembly Files:** Author each of the remaining 12 F64 operations in standalone `.asm` files under `fpu_emu/asm/`.
->    - **Exclude from `ucode.asm`:** Do **not** `.include` these new files into `ucode.asm` yet. The existing 1,023-word ROM remains green with all 1,473 tests passing.
->    - **In-Memory Assembly:** In tests, assemble the `.asm` files dynamically via `fpu_asm.Assembler().assemble_file(path)` directly into `List[MicroInstruction]` in memory (zero filesystem object artifacts).
->    - **Cumulative Size Tracking:** Track cumulative total size in `fpu_emu/ucode_f64.asm` (currently at 1,335 words).
->    - **Unit / Verification Testing:** Run tests against a fresh `FpgaModel` by executing `fpga.dispatcher._run(assembled_instructions)` directly on pushed stack inputs.
->    - **Instruction Word Accounting:** Measure and log the exact static instruction word count for each routine.
->    - **Refactor Execution:** Once all 12 routines pass unit testing and the total instruction count is verified, execute the machine word rearrangement and EBR 0–5 expansion refactor.
+> Rather than maintaining separate, duplicate 32-bit and 64-bit polynomial engines, all 32-bit transcendentals and trigonometrics are implemented as thin wrappers calling the verified 64-bit cores via standard format conversions:
 >
-> #### F64 Pre-Refactor Implementation Checklist
-> - [x] **1. `CONV_F32_F64` (`0xC9`)**: Widens IEEE-754 32-bit float to 64-bit float (100% complete, 40 integration tests passing, 36 words).
-> - [x] **2. `CONV_F64_F32` (`0xCB`)**: Narrows IEEE-754 64-bit float to 32-bit float (100% complete, 52 integration tests passing, 40 words, $V=1$ on overflow, $U=1$ on underflow).
-> - [x] **3. `CONV_U64_F64` (`0xC5`)**: Unsigned 64-bit integer $\to$ Double float (100% complete, 91 integration tests passing, 8 words).
-> - [x] **4. `CONV_I64_F64` (`0xCE`)**: Signed 64-bit integer $\to$ Double float (100% complete, 167 integration tests passing, 7 words, shares unsigned core).
-> - [x] **5. `CONV_F64_I64` (`0xCF`)**: Double float $\to$ Signed 64-bit integer (100% complete, 49 integration tests passing, 51 words).
-> - [x] **6. `SQRT_F64` (`0x23`)**: 64-bit square root via 54-iteration restoring binary shift-and-subtract loop (100% complete, 43 integration tests passing, 57 words).
-> - [x] **7. `LOG2_F64` (`0x33`)**: 64-bit base-2 logarithm via argument reduction and 11-term odd series (100% complete, 43 integration tests passing, 113 words).
-> - [x] **8. `EXP2_F64` (`0x3B`)**: 64-bit base-2 exponential ($2^x$) via range reduction and 13-term Horner evaluation (100% complete, 52 integration tests passing, 150 words).
-> - [x] **9. `POW_F64` (`0x2B`)**: 64-bit general power ($y^x = 2^{x \cdot \log_2(y)}$) via $2^{x \log_2 y}$ dispatch (100% complete, 44 integration tests passing, 33 words).
-> - [x] **10. `SIN_F64` (`0x73`)**: 64-bit sine via Cody-Waite range reduction and 8-term Horner evaluation (100% complete, 42 integration tests passing, shared trig core).
-> - [x] **11. `COS_F64` (`0x7B`)**: 64-bit cosine via Cody-Waite range reduction and 8-term Horner evaluation (100% complete, 42 integration tests passing, shared trig core).
-> - [x] **12. `TAN_F64` (`0x83`)**: 64-bit tangent via Cody-Waite range reduction and 8-term Horner evaluation (100% complete, 39 integration tests passing, 216 words total for all 3 trig functions).
+> 1. **Unary Transcendentals (`EXP2_F32`, `LOG2_F32`, `SIN_F32`, `COS_F32`, `TAN_F32`):**
+>    - `POP_ONE_32` pops 32-bit float $X$ into `AL`.
+>    - `CALL CONV_F32_F64_CORE` expands $X$ to 64-bit double in `AX`.
+>    - `CALL <OP>_F64_CORE` computes high-precision 53-bit result in `AX`.
+>    - `CALL CONV_F64_F32_CORE` narrows back to float32 in `AL` (handles IEEE rounding, F32 overflow/underflow via `NORMALIZE_F32`).
+>    - `HALT AL` pushes result and halts.
+>    - Size per operation: **5 words** each (replaces 60w in `exp2_f32`, 81w in `log2_f32`, 144w in `trig_f32`).
+>
+> 2. **Binary Power (`POW_F32`):**
+>    - `POP_TWO_32` pops base $Y$ and exponent $X$.
+>    - Converts both operands to float64, dispatches to `POW_F64_CORE`, and narrows back via `CONV_F64_F32_CORE`.
+>    - Size: **~12 words** (replaces 30w in `pow_f32`).
+>
+> 3. **Elimination of Obsolete ROM Tables:**
+>    - **`CHEB` (128 words):** Polynomial constants solely used by 32-bit `exp2`, `log2`, and `trig`. **100% ELIMINATED.**
+>    - **`TRIG` (128 words):** CORDIC arctangent tables unused since migration to Horner. **100% ELIMINATED.**
+>    - **`SEEDS` (256 words):** Newton-Raphson seeds unused since adopting restoring division and binary sqrt. **100% ELIMINATED.**
+>    - **`CONST` (64 words):** Retained in EBR 6–7 for common float32/float64 math constants ($\pi, e, \ln(2), \text{MAGIC}, 1.0, C_1..C_3$).
+>
+> 4. **Archiving Dedicated High-Speed F32 Routines (Future Larger FPGA Path):**
+>    - The current high-speed single-cycle Booth-multiplier implementations (`exp2_f32.asm`, `log2_f32.asm`, `pow_f32.asm`, `trig_f32.asm`) will be preserved in standalone archive files (e.g., `fpu_emu/asm/archived_fast_f32/` or `*_fast.asm`).
+>    - They will **NOT** be `.include`d in `ucode.asm` / `ucode_f64.asm`, preserving the strict $\le 1,536$-word footprint for the MachXO2-2000.
+>    - If the project later transitions to a larger FPGA (such as the Lattice MachXO3 or ECP5 with additional EBRs), these fast dedicated routines (~45 cycles) can be swapped back in directly to regain wire-speed 32-bit transcendental execution without re-engineering.
+>
+> **Projected Net Savings:** **~276 microcode words** saved ($315 \to 39$ words across the 4 files), reducing total microcode from **1,563 words down to ~1,287 words** (well under the 1,536 limit with ~249 words of headroom).
 
 ### 5. Hardware Simulation & Verilog RTL
 - [ ] **Host Interface Simulation**:
@@ -194,11 +169,12 @@ To fit all microcode within the 1,536-word limit of EBR 0–5 (expanding down fr
 | **2. Algorithmic Overhaul** | Replace F32 CORDIC with Horner in `trig_f32.asm` | **-15 words** | Low (Proven math) | **COMPLETE** |
 | **3. ROM Constant Offloading** | Load `1.0`, `MAGIC`, $\sqrt{2}$ from CONST ROM instead of synthesizing | **-46 words** | None (Assembly only) | **COMPLETE** |
 | **4. 13-Bit Immediate Optimization** | Direct exponent and bound checks (2047, 1075, 1034) | **-37 words** | None (Assembly only) | **COMPLETE** |
-| **5. Common Shared Subroutines** | Deduplicate Quiet NaN / Domain Error / Return 1.0 | **~35 words** | None (Assembly only) | Planned |
-| **6. Hardware Flag Enhancement** | `UNPACK` sets `OVERFLOW` (or `SPECIAL`) on NaN/Inf | **~30 words** | Very Low (Datapath flag) | Planned |
+| **5. F32 $\to$ F64 $\to$ F32 Delegation** | Delegate `EXP2`, `LOG2`, `POW`, `TRIG` to F64 cores | **~276 words** | Low (Assembly wrappers) | **NEXT IN QUEUE** |
+| **6. Common Shared Subroutines** | Deduplicate Quiet NaN / Domain Error / Return 1.0 | **~35 words** | None (Assembly only) | Optional Reserve |
 | **CURRENT PROGRESS** | **Initial: 1,749 words $\to$ Current: 1,563 words** | **-186 words saved** | **Target: $\le 1,536$ words** | **Only 27 words to go!** |
+| **PROJECTED AFTER STRATEGY 5** | **1,563 words $\to$ ~1,287 words** | **-276 words saved** | **8 EBR On-Chip Goal: MET** | **~249 words free headroom** |
 
-Adopting Strategies 1, 1b, 2, 3, and 4 has already saved **186 words** (bringing microcode down from 1,749 to 1,563 words). Completing either Strategy 5 or Strategy 6 will comfortably achieve the target of $\le 1,536$ words (fitting inside the 6 EBR blocks).
+Adopting Strategies 1, 1b, 2, 3, and 4 has saved **186 words** (bringing microcode down from 1,749 to 1,563 words). Executing Strategy 5 (F32 $\to$ F64 $\to$ F32 Delegation) will save another **~276 words**, comfortably landing at **~1,287 words** and achieving 100% on-chip EBR residency (zero external SRAM).
 
 ---
 
@@ -394,5 +370,6 @@ Loading from CONST ROM with `LDC` replaces 3- to 6-instruction blocks with a sin
 | **2** | Replace F32 CORDIC with Horner polynomial | `trig_f32.asm`, `build_flash.py` | **-15 words** | 1,646 words | **COMPLETE** |
 | **3** | Use `LDC` from CONST ROM for `1.0`, `MAGIC`, $\sqrt{2}$ | `build_flash.py`, `log2_f64`, `exp2_f64`, `pow_f64`, `trig_f64` | **-46 words** | 1,600 words | **COMPLETE** |
 | **4** | 13-bit immediate optimizations (direct 2047, 1075, bounds) | `conv_f64_f32`, `exp2_f64`, `log2_f64`, `sqrt_f64`, `trig_f64`, `conv_f32_f64` | **-37 words** | **1,563 words** | **COMPLETE** |
-| **5** | Deduplicate Quiet NaN, domain error, and 1.0 exit trampolines | `trig_f64`, `exp2_f64`, `log2_f64`, `pow_f64`, `sqrt_f64` | **~35 words** | **1,528 words** *(< 1,536 limit!)* | Planned |
-| **6** | Make `UNPACK` set `OVERFLOW` flag on NaN/Inf | `add_f64`, `mul_f64`, `div_f64`, `trig_f64`, `exp2_f64`, `sqrt_f64` | **~30 words** | **1,498 words** | Planned |
+| **5** | **F32 $\to$ F64 $\to$ F32 Delegation & 100% On-Chip EBR Budget** | `exp2_f32`, `log2_f32`, `pow_f32`, `trig_f32`, `conv_f32_f64`, `conv_f64_f32` | **-276 words** | **~1,287 words** *(Fits 8 EBRs!)* | **NEXT IN QUEUE** |
+| **6** | Deduplicate Quiet NaN, domain error, and 1.0 exit trampolines | `trig_f64`, `exp2_f64`, `log2_f64`, `pow_f64`, `sqrt_f64` | **~35 words** | **~1,252 words** | Optional Reserve |
+| **7** | Make `UNPACK` set `OVERFLOW` flag on NaN/Inf | `add_f64`, `mul_f64`, `div_f64`, `trig_f64`, `exp2_f64`, `sqrt_f64` | **~30 words** | **~1,222 words** | Optional Reserve |
