@@ -29,14 +29,14 @@ def test_upc_adder_basic_increment():
 
 def test_upc_adder_overflow_carry():
     clock = Clock()
-    upc_reg = Register(name=Reg.UPC, size_in_bits=10, clock=clock)
+    upc_reg = Register(name=Reg.UPC, size_in_bits=11, clock=clock)
     adder = UpcAdder(upc_reg)
 
-    # 10-bit limit is 1023 (0x3FF). Incrementing 1023 must assert carry
-    upc_reg.write(1023)
+    # 11-bit limit is 2047 (0x7FF). Incrementing 2047 must assert carry
+    upc_reg.write(2047)
     assert adder.val == 0
     assert adder.carry is True
-    assert adder.read_int() == 1024  # 11-bit output with bit 10 set
+    assert adder.read_int() == 2048  # 12-bit output with bit 11 set
 
 
 def test_upc_adder_bus_read():

@@ -24,10 +24,15 @@
 .include "asm/div_int.asm"
 
 .include "asm/sqrt_f32.asm"
+.include "asm/sqrt_f64.asm"
 .include "asm/log2_f32.asm"
+.include "asm/log2_f64.asm"
 .include "asm/exp2_f32.asm"
+.include "asm/exp2_f64.asm"
 .include "asm/pow_f32.asm"
+.include "asm/pow_f64.asm"
 .include "asm/trig_f32.asm"
+.include "asm/trig_f64.asm"
 
 .include "asm/chs_f32.asm"
 .include "asm/chs_f64.asm"
@@ -47,7 +52,11 @@
 .include "asm/conv_u32_u64.asm"
 .include "asm/conv_u32_i32.asm"
 .include "asm/conv_int_f32.asm"
+.include "asm/conv_int_f64.asm"
 .include "asm/conv_f32_i32.asm"
+.include "asm/conv_f64_i64.asm"
+.include "asm/conv_f32_f64.asm"
+.include "asm/conv_f64_f32.asm"
 .include "asm/floor_ceil_f32.asm"
 .include "asm/floor_ceil_f64.asm"
 

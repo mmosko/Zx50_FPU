@@ -28,7 +28,10 @@
 
 USER_POW_F64:
     CALL POP_TWO_64             ; BX <- X (TOS, exp), AX <- Y (NOS, base)
+    CALL POW_F64_CORE
+    HALT AX
 
+POW_F64_CORE:
     ; Test if exp (X) == 0.0 or -0.0 -> Y^0 == 1.0
     MOV DL, BH
     LSL DL, 1                   ; Shift out sign bit of X
@@ -69,24 +72,23 @@ USER_POW_F64:
 
     ; Compute 2^AX
     CALL EXP2_F64_CORE          ; AX <- 2^(X * log2(Y))
-
-    HALT AX
+    RET
 
 POW_F64_RET_ONE:
     LDC AX, CONST, ONE_F64
-    HALT AX
+    RET
 
 POW_F64_BASE_ZERO:
     OR BH, BH                   ; Test sign of exp X (BH)
     JNZ SIGN, POW_F64_ZERO_NEG_EXP
     XOR AX, AX                  ; 0^positive = 0.0
-    HALT AX
+    RET
 
 POW_F64_ZERO_NEG_EXP:
     LDC AX, CONST, POS_INF_F64
     SET ERR, 1
     SET VF, 1
-    HALT AX
+    RET
 
 POW_F64_DOMAIN_ERR:
     SET ERR, 1

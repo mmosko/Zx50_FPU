@@ -83,7 +83,7 @@ class Registers:
         # 128 words in EBR 0 & 1
         self.sp = Register(name=Reg.SP, size_in_bits=7, clock=clock)
         self.osp =Register(name=Reg.OSP, size_in_bits=7, clock=clock)
-        self.upc = Register(name=Reg.UPC, size_in_bits=10, clock=clock)
+        self.upc = Register(name=Reg.UPC, size_in_bits=11, clock=clock)
 
         # The instruction registers (read from u_code memory)
         self.instr = Register(name=Reg.INSTR, size_in_bits=19, clock=clock)

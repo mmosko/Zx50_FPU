@@ -37,8 +37,8 @@ class ControlBlock(FunctionalBlock):
         self._none_bus.set(Reg.NONE.value)
         self._upc_bus.set(Reg.UPC.value)
 
-        # Distributed LUT memory, 16x 10 bits
-        self._call_stack = LutRam(name="call_stack", size=16, width=10, clock=clock)
+        # Distributed LUT memory, 16x 11 bits
+        self._call_stack = LutRam(name="call_stack", size=16, width=11, clock=clock)
         self._csp = Register(name=Reg.RET_SET, size_in_bits=4, clock=clock)
         self._csp.write(0)
 

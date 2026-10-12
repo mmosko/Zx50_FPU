@@ -172,21 +172,21 @@ class Dispatcher:
         # The UpcAdder is always executing in parallel
         self._upc_mux.select(0)
         upc_next = self._upc_mux.read_int()
-        if upc_next & 0x400 > 0:
+        if upc_next & 0x800 > 0:
             self._status.set_bit(StatusFlag.ERR, True)
             raise UpcOverflowError("UPC overflow/carry during fetch")
 
         # T0 clock tick to present result to reg.instr / imm_reg on T1
         self._clock.tick(1)
         fetch_instr.to_register(self._instr_reg, self._imm_reg)
-        self._upc.write(upc_next & 0x3FF)
+        self._upc.write(upc_next & 0x7FF)
 
         nop_instr = MicroInstruction(op=MicroOp.NOP)
         try:
             while not self._halted:
                 # Read and decode instruction from reg.instr
                 instr = MicroInstruction.from_register(self._instr_reg)
-                logger.debug("UPC %03x: %s", (self._upc.read_int() - 1) & 0x3FF, instr)
+                logger.debug("UPC %03x: %s", (self._upc.read_int() - 1) & 0x7FF, instr)
                 block_num = (instr.op.value >> 3) & 0x07
                 self._writeback_mux.set_block(block_num)
 
@@ -210,12 +210,12 @@ class Dispatcher:
                     is_jump = False
 
                 upc_next = self._upc_mux.read_int()
-                if upc_next & 0x400 > 0:
+                if upc_next & 0x800 > 0:
                     self._status.set_bit(StatusFlag.ERR, True)
                     raise UpcOverflowError("UPC overflow/carry during fetch")
 
                 if is_jump:
-                    branch_target = upc_next & 0x3FF
+                    branch_target = upc_next & 0x7FF
                     if self._halted or branch_target >= len(microcode):
                         break
                     # Branch taken:
@@ -231,7 +231,7 @@ class Dispatcher:
                     fetch_instr = microcode[current_upc]
                     fetch_instr.to_register(self._instr_reg, self._imm_reg)
                     # UPC <= UPC + 1 (from UpcAdder)
-                    self._upc.write(upc_next & 0x3FF)
+                    self._upc.write(upc_next & 0x7FF)
 
         finally:
             self._halted = saved_halted

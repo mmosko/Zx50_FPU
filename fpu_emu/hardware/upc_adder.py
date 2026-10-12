@@ -31,8 +31,8 @@ class UpcAdder(Readable):
     A dedicated 10-bit incrementer calculates UPC + 1.
     If the counter overflows (1023 + 1 = 1024), carry is asserted, indicating an error.
     """
-    WIDTH: int = 10
-    MAX_VAL: int = (1 << WIDTH) - 1  # 1023 (0x3FF)
+    WIDTH: int = 11
+    MAX_VAL: int = (1 << WIDTH) - 1  # 2047 (0x7FF)
     MASK: int = MAX_VAL
 
     def __init__(self, upc: Register) -> None:
@@ -64,12 +64,12 @@ class UpcAdder(Readable):
 
     @property
     def val(self) -> int:
-        """The 10-bit incremented UPC value (bits 0..9)."""
+        """The 11-bit incremented UPC value (bits 0..10)."""
         return self.read_int() & self.MASK
 
     @property
     def carry(self) -> bool:
-        """The carry/overflow bit (bit 10, mask 0x400)."""
+        """The carry/overflow bit (bit 11, mask 0x800)."""
         return (self.read_int() & (1 << self.WIDTH)) != 0
 
     # def add(self, upc: int, step: int = 1) -> UpcAdderResult:

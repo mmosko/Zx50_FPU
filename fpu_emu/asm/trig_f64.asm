@@ -71,26 +71,30 @@ USER_TAN_F64:
     LDI CL, 2                   ; Opcode 2 = TAN
 
 TRIG_F64_ENTRY:
-    STO 15, CL                  ; SCR[15] <- user opcode
     CALL POP_ONE_64             ; AX <- theta from TOS, halts on underflow
+    CALL TRIG_F64_CORE
+    HALT AX
+
+TRIG_F64_CORE:
+    STO 15, CL                  ; SCR[15] <- user opcode
     STO 6, AX                   ; SCR[6..7] <- original theta
 
     ; Check for zero (+/-0.0): AH[30:0] == 0 and AL == 0
     MOV DH, AH
     LSL DH, 1
     OR DH, DH, AL
-    JZ ZERO, .trig_zero
+    JZ ZERO, .f64_trig_zero
 
     ; Extract 11-bit biased exponent into DH
     MOV DH, AH
     LSL DH, 1
     LSR DH, 21
     CMP DH, 2047
-    JZ ZERO, .trig_nan_or_inf   ; If exponent was 2047: Inf or NaN
+    JZ ZERO, .f64_trig_nan_or_inf   ; If exponent was 2047: Inf or NaN
 
     ; Tiny angle check: |theta| < 2^-27 (biased exp < 996)
     CMP DH, 996
-    JNZ CARRY, .trig_small_angle
+    JNZ CARRY, .f64_trig_small_angle
 
     ; Clear sign bit of theta to obtain y = |theta|
     LSL AH, 1
@@ -157,14 +161,14 @@ TRIG_F64_ENTRY:
     ; --------------------------------------------------------------------------
     LD CL, 15                   ; CL <- user opcode
     CMP CL, 1
-    JZ ZERO, .dispatch_cos
+    JZ ZERO, .f64_dispatch_cos
     CMP CL, 2
-    JZ ZERO, .dispatch_tan
+    JZ ZERO, .f64_dispatch_tan
 
     ; --- USER_SIN_F64 ---
     LD DL, 14                   ; DL <- q
     AND DL, DL, 1
-    JNZ ZERO, .sin_odd_q
+    JNZ ZERO, .f64_sin_odd_q
 
     ; Even quadrant (q = 0 or 2): evaluate sin(r)
     LDI DL, 0
@@ -172,33 +176,33 @@ TRIG_F64_ENTRY:
     CALL TRIG_POLY_CORE
     LD DL, 14
     CMP DL, 2
-    JNZ ZERO, .sin_apply_sign
+    JNZ ZERO, .f64_sin_apply_sign
     FCHS AH                     ; Negate for q == 2
-    JMP .sin_apply_sign
+    JMP .f64_sin_apply_sign
 
-.sin_odd_q:
+.f64_sin_odd_q:
     ; Odd quadrant (q = 1 or 3): evaluate cos(r)
     LDI DL, 1
     STO 13, DL
     CALL TRIG_POLY_CORE
     LD DL, 14
     CMP DL, 3
-    JNZ ZERO, .sin_apply_sign
+    JNZ ZERO, .f64_sin_apply_sign
     FCHS AH                     ; Negate for q == 3
 
-.sin_apply_sign:
+.f64_sin_apply_sign:
     LD BH, 7                    ; BH <- original AH
     LSR BH, 31                  ; Test sign bit of theta
-    JZ ZERO, .sin_done
+    JZ ZERO, .f64_sin_done
     FCHS AH                     ; Invert sign if theta was negative
-.sin_done:
-    HALT AX
+.f64_sin_done:
+    RET
 
     ; --- USER_COS_F64 ---
-.dispatch_cos:
+.f64_dispatch_cos:
     LD DL, 14                   ; DL <- q
     AND DL, DL, 1
-    JNZ ZERO, .cos_odd_q
+    JNZ ZERO, .f64_cos_odd_q
 
     ; Even quadrant (q = 0 or 2): evaluate cos(r)
     LDI DL, 1
@@ -206,25 +210,25 @@ TRIG_F64_ENTRY:
     CALL TRIG_POLY_CORE
     LD DL, 14
     CMP DL, 2
-    JNZ ZERO, .cos_done
+    JNZ ZERO, .f64_cos_done
     FCHS AH                     ; Negate for q == 2
-    JMP .cos_done
+    JMP .f64_cos_done
 
-.cos_odd_q:
+.f64_cos_odd_q:
     ; Odd quadrant (q = 1 or 3): evaluate sin(r)
     LDI DL, 0
     STO 13, DL
     CALL TRIG_POLY_CORE
     LD DL, 14
     CMP DL, 1
-    JNZ ZERO, .cos_done
+    JNZ ZERO, .f64_cos_done
     FCHS AH                     ; Negate for q == 1
 
-.cos_done:
-    HALT AX
+.f64_cos_done:
+    RET
 
     ; --- USER_TAN_F64 ---
-.dispatch_tan:
+.f64_dispatch_tan:
     ; Compute sin(r)
     LDI DL, 0
     STO 13, DL
@@ -239,59 +243,59 @@ TRIG_F64_ENTRY:
 
     LD DL, 14                   ; DL <- q
     AND DL, DL, 1
-    JNZ ZERO, .tan_odd_q
+    JNZ ZERO, .f64_tan_odd_q
 
     ; Even quadrant (q = 0 or 2): num = sin(r), den = cos(r)
     LD AX, 16                   ; AX <- sin(r)
     LD BX, 18                   ; BX <- cos(r)
     CALL DIV_F64_CORE
-    JMP .tan_apply_sign
+    JMP .f64_tan_apply_sign
 
-.tan_odd_q:
+.f64_tan_odd_q:
     ; Odd quadrant (q = 1 or 3): num = -cos(r), den = sin(r)
     LD AX, 18                   ; AX <- cos(r)
     FCHS AH                     ; AX <- -cos(r)
     LD BX, 16                   ; BX <- sin(r)
     CALL DIV_F64_CORE
 
-.tan_apply_sign:
+.f64_tan_apply_sign:
     LD BH, 7                    ; BH <- original AH
     LSR BH, 31                  ; Test sign bit of theta
-    JZ ZERO, .tan_done
+    JZ ZERO, .f64_tan_done
     FCHS AH                     ; Invert sign if theta was negative
-.tan_done:
-    HALT AX
+.f64_tan_done:
+    RET
 
     ; --------------------------------------------------------------------------
     ; Special Cases
     ; --------------------------------------------------------------------------
-.trig_zero:
-.trig_small_angle:
+.f64_trig_zero:
+.f64_trig_small_angle:
     LD CL, 15                   ; CL <- user opcode
     CMP CL, 1
-    JZ ZERO, .trig_ret_one      ; cos(0 or small) = 1.0
+    JZ ZERO, .f64_trig_ret_one  ; cos(0 or small) = 1.0
     LD AX, 6                    ; Return original theta for SIN and TAN
-    HALT AX
+    RET
 
-.trig_ret_one:
+.f64_trig_ret_one:
     LDC AX, CONST, ONE_F64
-    HALT AX
+    RET
 
-.trig_nan_or_inf:
+.f64_trig_nan_or_inf:
     LD AX, 6                    ; Load original theta
     MOV DH, AH
     LSL DH, 12                  ; Clear sign and exponent bits
     OR DH, DH, AL               ; Check if fraction == 0
-    JZ ZERO, .trig_inf_err      ; If fraction == 0: Infinity -> Domain Error!
+    JZ ZERO, .f64_trig_inf_err  ; If fraction == 0: Infinity -> Domain Error!
 
     ; NaN: Return NaN as-is
-    HALT AX
+    RET
 
-.trig_inf_err:
+.f64_trig_inf_err:
     ; Return Quiet NaN (0x7FF80000_00000000) with ERR=1
     LDC AX, CONST, NAN_F64
     SET ERR, 1
-    HALT AX
+    RET
 
 ; ==============================================================================
 ; TRIG_POLY_CORE: Horner Polynomial for sin(r) or cos(r)

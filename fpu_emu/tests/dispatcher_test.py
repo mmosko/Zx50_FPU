@@ -85,9 +85,9 @@ def test_dispatcher_branch_updates_upc(fpga: FpgaModel):
 
 
 def test_dispatcher_upc_overflow_raises_error(fpga: FpgaModel):
-    """When UPC overflows 10 bits (>1023), UpcOverflowError must be raised and ERR flag asserted."""
-    fpga.reg_file.upc.write(1023)
-    long_microcode = [MicroInstruction(op=MicroOp.NOP)] * 1024
+    """When UPC overflows 11 bits (>2047), UpcOverflowError must be raised and ERR flag asserted."""
+    fpga.reg_file.upc.write(2047)
+    long_microcode = [MicroInstruction(op=MicroOp.NOP)] * 2048
 
     with pytest.raises(UpcOverflowError):
         fpga.dispatcher._run(long_microcode)

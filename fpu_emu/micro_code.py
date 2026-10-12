@@ -2,18 +2,30 @@
 
 from typing import List
 
+import importlib.util
+from pathlib import Path
+
 from fpu_emu.fpga_resource import fpga_resource
 from fpu_emu.micro_instruction import MicroInstruction
-from fpu_emu.ucode import fpu_symbols, fpu_ucode
 from fpu_emu.user_opcodes import UserOpcode
+
+_tmp_ucode_path = Path("/tmp/ucode.py")
+if _tmp_ucode_path.exists():
+    _spec = importlib.util.spec_from_file_location("_tmp_ucode", _tmp_ucode_path)
+    _mod = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)
+    fpu_symbols = _mod.fpu_symbols
+    fpu_ucode = _mod.fpu_ucode
+else:
+    from fpu_emu.ucode import fpu_symbols, fpu_ucode
 
 
 class MicroCode:
     """Microcode ROM lookup table."""
 
-    # 1024 words (EBR 4-7) for runtime microcode execution store
-    HARD_MAX_MICRO_INSTRUCTIONS: int = 1024
-    SOFT_MAX_MICRO_INSTRUCTIONS: int = 1024
+    # 1536 words (EBR 0-5) for runtime microcode execution store (6 KB Code ROM)
+    HARD_MAX_MICRO_INSTRUCTIONS: int = 1536
+    SOFT_MAX_MICRO_INSTRUCTIONS: int = 1536
     MAX_MICRO_INSTRUCTIONS: int = HARD_MAX_MICRO_INSTRUCTIONS
 
     @classmethod
@@ -26,10 +38,10 @@ class MicroCode:
 
     @classmethod
     @fpga_resource(
-        approach="Cascaded Single-Port SysMEM EBR (EBR 4-7, 1024x32) for runtime microcode execution store",
+        approach="Cascaded Single-Port SysMEM EBR (EBR 0-5, 1536x32) for runtime microcode execution store",
         luts=0,
         ffs=0,
-        ebr=4,
+        ebr=6,
         delay_ns=3.2,
         cycles=1,
         shared_unit="ebr_microcode_rom",
