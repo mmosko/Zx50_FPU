@@ -1,86 +1,48 @@
 ; ==============================================================================
-; POW_F32: IEEE-754 Single-Precision Power: Y^X = EXP2_F32(X * LOG2_F32(Y))
+; USER_POW_F32: IEEE-754 Single-Precision Power: Y^X
 ;
-; Inputs:
-;   Stack: TOS = float32 X (exp), NOS = float32 Y (base)
-;
-; Outputs:
-;   Stack: TOS = float32 Y^X
-;   Status flags:
-;     ZERO set if result underflows to 0.0
-;     OVERFLOW set if result overflows to +Inf
-;     ERR set if Y < 0.0 or on invalid domain (e.g. 0^neg)
-;     UNDERFLOW set if stack underflow
-;
-; Register Allocation:
-;   AL : Base (Y) / log2(Y) / product / result
-;   BL : Exponent (X)
-;   BH : Temporary for zero / one tests
-;   Scratchpad:
-;     SCR[0] : Exponent (X) preserved during LOG2_CORE evaluation
-;
-; Subroutines Called:
-;   POP_TWO_32, LOG2_CORE, MUL_F32_CORE, EXP2_CORE
+; Delegation wrapper:
+;   1. Pops two float32 operands: exp (X) in BL, base (Y) in AL
+;   2. Converts base (Y) to float64 and saves to SCR[18..19]
+;   3. Converts exp (X) to float64 in BX
+;   4. Loads base (Y) into AX
+;   5. Calls POW_F64_CORE
+;   6. Converts float64 result in AX to float32 in AL
+;   7. Re-asserts VF if ERR set (e.g. 0^neg division-by-zero overflow)
+;   8. HALT AL
 ; ==============================================================================
 
-.equ ONE_F32, 32
-.equ POS_INF_F32, 38
-
 USER_POW_F32:
-    CALL POP_TWO_32             ; AL <- base (Y, NOS), BL <- exp (X, TOS)
-
-    ; Test if exp == 0.0 or -0.0 -> Y^0 == 1.0
-    MOV BH, BL
-    LSL BH, 1                   ; Shift out sign bit
-    JZ ZERO, POW_RET_ONE
-
-    ; Test if base == 1.0f -> 1^X == 1.0
-    LDC BH, CONST, ONE_F32
-    CMP BH, AL
-    JZ ZERO, POW_RET_ONE
-
-    ; Test if base == 0.0 or -0.0
-    MOV BH, AL
-    LSL BH, 1                   ; Shift out sign bit
-    JZ ZERO, POW_BASE_ZERO
-
-    ; Test if base < 0.0 -> domain error
-    OR AL, AL
-    JNZ SIGN, POW_DOMAIN_ERR
-
-    ; Save exp (BL) to scratchpad slot 16 (avoiding SCR[0..11] clobber by LOG2_CORE)
-    STO 16, BL
-
-    ; AL holds base (Y > 0)
-    CALL LOG2_CORE              ; AL <- log2(Y)
-
-    ; Load exp (X) from scratchpad slot 16 into BL
-    LD BL, 16
-
-    ; Multiply: AL (log2(Y)) * BL (X)
-    CALL MUL_F32_CORE           ; AL <- X * log2(Y)
-
-    ; Compute 2^AL
-    CALL EXP2_CORE              ; AL <- 2^(X * log2(Y)) = Y^X
-
+    CALL POP_TWO_32                 ; BL <- exp (X, TOS), AL <- base (Y, NOS)
+    CALL POW_F32_CORE
     HALT AL
 
-POW_RET_ONE:
-    LDC AL, CONST, ONE_F32      ; Return 1.0f
-    HALT AL
+POW_F32_CORE:
+    ; Save exp (BL) to SCR[20]
+    STO 20, BL
 
-POW_BASE_ZERO:
-    OR BL, BL                   ; Test sign of exp (BL)
-    JNZ SIGN, POW_ZERO_NEG_EXP
-    XOR AL, AL                  ; 0^positive = 0.0
-    HALT AL
+    ; Convert base (AL) to float64 in AX
+    CALL CONV_F32_F64_CORE          ; AX <- float64(base Y)
+    STO 18, AX                      ; SCR[18..19] <- float64(base Y)
 
-POW_ZERO_NEG_EXP:
-    LDC AL, CONST, POS_INF_F32  ; 0^negative = +Inf
-    SET ERR, 1
+    ; Convert exp (X) to float64
+    LD AL, 20                       ; AL <- exp X (32-bit)
+    CALL CONV_F32_F64_CORE          ; AX <- float64(exp X)
+    MOV BX, AX                      ; BX <- float64(exp X)
+
+    ; Load base into AX
+    LD AX, 18                       ; AX <- float64(base Y)
+
+    ; Call POW_F64_CORE: AX = base, BX = exp
+    CALL POW_F64_CORE               ; AX <- float64(base^exp)
+
+    ; Convert float64 result to float32 in AL
+    CALL CONV_F64_F32_CORE          ; AL <- float32(AX)
+
+    ; If ERR set (0^neg), re-assert VF flag
+    JNZ ERR, .pow_f32_set_vf
+    RET
+
+.pow_f32_set_vf:
     SET VF, 1
-    HALT AL
-
-POW_DOMAIN_ERR:
-    SET ERR, 1
-    HALT
+    RET
