@@ -119,14 +119,54 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 | **Square Root** | `SQRT_F64` | Pending | **~35 – 45 words** |
 | **Transcendentals** | `LOG2_F64`, `EXP2_F64`, `POW_F64` | Pending | **~190 – 270 words** |
 | **CORDIC Trigonometrics** | `SIN_F64`, `COS_F64`, `TAN_F64` | Pending | **~180 – 240 words** |
-| **TOTAL REMAINING F64 INSTRUCTIONS** | **13 remaining operations** | Pending | **~473 – 643 words** |
+| **TOTAL REMAINING F64 INSTRUCTIONS** | **12 remaining operations** | Pending | **~440 – 546 words** |
 
-> [!NOTE]
-> **Microcode ROM Architecture Requirement:**
-> Current microcode usage is **1,023 / 1,024 words** (1 word headroom remaining in a single 10-bit UPC address space). Implementing the full 64-bit floating-point and transcendental suite requires expanding microcode capacity:
-> - **Option A (Recommended - 2,048 Words):** Expand `UPC` address width from 10 bits (`0x3FF`) to 11 bits (`0x7FF`) by allocating a 2nd EBR block on the Lattice MachXO2-2000 (which has 8 EBR blocks total, with only 1 currently dedicated to microcode).
-> - **Option B (Microcode Bank Switching / Overlay):** Add a 1-bit bank register switching two 1,024-word pages (Bank 0: 32-bit & integer operations; Bank 1: 64-bit float operations).
-> - **Option C (Staged Implementation):** Implement pure conversions and integer operations within current ROM space via microcode compaction, deferring transcendental/CORDIC 64-bit routines until 2K expansion is enabled.
+> [!IMPORTANT]
+> ### Microcode ROM Expansion & Architecture Refactor Plan (80–120 MHz)
+> To comfortably host the complete 64-bit floating-point, transcendental, and trigonometric suite without compromise, the FPU architecture is being upgraded from 1,024 words to **1,536 words**:
+>
+> 1. **EBR Memory Re-partitioning (MachXO2-2000, 8 EBRs Total):**
+>    - **EBR 0–5 (Microcode Store):** 6 EBR blocks configured as **1,536 words $\times$ 32 bits** (expanding microcode capacity by 512 words).
+>    - **EBR 6–7 (Data RAM & Stack):** 2 EBR blocks configured as **512 words $\times$ 32 bits** (dedicated to math stack [128 words], scratchpad [64 words], user storage [16 words], and core constants [304 words]).
+>    - **Zero-Contention Parallel Access:** Microcode fetching (EBR 0–5) and Stack/Scratchpad read/write (EBR 6–7) operate on physically isolated EBR blocks, guaranteeing single-cycle concurrent execution without pipeline stalls.
+>    - **External 10ns Fast SRAM:** Large lookup tables (CORDIC angle tables, Chebyshev polynomial coefficients, Newton-Raphson seeds) are offloaded to external 10ns SRAM. At 80–120 MHz ($T_{\text{clk}} = 8.3\text{ – }12.5\text{ ns}$), SRAM accesses execute with 1–2 NOPs / wait cycles, which is negligible for multi-cycle transcendental routines.
+>
+> 2. **Machine Word Rearrangement (Fixed 32-Bit Word):**
+>    - Retains fixed 32-bit instructions (avoiding variable-length/16-bit decoding penalties, alignment logic, and timing degradation at 80–120 MHz).
+>    - Reuses bits `[24:21]` as a shared `DST/FLAG` field (since branches evaluate condition flags without a destination register, while datapath ops write to a destination register without condition flags).
+>    ```text
+>     31        26 25 24        21 20        17 16        13 12                                 0
+>    +------------+--+------------+------------+------------+------------------------------------+
+>    |   OPCODE   |W |  DST/FLAG  |    SRC1    |    SRC2    |          IMMEDIATE / ADDR          |
+>    |   [31:26]  |  |  [24:21]   |  [20:17]   |  [16:13]   |              [12:0]                |
+>    |   (6 bits) |  |  (4 bits)  |  (4 bits)  |  (4 bits)  |             (13 bits)              |
+>    +------------+--+------------+------------+------------+------------------------------------+
+>    ```
+>    - **13-Bit Immediate / Address Reach (`[12:0]`, 0 .. 8,191):** Directly addresses up to 8,192 words of microcode and allows full IEEE-754 double-precision exponent and constant immediates (like 1023, 1075, 2047) without masking workarounds.
+>    - **Full 3-Address Ternary Operations:** Preserves `DST`, `SRC1`, and `SRC2` for single-cycle ternary ALU arithmetic (`EXP_SUB`, `SUB`, `ADD`, `MULU`).
+>
+> 3. **F64 Pre-Refactor Plan (In-Memory Assembly & Verification):**
+>    To avoid polluting the repository with binary/object files and prevent blowing past the 1,024-word ROM limit before the hardware refactor:
+>    - **Standalone Assembly Files:** Author each of the remaining 12 F64 operations in standalone `.asm` files under `fpu_emu/asm/`.
+>    - **Exclude from `ucode.asm`:** Do **not** `.include` these new files into `ucode.asm` yet. The existing 1,023-word ROM remains green with all 1,473 tests passing.
+>    - **In-Memory Assembly:** In tests, assemble the `.asm` files dynamically via `fpu_asm.Assembler().assemble_file(path)` directly into `List[MicroInstruction]` in memory (zero filesystem object artifacts).
+>    - **Unit / Verification Testing:** Run tests against a fresh `FpgaModel` by executing `fpga.dispatcher._run(assembled_instructions)` directly on pushed stack inputs.
+>    - **Instruction Word Accounting:** Measure and log the exact static instruction word count for each routine.
+>    - **Refactor Execution:** Once all 12 routines pass unit testing and the total instruction count is verified, execute the machine word rearrangement and EBR 0–5 expansion refactor.
+>
+> #### F64 Pre-Refactor Implementation Checklist
+> - [ ] **1. `CONV_F32_F64` (`0xC9`)**: Widens IEEE-754 32-bit float to 64-bit float.
+> - [ ] **2. `CONV_F64_F32` (`0xCB`)**: Narrows IEEE-754 64-bit float to 32-bit float ($V=1$ on overflow, $U=1$ on underflow).
+> - [ ] **3. `CONV_U64_F64` (`0xC5`)**: Unsigned 64-bit integer $\to$ Double float.
+> - [ ] **4. `CONV_I64_F64` (`0xCE`)**: Signed 64-bit integer $\to$ Double float (shares unsigned core).
+> - [ ] **5. `CONV_F64_I64` (`0xCF`)**: Double float $\to$ Signed 64-bit integer.
+> - [ ] **6. `SQRT_F64` (`0x23`)**: 64-bit square root via 54-iteration restoring binary shift-and-subtract loop.
+> - [ ] **7. `LOG2_F64` (`0x33`)**: 64-bit base-2 logarithm via argument reduction and Chebyshev polynomial.
+> - [ ] **8. `EXP2_F64` (`0x3B`)**: 64-bit base-2 exponential ($2^x$) via range reduction and polynomial evaluation.
+> - [ ] **9. `POW_F64` (`0x2B`)**: 64-bit general power ($y^x = 2^{x \cdot \log_2(y)}$).
+> - [ ] **10. `SIN_F64` (`0x73`)**: 64-bit circular CORDIC sine (53 iterations).
+> - [ ] **11. `COS_F64` (`0x7B`)**: 64-bit circular CORDIC cosine (shared CORDIC core).
+> - [ ] **12. `TAN_F64` (`0x83`)**: 64-bit circular CORDIC tangent (CORDIC $\to$ `DIV_F64_CORE`).
 
 ### 5. Hardware Simulation & Verilog RTL
 - [ ] **Host Interface Simulation**:
