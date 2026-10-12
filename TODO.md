@@ -112,9 +112,10 @@ trigonometrics are implemented as thin wrappers calling the verified 64-bit core
   - Replaced `USER_POW_F32` with the delegation wrapper: pops both operands, widens to float64, calls `POW_F64_CORE`, narrows back via `CONV_F64_F32_CORE`, and preserves `OVERFLOW` on $0^\text{neg}$.
   - Microcode total footprint reduced from 1,447 words to **1,433 words** (14 words saved).
   - Verified all 39 `pow_f32` tests pass, 247 power/log/exp integration tests pass, and full 2,183 test suite passes with 0 regressions.
-- [ ] **Step 7: Implement Delegation Wrapper in `trig_f32.asm`**
-  - Replace the 144-word `trig_f32.asm` with thin dispatchers for `USER_SIN_F32`, `USER_COS_F32`, and `USER_TAN_F32` that load `CL` (0, 1, 2) and call `CONV_F32_F64_CORE` $\to$ `TRIG_F64_CORE` $\to$ `CONV_F64_F32_CORE` $\to$ `HALT AL`.
-  - Verify all single-precision `sin`, `cos`, and `tan` test suites pass.
+- [x] **Step 7: Implement Delegation Wrapper in `trig_f32.asm`**
+  - Replaced the 144-word `trig_f32.asm` with thin delegation wrapper: dispatches `USER_SIN_F32` ($CL=0$), `USER_COS_F32` ($CL=1$), and `USER_TAN_F32` ($CL=2$), checks for NaN/$\pm$Inf (returns `NAN_F32` with `ERR=1`), widens via `CONV_F32_F64_CORE`, calls `TRIG_F64_CORE`, narrows via `CONV_F64_F32_CORE`, and halts with `AL`.
+  - Microcode total footprint reduced from 1,433 words to **1,309 words** (124 words saved).
+  - Verified all 85 single-precision trig tests pass, 208 combined single & double precision trig tests pass, and full 2,183 test suite passes with 0 regressions.
 
 #### Phase 3: Table Retirement & Unified Microcode Verification
 - [ ] **Step 8: Retire Obsolete `CHEB` Table**
