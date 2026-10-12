@@ -14,7 +14,6 @@
   // DATA_RAM Sub-table Word Offsets (EBR 0)
   `define DATA_RAM_CONST_BASE      10'h100 // Words 256..319
   `define DATA_RAM_TRIG_BASE       10'h200 // Words 512..639
-  `define DATA_RAM_CHEB_BASE       10'h280 // Words 640..767
   `define DATA_RAM_SEEDS_BASE      10'h300 // Words 768..1023
 
   // FPU Constants Word Slot Map (32-bit words from DATA_RAM_CONST_BASE)
@@ -57,25 +56,5 @@
   `define CONST_SLOT_LN10_F64           6'd60
   `define CONST_SLOT_MAGIC_F64          6'd62
   `define CONST_SLOT_MAGIC_F64_HI       6'd63
-
-  // Chebyshev & Polynomial Coefficients Word Slot Map (32-bit words from DATA_RAM_CHEB_BASE)
-  `define CHEB_SLOT_EXP2_C1            6'd1
-  `define CHEB_SLOT_EXP2_C2            6'd2
-  `define CHEB_SLOT_EXP2_C3            6'd3
-  `define CHEB_SLOT_EXP2_C4            6'd4
-  `define CHEB_SLOT_EXP2_C5            6'd5
-  `define CHEB_SLOT_EXP2_C6            6'd6
-  `define CHEB_SLOT_LOG2_C0            6'd7
-  `define CHEB_SLOT_LOG2_C1            6'd8
-  `define CHEB_SLOT_LOG2_C2            6'd9
-  `define CHEB_SLOT_LOG2_C3            6'd10
-  `define CHEB_SLOT_SQRT2_MANT         6'd11
-  `define CHEB_SLOT_SIN_C1             6'd12
-  `define CHEB_SLOT_SIN_C2             6'd13
-  `define CHEB_SLOT_SIN_C3             6'd14
-  `define CHEB_SLOT_COS_D1             6'd15
-  `define CHEB_SLOT_COS_D2             6'd16
-  `define CHEB_SLOT_COS_D3             6'd17
-  `define CHEB_SLOT_COS_D4             6'd18
 
 `endif // FPU_ROM_MAP_VH

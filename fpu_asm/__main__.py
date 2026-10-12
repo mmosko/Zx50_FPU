@@ -40,8 +40,8 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--pad",
         type=int,
-        default=512,
-        help="Pad output image with NOPs up to this number of 32-bit words (default: 512).",
+        default=1536,
+        help="Pad output image with NOPs up to this number of 32-bit words (default: 1536).",
     )
     parser.add_argument(
         "--no-pad",

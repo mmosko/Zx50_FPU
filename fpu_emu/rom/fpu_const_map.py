@@ -18,7 +18,7 @@ class FpuTable(IntEnum):
     Mapped to base offsets in unified DATA_RAM (1024x32, EBR 0):
       - CONST: Base 0x100 (words 256..319, 32-bit)
       - TRIG:  Base 0x200 (words 512..639, 32-bit)
-      - CHEB:  Base 0x280 (words 640..767, 32-bit)
+      - CHEB:  Reserved (obsolete)
       - RECIP: Base 0x300 (words 768..1023, low 16-bit slice)
       - SQRT:  Base 0x300 (words 768..1023, high 16-bit slice)
     """
@@ -27,30 +27,6 @@ class FpuTable(IntEnum):
     CHEB = 2
     RECIP = 3
     SQRT = 4
-
-
-class FpuCheb(IntEnum):
-    """Chebyshev / Polynomial Coefficients Word Slot Map for EBR CHEB ROM.
-    Each slot represents a 32-bit word offset from CHEB table base (0x280).
-    """
-    EXP2_C1 = 1  # exp2 Taylor c1 (ln(2) in Q1.31)
-    EXP2_C2 = 2  # exp2 Taylor c2 (ln(2)^2 / 2 in Q1.31)
-    EXP2_C3 = 3  # exp2 Taylor c3 (ln(2)^3 / 6 in Q1.31)
-    EXP2_C4 = 4  # exp2 Taylor c4 (ln(2)^4 / 24 in Q1.31)
-    EXP2_C5 = 5  # exp2 Taylor c5 (ln(2)^5 / 120 in Q1.31)
-    EXP2_C6 = 6  # exp2 Taylor c6 (ln(2)^6 / 720 in Q1.31)
-    LOG2_C0 = 7  # log2 minimax c0 (2.88539008 in Q3.29)
-    LOG2_C1 = 8  # log2 minimax c1 (0.96179840 in Q3.29)
-    LOG2_C2 = 9  # log2 minimax c2 (0.57676343 in Q3.29)
-    LOG2_C3 = 10  # log2 minimax c3 (0.43044988 in Q3.29)
-    SQRT2_MANT = 11  # sqrt(2) mantissa threshold (bit 23 implicit 1)
-    SIN_C1 = 12  # sin Taylor c1 (1/6 in IEEE-754 single float)
-    SIN_C2 = 13  # sin Taylor c2 (1/120 in IEEE-754 single float)
-    SIN_C3 = 14  # sin Taylor c3 (1/5040 in IEEE-754 single float)
-    COS_D1 = 15  # cos Taylor d1 (1/2 in IEEE-754 single float)
-    COS_D2 = 16  # cos Taylor d2 (1/24 in IEEE-754 single float)
-    COS_D3 = 17  # cos Taylor d3 (1/720 in IEEE-754 single float)
-    COS_D4 = 18  # cos Taylor d4 (1/40320 in IEEE-754 single float)
 
 
 class FpuConst(IntEnum):

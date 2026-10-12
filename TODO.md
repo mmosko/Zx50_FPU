@@ -118,9 +118,10 @@ trigonometrics are implemented as thin wrappers calling the verified 64-bit core
   - Verified all 85 single-precision trig tests pass, 208 combined single & double precision trig tests pass, and full 2,183 test suite passes with 0 regressions.
 
 #### Phase 3: Table Retirement & Unified Microcode Verification
-- [ ] **Step 8: Retire Obsolete `CHEB` Table**
-  - Remove the 128-word `CHEB` definition from `fpu_const_map.py` and `build_flash.py`.
-  - Verify no lingering references remain.
+- [x] **Step 8: Retire Obsolete `CHEB` Table**
+  - Removed `CHEB_DEF` and `generate_cheb_table()` from `tools/build_flash.py`, removed `CHEB_SLOT_*` definitions from `src/fpu_rom_map.vh`, and eliminated `FpuCheb` from `fpu_emu/rom/fpu_const_map.py`.
+  - Updated `fpu_asm/assembler.py` to remove `FpuCheb` imports and symbol resolution.
+  - Verified no active microcode or tests reference `CHEB`. Regenerated all artifacts via `build_flash.py`.
 - [ ] **Step 9: Microcode Reassembly & Verification**
   - Reassemble unified microcode and verify that total microcode drops from **1,563 words to ~1,287 words** (saving ~276 words and well within the 1,536 limit).
   - Run the full test suite (2,183+ tests) to confirm all operations pass.

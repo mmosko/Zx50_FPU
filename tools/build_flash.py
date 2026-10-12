@@ -223,47 +223,6 @@ CONSTANTS_DEF = [
     ("MAGIC_F64_HI", 63, 0x43380000, 4, "high 32-bit word of MAGIC in IEEE-754 double precision"),
 ]
 
-CHEB_DEF = [
-    # (enum_name, slot, hex_val, description)
-    ("EXP2_C1", 1, 0x58B90C26, "exp2 Taylor c1 (ln(2) in Q1.31)"),
-    ("EXP2_C2", 2, 0x1EBFBE08, "exp2 Taylor c2 (ln(2)^2 / 2 in Q1.31)"),
-    ("EXP2_C3", 3, 0x071ABC52, "exp2 Taylor c3 (ln(2)^3 / 6 in Q1.31)"),
-    ("EXP2_C4", 4, 0x013B29F7, "exp2 Taylor c4 (ln(2)^4 / 24 in Q1.31)"),
-    ("EXP2_C5", 5, 0x002BE4C7, "exp2 Taylor c5 (ln(2)^5 / 120 in Q1.31)"),
-    ("EXP2_C6", 6, 0x00051153, "exp2 Taylor c6 (ln(2)^6 / 720 in Q1.31)"),
-    ("LOG2_C0", 7, 0x5C551D94, "log2 minimax c0 (2.88539008 in Q3.29)"),
-    ("LOG2_C1", 8, 0x1EC70D70, "log2 minimax c1 (0.96179840 in Q3.29)"),
-    ("LOG2_C2", 9, 0x1274D895, "log2 minimax c2 (0.57676343 in Q3.29)"),
-    ("LOG2_C3", 10, 0x0DC63ED4, "log2 minimax c3 (0.43044988 in Q3.29)"),
-    ("SQRT2_MANT", 11, 0x00B504F3, "sqrt(2) mantissa threshold (bit 23 implicit 1)"),
-    ("SIN_C1", 12, 0x3E2AAAAB, "sin Taylor c1 (1/6 in IEEE-754 single float)"),
-    ("SIN_C2", 13, 0x3C088889, "sin Taylor c2 (1/120 in IEEE-754 single float)"),
-    ("SIN_C3", 14, 0x39500D01, "sin Taylor c3 (1/5040 in IEEE-754 single float)"),
-    ("COS_D1", 15, 0x3F000000, "cos Taylor d1 (1/2 in IEEE-754 single float)"),
-    ("COS_D2", 16, 0x3D2AAAAB, "cos Taylor d2 (1/24 in IEEE-754 single float)"),
-    ("COS_D3", 17, 0x3AB60B61, "cos Taylor d3 (1/720 in IEEE-754 single float)"),
-    ("COS_D4", 18, 0x37D00D01, "cos Taylor d4 (1/40320 in IEEE-754 single float)"),
-]
-
-
-def generate_constants_table() -> bytearray:
-    """Table 11: Mathematical & Algorithm Constants (256 bytes / 64 word slots)."""
-    data = bytearray(256)
-    for _, slot, hex_val, nbytes, _ in CONSTANTS_DEF:
-        offset = slot * 4
-        raw = hex_val.to_bytes(nbytes, byteorder="little")
-        data[offset : offset + nbytes] = raw
-    return data
-
-
-def generate_cheb_table() -> bytearray:
-    """Table 15: Chebyshev & Polynomial Coefficients (512 bytes / 128 words)."""
-    data = bytearray(128 * 4)
-    for _, slot, hex_val, _ in CHEB_DEF:
-        offset = slot * 4
-        data[offset : offset + 4] = hex_val.to_bytes(4, byteorder="little")
-    return data
-
 
 def generate_cordic_atan32_table() -> bytearray:
     """Table 12: CORDIC Arctangent 32-bit Table [ theta_i = atan(2^-i) in Q2.30 ] for i in [0..31]."""
@@ -402,11 +361,7 @@ def generate_flash_words() -> list[int]:
     for i in range(32):
         words[DATA_RAM_TRIG_WORD + i] = int.from_bytes(cordic_atan32[i * 4 : i * 4 + 4], byteorder="little")
 
-    # 3. Chebyshev Polynomial Coefficients at words 640..767 (DATA_RAM offset 0x280)
-    for _, slot, hex_val, _ in CHEB_DEF:
-        words[DATA_RAM_CHEB_WORD + slot] = hex_val & 0xFFFFFFFF
-
-    # 4. Combined 16-bit Seed Tables at words 768..1023 (DATA_RAM offset 0x300)
+    # 3. Combined 16-bit Seed Tables at words 768..1023 (DATA_RAM offset 0x300)
     # Bit [31:16]: SQRT seed, Bit [15:0]: RECIP seed
     recip = generate_recip_table()
     sqrt = generate_sqrt_table()
@@ -415,7 +370,7 @@ def generate_flash_words() -> list[int]:
         s_val = sqrt[k * 2] | (sqrt[k * 2 + 1] << 8)
         words[DATA_RAM_SEEDS_WORD + k] = ((s_val & 0xFFFF) << 16) | (r_val & 0xFFFF)
 
-    # 5. Microcode Store (CODE_ROM) at words 1024..2047
+    # 4. Microcode Store (CODE_ROM) at words 1024..2047
     try:
         from fpu_emu.ucode import fpu_ucode
         for i, inst in enumerate(fpu_ucode):
@@ -459,15 +414,10 @@ def write_verilog_header(header_path: str):
         f.write("  // DATA_RAM Sub-table Word Offsets (EBR 0)\n")
         f.write(f"  `define DATA_RAM_CONST_BASE      10'h{DATA_RAM_CNS_WORD:03X} // Words 256..319\n")
         f.write(f"  `define DATA_RAM_TRIG_BASE       10'h{DATA_RAM_TRIG_WORD:03X} // Words 512..639\n")
-        f.write(f"  `define DATA_RAM_CHEB_BASE       10'h{DATA_RAM_CHEB_WORD:03X} // Words 640..767\n")
         f.write(f"  `define DATA_RAM_SEEDS_BASE      10'h{DATA_RAM_SEEDS_WORD:03X} // Words 768..1023\n\n")
         f.write("  // FPU Constants Word Slot Map (32-bit words from DATA_RAM_CONST_BASE)\n")
         for name, slot, _, _, _ in CONSTANTS_DEF:
             f.write(f"  `define CONST_SLOT_{name:<18} 6'd{slot}\n")
-        f.write("\n")
-        f.write("  // Chebyshev & Polynomial Coefficients Word Slot Map (32-bit words from DATA_RAM_CHEB_BASE)\n")
-        for name, slot, _, _ in CHEB_DEF:
-            f.write(f"  `define CHEB_SLOT_{name:<18} 6'd{slot}\n")
         f.write("\n")
         f.write("`endif // FPU_ROM_MAP_VH\n")
 
@@ -489,7 +439,7 @@ def write_python_constants(py_path: str):
         f.write("    Mapped to base offsets in unified DATA_RAM (1024x32, EBR 0):\n")
         f.write("      - CONST: Base 0x100 (words 256..319, 32-bit)\n")
         f.write("      - TRIG:  Base 0x200 (words 512..639, 32-bit)\n")
-        f.write("      - CHEB:  Base 0x280 (words 640..767, 32-bit)\n")
+        f.write("      - CHEB:  Reserved (obsolete)\n")
         f.write("      - RECIP: Base 0x300 (words 768..1023, low 16-bit slice)\n")
         f.write("      - SQRT:  Base 0x300 (words 768..1023, high 16-bit slice)\n")
         f.write('    """\n')
@@ -498,13 +448,6 @@ def write_python_constants(py_path: str):
         f.write("    CHEB = 2\n")
         f.write("    RECIP = 3\n")
         f.write("    SQRT = 4\n\n\n")
-        f.write("class FpuCheb(IntEnum):\n")
-        f.write('    """Chebyshev / Polynomial Coefficients Word Slot Map for EBR CHEB ROM.\n')
-        f.write("    Each slot represents a 32-bit word offset from CHEB table base (0x280).\n")
-        f.write('    """\n')
-        for name, slot, _, desc in CHEB_DEF:
-            f.write(f"    {name} = {slot}  # {desc}\n")
-        f.write("\n\n")
         f.write("class FpuConst(IntEnum):\n")
         f.write('    """FPU Constants Word Slot Map for EBR Constants ROM.\n')
         f.write("    Each slot represents a 32-bit word offset from CONST table base (0x100).\n")

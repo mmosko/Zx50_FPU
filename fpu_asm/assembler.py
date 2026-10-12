@@ -18,7 +18,7 @@ from fpu_emu.hardware.reg import Reg
 from fpu_emu.hardware.register import StatusFlag
 from fpu_emu.micro_opcodes import MicroOp
 from fpu_emu.micro_instruction import MicroInstruction, IW
-from fpu_emu.rom.fpu_const_map import FpuTable, FpuConst, FpuCheb
+from fpu_emu.rom.fpu_const_map import FpuTable, FpuConst
 
 
 FLAG_MAP = {
@@ -132,8 +132,6 @@ class Pass2Encoder(Transformer):
             return FLAG_MAP[name.upper()]
         if hasattr(FpuConst, name):
             return getattr(FpuConst, name).value
-        if hasattr(FpuCheb, name):
-            return getattr(FpuCheb, name).value
 
         line = getattr(token, "line", None)
         col = getattr(token, "column", None)
