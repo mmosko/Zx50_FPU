@@ -8,8 +8,8 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 
 ## Current Status & Capacity
 
-- **Test Suite Status:** 100% pass rate (**1,473 / 1,473 tests passing**).
-- **Microcode Capacity:** **1,023 / 1,024 words used** (**1 instruction word of headroom remaining** in a single 10-bit UPC address space).
+- **Test Suite Status:** 100% pass rate (**2,182 / 2,182 tests passing**).
+- **Microcode Size:** **1,646 words** across unified single- and double-precision math, transcendentals, and polynomials (down from initial 1,749 baseline; target is $\le 1,536$ words to fit 6 EBR blocks).
 - **Hardware Call Stack:** 16-deep $\times$ 10-bit return-address stack in distributed LUT RAM (`RAM16X1S`) with 4-bit `CSP` pointer fully implemented and verified.
 - **Datapath Bus Symmetry:** `HA_MUX` and `HB_MUX` widened to full 4-bit symmetry (14:1 32-bit muxing across all 10 registers `AL`..`FH`, `EA`, `EB`, `C`, and `IMM`), allowing any register as `src1` without register shuffling.
 - **Completed 32-Bit Math Operations:**
@@ -19,7 +19,7 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
   - Conversions: `CONV_U32_I32`, `CONV_I32_U32`, `CONV_U32_F32`, `CONV_I32_F32`, `CONV_F32_I32`.
   - Math utilities: `ABS_I32`, `ABS_F32`, `CHS_I32`, `CHS_F32`, `FLOOR_F32`, `CEIL_F32`, `DUP4`.
   - Transcendentals: `SQRT_F32`, `EXP2_F32`, `LOG2_F32`, `POW_F32`.
-  - CORDIC Trigonometrics: `SIN_F32`, `COS_F32`, `TAN_F32` (with Cody-Waite range reduction and asymptote detection).
+  - Trigonometrics: `SIN_F32`, `COS_F32`, `TAN_F32` (via Cody-Waite range reduction and fast unrolled Horner polynomial evaluation; CORDIC table eliminated).
   - Memory Storage: `CP_MEMx_TOS` (slots 0..15), `CP_TOS_MEMx` (slots 0..15), `ZERO_MEM` (using indirect addressing and latched opcode nibble dispatch).
   - Math Constants: `PUSH_PI_32`, `PUSH_E_32`, `PUSH_LN2_32`, `PUSH_LOG2E_32`, `PUSH_LOG2_10_32`, `PUSH_LOG10_2_32`, `PUSH_SQRT2_32`, `PUSH_INV_SQRT2_32`.
 - **Completed 64-Bit Math Operations:**
@@ -182,20 +182,21 @@ Programmer's Guide: [ProgrammersGuide.md](ProgrammersGuide.md)
 
 ## Appendix: Microcode Optimization & Footprint Reduction Analysis (Saving $\ge 250$ Words)
 
-To fit all microcode within the 1,536-word limit of EBR 0–5 (expanding down from the current 1,743 assembled words in `ucode_f64.asm` to $\le 1,493$ words), the following optimization strategies have been analyzed across all 58 `.asm` files in `fpu_emu/asm/`:
+To fit all microcode within the 1,536-word limit of EBR 0–5 (expanding down from the initial 1,749 baseline in `ucode_f64.asm` to $\le 1,536$ words), the following optimization strategies have been analyzed across all 58 `.asm` files in `fpu_emu/asm/`:
 
 ### Summary of Identified Savings
 
-| Strategy | Area | Potential Savings | Complexity / Risk |
-| :--- | :--- | :---: | :---: |
-| **1. Hardware Macro / Fused Opcode** | `PUSH_HALT <reg>` (or `HALT <reg>`) | **70 words** | Very Low (Hardware/Decoder) |
-| **2. Algorithmic Overhaul** | Replace F32 CORDIC with 4-term Horner in `trig_f32.asm` | **105–110 words** | Low (Proven math) |
-| **3. Hardware Flag Enhancement** | `UNPACK` sets `OVERFLOW` (or `SPECIAL`) on NaN/Inf | **45–55 words** | Very Low (Datapath flag) |
-| **4. Common Shared Subroutines** | Deduplicate Domain Error / Return 1.0 / Int-to-Float | **55–65 words** | None (Assembly only) |
-| **5. ROM Constant Offloading** | Load `1.0`, `MAGIC`, $\sqrt{2}$ from CONST ROM instead of synthesizing | **30–40 words** | None (Assembly only) |
-| **TOTAL IDENTIFIED SAVINGS** | | **305 – 340 words** | **Target: 250 words** |
+| Strategy | Area | Potential Savings | Complexity / Risk | Status |
+| :--- | :--- | :---: | :---: | :---: |
+| **1. Hardware Macro / Fused Opcode** | `HALT <reg>` (push and halt in memory block) | **-76 words** | Very Low (Hardware/Decoder) | **COMPLETE** |
+| **1b. Mul Loop Consolidate** | Consolidate `LDI DL, 1` in `USER_MUL_U64` | **-12 words** | None (Assembly only) | **COMPLETE** |
+| **2. Algorithmic Overhaul** | Replace F32 CORDIC with Horner in `trig_f32.asm` | **-15 words** | Low (Proven math) | **COMPLETE** |
+| **3. Common Shared Subroutines** | Deduplicate Quiet NaN / Domain Error / Return 1.0 | **50 words** | None (Assembly only) | Planned |
+| **4. Hardware Flag Enhancement** | `UNPACK` sets `OVERFLOW` (or `SPECIAL`) on NaN/Inf | **50 words** | Very Low (Datapath flag) | Planned |
+| **5. ROM Constant Offloading** | Load `1.0`, `MAGIC`, $\sqrt{2}$ from CONST ROM instead of synthesizing | **35 words** | None (Assembly only) | Planned |
+| **CURRENT PROGRESS** | **Initial: 1,749 words $\to$ Current: 1,646 words** | **-103 words saved** | **Target: $\le 1,536$ words** | **110 words to go** |
 
-Adopting Strategies 1, 2, and 4 alone yields **$\approx 240\text{--}245$ words** with minimal risk. Adding Strategy 3 or 5 brings the total microcode down to **$\approx 1,400\text{--}1,450$ words** (leaving $\approx 100$ words of headroom in EBR 0–5).
+Adopting Strategies 1, 1b, and 2 has already saved **103 words** (bringing microcode down from 1,749 to 1,646 words). Completing Strategies 3, 4, or 5 will comfortably achieve the target of $\le 1,536$ words (leaving ample headroom in EBR 0–5).
 
 ---
 
@@ -387,8 +388,8 @@ Loading from CONST ROM with `LDC` replaces 3- to 6-instruction blocks with a sin
 | :-: | :--- | :--- | :-: | :-: | :-: |
 | — | *Initial baseline* | `ucode_f64.asm` | — | **1,749 words** | Baseline |
 | **1** | Implement `HALT <reg>` (push and halt) in Memory Block | Assembler, emulator, all 58 `.asm` files | **-76 words** | 1,673 words | **COMPLETE** |
-| **1b** | Consolidate `LDI DL, 1` in `USER_MUL_U64` | `mul_int.asm` | **-12 words** | **1,661 words** | **COMPLETE** |
-| **2** | Replace F32 CORDIC with 4-term Horner | `trig_f32.asm` | **-110 words** | 1,551 words | Planned |
-| **3** | Deduplicate Quiet NaN, domain error, and 1.0 exit trampolines | `trig_f64`, `exp2_f64`, `log2_f64`, `pow_f64`, `sqrt_f64` | **-50 words** | **1,501 words** *(< 1,536 limit!)* | Planned |
-| **4** | Make `UNPACK` set `OVERFLOW` flag on NaN/Inf | `add_f64`, `mul_f64`, `div_f64`, `trig_f64`, `exp2_f64`, `sqrt_f64` | **-50 words** | **1,451 words** | Planned |
-| **5** | Use `LDC` from CONST ROM for `1.0`, `MAGIC`, $\sqrt{2}$ | `log2_f64`, `exp2_f64`, `trig_f64`, `floor_ceil_f64` | **-35 words** | **1,416 words** | Planned |
+| **1b** | Consolidate `LDI DL, 1` in `USER_MUL_U64` | `mul_int.asm` | **-12 words** | 1,661 words | **COMPLETE** |
+| **2** | Replace F32 CORDIC with Horner polynomial | `trig_f32.asm`, `build_flash.py` | **-15 words** | **1,646 words** | **COMPLETE** |
+| **3** | Deduplicate Quiet NaN, domain error, and 1.0 exit trampolines | `trig_f64`, `exp2_f64`, `log2_f64`, `pow_f64`, `sqrt_f64` | **-50 words** | 1,596 words | Planned |
+| **4** | Make `UNPACK` set `OVERFLOW` flag on NaN/Inf | `add_f64`, `mul_f64`, `div_f64`, `trig_f64`, `exp2_f64`, `sqrt_f64` | **-50 words** | **1,546 words** | Planned |
+| **5** | Use `LDC` from CONST ROM for `1.0`, `MAGIC`, $\sqrt{2}$ | `log2_f64`, `exp2_f64`, `trig_f64`, `floor_ceil_f64` | **-35 words** | **1,511 words** *(< 1,536 limit!)* | Planned |

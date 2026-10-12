@@ -66,5 +66,12 @@
   `define CHEB_SLOT_LOG2_C2            6'd9
   `define CHEB_SLOT_LOG2_C3            6'd10
   `define CHEB_SLOT_SQRT2_MANT         6'd11
+  `define CHEB_SLOT_SIN_C1             6'd12
+  `define CHEB_SLOT_SIN_C2             6'd13
+  `define CHEB_SLOT_SIN_C3             6'd14
+  `define CHEB_SLOT_COS_D1             6'd15
+  `define CHEB_SLOT_COS_D2             6'd16
+  `define CHEB_SLOT_COS_D3             6'd17
+  `define CHEB_SLOT_COS_D4             6'd18
 
 `endif // FPU_ROM_MAP_VH

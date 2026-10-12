@@ -6,6 +6,8 @@ in Verilog. Do not cheat the rules. Cheating invalidates the whole purpose of th
 - BANNED: Procedural hard-coded calculation shortcuts or python loops bypassing microcode.
 - REQUIRED: All arithmetic, scaling, table queries, and stack moves execute cycle-by-cycle
   via `run_microcode()` and the 16-bit synthesizable ALU primitive.
+- BANNED: If a file has a header that says "auto-generated" or "do not edit", you cannot edit it.  It is likely
+  created by a program like `build_flash.py` or `fpu_asm`.
 
 - Register access must be through the HA_BUS and HB_BUS max
 - Register write-back must be through the RES_BUS mux

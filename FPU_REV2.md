@@ -33,7 +33,7 @@ MMU[SBC Memory / MREQ Controller]
 subgraph SysMEM [Internal SysMEM Dual-Port EBR - 9.2 KB]
 Stack[Hardware Stack: 64 words x 32/64-bit]
 Scratch[Scratchpad & Vector Buffers]
-LUTs[Lookup Tables: Sqrt, Log/Exp, CORDIC Trig]
+LUTs[Lookup Tables: Sqrt, Recip, Polynomial Coeffs]
 UCodeRAM[Microcode Execution RAM]
 end
 Core[Math Engine & Micro-sequencer]
@@ -160,7 +160,7 @@ Under the MachXO2 hardware architecture (Family Data Sheet Table 2.5):
 +------------------+-----------------------+-----------------------------------------------+------------+
 | EBR 0, 1, 2, 3   | Cascaded Unified RAM  | DATA_RAM: Segregated RAM & ROM Space          | 4,096 B    |
 | (4 Blocks)       | (1024 x 32-bit)       | • Lower 1 KB: Stack, Scratchpad, User Storage | (1024 W)   |
-|                  |                       | • Upper 3 KB: Math Constants, Angles, Seeds   |            |
+|                  |                       | • Upper 3 KB: Math Constants, Poly, Seeds     |            |
 +------------------+-----------------------+-----------------------------------------------+------------+
 | EBR 4, 5, 6, 7   | Cascaded Unified ROM  | CODE_ROM: Microcode Execution Store           | 4,096 B    |
 | (4 Blocks)       | (1024 x 32-bit)       | • Unified UPC[9:0] execution (1024 words)     | (1024 W)   |
@@ -185,8 +185,8 @@ The 10-bit address space (`MEM_ADDR[9:0]`, `0x000`–`0x3FF`) is cleanly partiti
 | `0x0D0`–`0x0FF` | 208..255 | 48 words / 192 B | **RAM** | **Working Headroom** (Dynamic storage) | Dynamic allocation |
 | `0x100`–`0x13F` | 256..319 | 64 words / 256 B | **ROM** | **IEEE-754 Math Constants** ($\pi, e, \ln 2$, etc.) | `0x100 \| slot[5:0]` |
 | `0x140`–`0x1FF` | 320..511 | 192 words / 768 B | **ROM** | **Math Headroom** (Float64 / FIR / Poly) | Reserved headroom |
-| `0x200`–`0x27F` | 512..639 | 128 words / 512 B | **ROM** | **Trigonometric & CORDIC Angles** | `0x200 \| slot[6:0]` |
-| `0x280`–`0x2FF` | 640..767 | 128 words / 512 B | **ROM** | **Chebyshev Polynomial Coefficients** | `0x280 \| slot[6:0]` |
+| `0x200`–`0x27F` | 512..639 | 128 words / 512 B | **ROM** | **Unassigned Headroom** *(formerly CORDIC Angles, now retired)* | Reserved headroom |
+| `0x280`–`0x2FF` | 640..767 | 128 words / 512 B | **ROM** | **Polynomial Coefficients (`CHEB`)**<br>• Slots 1–6: $2^x$ Chebyshev coefficients<br>• Slots 7–10: $\log_2(1+f)$ Chebyshev coefficients<br>• Slot 11: $\sqrt{2}$ mantissa constant<br>• Slots 12–14: $\sin(r)$ Taylor coefficients (`SIN_C1`..`C3`)<br>• Slots 15–18: $\cos(r)$ Taylor coefficients (`COS_D1`..`D4`) | `0x280 \| slot[6:0]` |
 | `0x300`–`0x3FF` | 768..1023 | 256 words / 1,024 B | **ROM** | **Interleaved RECIP / SQRT Seed LUTs**<br>• High 16b `[31:16]`: SQRT Seeds<br>• Low 16b `[15:0]`: RECIP Seeds | `0x300 \| slot[7:0]` |
 
 ### Hardware Write-Protection
@@ -198,15 +198,15 @@ Because the RAM/ROM boundary falls on the power-of-two address `0x100` (bit 8 or
 assign data_ram_we = is_write & (mem_addr[9:8] == 2'b00);
 ```
 
-Any unintended microcode write to addresses $\ge \text{0x100}$ is suppressed by hardware, guaranteeing that mathematical constants, CORDIC angles, and seed lookup tables cannot be overwritten or corrupted at runtime.
+Any unintended microcode write to addresses $\ge \text{0x100}$ is suppressed by hardware, guaranteeing that mathematical constants, polynomial coefficients, and seed lookup tables cannot be overwritten or corrupted at runtime.
 
 ### Zero-Cost Addressing for ROM Lookup Tables (`LDC`)
 
 To eliminate arithmetic adders and carry-chain propagation delays on the memory address path, each table base aligns to a power-of-two boundary in `DATA_RAM`. Table lookups (`LDC dst, TABLE, slot`) execute via zero-cost bitwise OR addressing:
 
 * **`CONST` (`TABLE = 0`):** `0x100 | (slot & 0x3F)` $\to$ full 32-bit constant.
-* **`TRIG`  (`TABLE = 1`):** `0x200 | (slot & 0x7F)` $\to$ full 32-bit angle.
-* **`CHEB`  (`TABLE = 2`):** `0x280 | (slot & 0x7F)` $\to$ full 32-bit polynomial coefficient.
+* **`TRIG`  (`TABLE = 1`):** `0x200 | (slot & 0x7F)` $\to$ reserved headroom (formerly CORDIC angle table, retired in favor of Horner polynomials).
+* **`CHEB`  (`TABLE = 2`):** `0x280 | (slot & 0x7F)` $\to$ full 32-bit polynomial coefficient (Chebyshev for $2^x$/$\log_2$ and Taylor for $\sin$/$\cos$).
 * **`RECIP` (`TABLE = 3`):** `0x300 | (slot & 0xFF)` $\to$ low 16-bit slice `[15:0]` zero-extended.
 * **`SQRT`  (`TABLE = 4`):** `0x300 | (slot & 0xFF)` $\to$ high 16-bit slice `[31:16]` zero-extended.
 
@@ -246,9 +246,7 @@ The four cascaded EBR blocks assigned to `CODE_ROM` (EBR 4–7) form a unified $
 
 * **Sequencing:** Driven directly by `UPC[9:0]` (`0x000`–`0x3FF`), returning a 32-bit instruction word `INSTR[31:0]`
   each clock cycle with zero external multiplexers or banking logic.
-* **Capacity:** 1,024 micro-instructions (doubled from the original 512-word limit). With ~548 words currently used by
-  core arithmetic and control routines, 476 words of headroom remain available for full 32-bit CORDIC trigonometrics and
-  prioritized 64-bit routines.
+* **Capacity:** 1,024 micro-instructions (doubled from the original 512-word limit), providing execution headroom for single- and double-precision math, hardware transcendentals, and polynomial evaluations.
 * **Autonomous Boot-Loading:** On system reset, the FPGA autonomous SPI boot-loader loads the unified 8 KB flash image
   in two sequential 1,024-word loops (Loop 1: Flash `0x0000..0x0FFF` $\to$ `DATA_RAM`; Loop 2: Flash `0x1000..0x1FFF` $\to$ `CODE_ROM`)
   before releasing the host Z80 CPU from reset.

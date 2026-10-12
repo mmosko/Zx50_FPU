@@ -1,274 +1,259 @@
 ; ==============================================================================
 ; TRIG_F32: IEEE-754 Single-Precision Trigonometric Functions (SIN, COS, TAN)
 ;
-; Optimized for Zx50 FPU Rev 2 using ternary ops, register context,
-; fall-through layout, and deduplicated special-case returns.
+; Opcodes:
+;   USER_SIN_F32 (0x72): Compute sin(theta) for single float on TOS
+;   USER_COS_F32 (0x7A): Compute cos(theta) for single float on TOS
+;   USER_TAN_F32 (0x82): Compute tan(theta) for single float on TOS
+;
+; Algorithm:
+;   1. Handle special cases:
+;      - theta = +/-0.0: sin(+/-0)=+/-0, cos(+/-0)=1.0, tan(+/-0)=+/-0
+;      - theta = +/-Inf: set ERR=1, return Quiet NaN (domain error)
+;      - theta = NaN: return NaN as-is, set ERR=1
+;      - |theta| < 2^-12: sin(theta)=theta, cos(theta)=1.0, tan(theta)=theta
+;   2. Range Reduction (Cody-Waite 2-term):
+;      - y = |theta|
+;      - k = round(y * (2/pi))
+;      - q = k & 3 (quadrant index)
+;      - r = (y - k * C1) - k * C2, where r in [-pi/4, pi/4]
+;      - x = r^2
+;   3. Cosine mapping:
+;      - cos(theta) = sin(|theta| + pi/2), so q_cos = (q + 1) & 3, sign = 0.
+;   4. Horner Polynomial Evaluation (unrolled):
+;      - sin(r) = r * (1 - x * (c1 - x * (c2 - x * c3)))
+;      - cos(r) = 1 - x * (d1 - x * (d2 - x * (d3 - x * d4)))
+;   5. Reconstruction:
+;      - SIN/COS: if q & 1 == 0 -> sin(r); if q & 1 == 1 -> cos(r)
+;                 negate if bit 1 of q is set (q == 2 or 3); apply sign(theta).
+;      - TAN:     if q & 1 == 0 -> sin(r) / cos(r)
+;                 if q & 1 == 1 -> -cos(r) / sin(r); apply sign(theta).
+;
+; Scratchpad Allocation (SCR[0..63]):
+;   SCR[0]  : Reduced angle r (float32)
+;   SCR[2]  : x = r^2 (float32) / MAGIC during reduction
+;   SCR[6]  : Original theta sign & value (float32)
+;   SCR[8]  : y = |theta| (float32)
+;   SCR[10] : k_f32 (float32)
+;   SCR[14] : Quadrant index q = k & 3
+;   SCR[15] : User opcode (0 = SIN, 1 = COS, 2 = TAN)
+;   SCR[16] : sin(r) intermediate for TAN
 ; ==============================================================================
 
-.equ ONE_F32, 32
-.equ POS_INF_F32, 38
-.equ NAN_F32, 35
-
 USER_SIN_F32:
-    LDI CL, 0                   ; CL <- Opcode 0 = SIN
-    JMP TRIG_ENTRY
+    LDI CL, 0                   ; Opcode 0 = SIN
+    JMP TRIG_F32_ENTRY
 
 USER_COS_F32:
-    LDI CL, 1                   ; CL <- Opcode 1 = COS
-    JMP TRIG_ENTRY
+    LDI CL, 1                   ; Opcode 1 = COS
+    JMP TRIG_F32_ENTRY
 
 USER_TAN_F32:
-    LDI CL, 2                   ; CL <- Opcode 2 = TAN (falls through into TRIG_ENTRY)
+    LDI CL, 2                   ; Opcode 2 = TAN
 
-TRIG_ENTRY:
-    CALL POP_ONE_32             ; AL <- theta (TOS)
-    MOV CH, AL                  ; CH <- original theta (preserves sign and value)
+TRIG_F32_ENTRY:
+    STO 15, CL                  ; SCR[15] <- user opcode
+    CALL POP_ONE_32             ; AL <- theta from TOS, halts on underflow
+    STO 6, AL                   ; SCR[6] <- original theta
 
-    ; Check for zero, NaN, Inf, and tiny angles
-    UNPACK AL, EA               ; EA <- exponent, AL <- mantissa
-    JZ ZERO, TRIG_SMALL_ANGLE   ; If input == 0.0: special zero/small angle handling
+    ; Check for zero (+/-0.0), NaN, Inf, and tiny angles using UNPACK
+    UNPACK AL, EA
+    JZ ZERO, .trig_zero         ; Exponent and fraction zero -> +/-0.0
     CMP EA, 255
-    JZ ZERO, TRIG_NAN_ERR       ; If NaN or Inf: error handling
-    CMP EA, 115                 ; |theta| < 2^-12 (E < 115)
-    JNZ CARRY, TRIG_SMALL_ANGLE ; If small angle: fast path
+    JZ ZERO, .trig_nan_or_inf   ; Biased exp 255 -> NaN or Infinity
+    CMP EA, 115
+    JNZ CARRY, .trig_small_angle ; Biased exp < 115 (|theta| < 2^-12)
 
-    ; Extract sign bit theta[31] into CH[31] (cleared for COS later)
-    LSR CH, 31
-    LSL CH, 31                  ; CH <- 0x80000000 if negative, 0 if positive
+    ; Clear sign bit of theta to obtain y = |theta|
+    LSL AL, 1
+    LSR AL, 1
+    STO 8, AL                   ; SCR[8] <- y = |theta|
 
     ; --------------------------------------------------------------------------
-    ; Range Reduction (Cody-Waite mod pi/2)
+    ; Cody-Waite Range Reduction: k = round(y * (2/pi))
     ; --------------------------------------------------------------------------
-    CMP EA, 126
-    JZ CARRY, TRIG_REDUCE_GENERAL  ; If EA >= 126 (C=0): Cody-Waite reduction
+    ; AL = y * (2/pi) (CONST slot 44)
+    LDC BL, CONST, 44
+    CALL MUL_F32_CORE
 
-    ; Here 115 <= EA < 126: |theta| < 0.5 < pi/4, so k = 0, q = 0, r = |theta|
-    LDI EB, 0                   ; EB <- quadrant 0
-    CMP EA, 120
-    JNZ CARRY, TRIG_SMALL_SHIFT_RIGHT
-    SUB C, EA, 120              ; C <- EA - 120 (Ternary SUB: 1 cycle)
-    LSL AL, C                   ; Shift mantissa to Q2.30
-    MOV BH, AL                  ; BH <- Z0 = r in Q2.30
-    JMP TRIG_START_CORDIC
+    ; Add 0.5: 0x3F000000 (biased exp 126 << 23)
+    LDI BL, 126
+    LSL BL, 23
+    CALL ADD_F32_CORE
 
-TRIG_SMALL_SHIFT_RIGHT:
-    SUB C, 120, EA              ; C <- 120 - EA (Ternary SUB: 1 cycle)
-    LSR AL, C                   ; Shift mantissa to Q2.30
-    MOV BH, AL                  ; BH <- Z0 = r in Q2.30
-    JMP TRIG_START_CORDIC
-
-TRIG_REDUCE_GENERAL:
-    ; EA >= 126: Compute k = round(|theta| * 2/pi)
-    MOV DH, AL                  ; DH <- original mantissa
-    LDC BL, CONST, 44           ; BL <- TWO_OVER_PI_F32 (0x3F22F983)
-    UNPACK BL, EB               ; BL <- mantissa of 2/pi
-    MULU AL, BL                 ; {AH, AL} <- mantissa * (2/pi mantissa)
-
-    ; Shift amount s_hi = 142 - EA
-    SUB C, 141, EA              ; C <- s_hi - 1 (Ternary SUB: 1 cycle)
-    LDI BL, 1
-    LSL BL, C                   ; BL <- rounding bit
-    ADD AH, AH, BL              ; AH <- AH + rounding bit (Ternary ADD)
-    SUB C, 142, EA              ; C <- s_hi (Ternary SUB: 1 cycle)
-    LSR AH, C                   ; AH <- k (rounded integer)
-    MOV DL, AH                  ; DL <- k
+    ; Add MAGIC constant: 1.5 * 2^23 = 0x4B400000
+    LDI BL, 0x4B
+    LSL BL, 8
+    OR BL, 0x40
+    LSL BL, 16                  ; BL <- 0x4B400000
+    STO 2, BL                   ; SCR[2] <- MAGIC
+    CALL ADD_F32_CORE
 
     ; Extract quadrant q = k & 3
-    AND EB, AH, 3               ; EB <- quadrant q (Ternary AND)
+    AND DL, AL, 3
 
-    ; Cody-Waite subtraction: r = theta_q30 - k*C1 - k*C2
-    SUB C, EA, 120              ; C <- EA - 120 (Ternary SUB)
-    LSL DH, C                   ; DH <- theta in Q2.30
+    ; Subtract MAGIC to get float32 k_f32
+    LD BL, 2
+    CALL SUB_F32_CORE
+    STO 10, AL                  ; SCR[10] <- k_f32
 
-    ; 1. Subtract k * C1 (C1_mant = 102943 = (100 << 10) + 543):
-    LDI BL, 100
-    LSL BL, 10
-    ADD BL, BL, 543             ; BL <- 102943 (Ternary ADD)
-    MULU AL, DL, BL             ; {AH, AL} <- k * 102943
-    LSL AL, 14                  ; AL <- (k * C1) in Q2.30
-    SUB DH, DH, AL              ; DH <- theta - k*C1 (Ternary SUB)
+    ; r1 = y - k_f32 * C1 (CW_C1_F32 = CONST slot 47)
+    LDC BL, CONST, 47
+    CALL MUL_F32_CORE
+    MOV BL, AL
+    LD AL, 8                    ; AL <- y
+    CALL SUB_F32_CORE
+    STO 0, AL                   ; SCR[0] <- r1
 
-    ; 2. Subtract k * C2 (C2_mant = 11601 = (45 << 8) + 81):
-    LDI BL, 45
-    LSL BL, 8
-    ADD BL, BL, 81              ; BL <- 11601 (Ternary ADD)
-    MULU AL, DL, BL             ; {AH, AL} <- k * 11601
-    SUB BH, DH, AL              ; BH <- Z0 = r = theta - k*C1 - k*C2 (Ternary SUB)
+    ; r = r1 - k_f32 * C2 (CW_C2_F32 = CONST slot 48)
+    LD AL, 10                   ; AL <- k_f32
+    LDC BL, CONST, 48
+    CALL MUL_F32_CORE
+    MOV BL, AL
+    LD AL, 0                    ; AL <- r1
+    CALL SUB_F32_CORE
+    STO 0, AL                   ; SCR[0] <- reduced r in [-pi/4, pi/4]
 
-    ; --------------------------------------------------------------------------
-    ; Accelerated Circular CORDIC Engine (24 stages)
-    ; --------------------------------------------------------------------------
-TRIG_START_CORDIC:
-    LDC FL, CONST, 55           ; FL <- CORDIC_INV_K_32 (1/K in Q2.30)
-    XOR BL, BL                  ; BL <- Y0 = 0
-    LDI C, 0                    ; C <- stage counter
-
-CORDIC_STAGE_LOOP:
-    MOV DH, FL
-    LSR DH, C                   ; DH <- X >> C
-    MOV FH, BL
-    ASR FH, C                   ; FH <- Y >> C (sign extended)
-    LDC AH, TRIG, C             ; AH <- theta_C
-
-    OR BH, BH
-    JNZ SIGN, CORDIC_DIR_NEG    ; If Z < 0: rotate negative
-
-CORDIC_DIR_POS:
-    ; Z >= 0: X <= X - Y_shift, Y <= Y + X_shift, Z <= Z - theta_C
-    SUB FL, FL, FH              ; FL <- X - Y_shift (Ternary: 1 cycle)
-    ADD BL, BL, DH              ; BL <- Y + X_shift (Ternary: 1 cycle)
-    SUB BH, BH, AH              ; BH <- Z - theta_C (Ternary: 1 cycle)
-    JMP CORDIC_STAGE_NEXT
-
-CORDIC_DIR_NEG:
-    ; Z < 0: X <= X + Y_shift, Y <= Y - X_shift, Z <= Z + theta_C
-    ADD FL, FL, FH              ; FL <- X + Y_shift (Ternary: 1 cycle)
-    SUB BL, BL, DH              ; BL <- Y - X_shift (Ternary: 1 cycle)
-    ADD BH, BH, AH              ; BH <- Z + theta_C (Ternary: 1 cycle)
-
-CORDIC_STAGE_NEXT:
-    ADD C, 1
-    CMP C, 24
-    JNZ ZERO, CORDIC_STAGE_LOOP
-
-    ; CORDIC complete: FL = cos(r) in Q2.30, BL = sin(r) in Q2.30
+    ; Compute x = r^2
+    MOV BL, AL
+    CALL MUL_F32_CORE
+    STO 2, AL                   ; SCR[2] <- x = r^2
 
     ; --------------------------------------------------------------------------
-    ; Opcode Reconstruction & Normalization
+    ; Cosine & Quadrant Mapping
     ; --------------------------------------------------------------------------
+    LD CL, 15                   ; CL <- user opcode
+    CMP CL, 1
+    JNZ ZERO, .not_cos
+    ADD DL, DL, 1
+    AND DL, DL, 3               ; q = (q + 1) & 3 for COS
+    LDI DH, 0
+    STO 6, DH                   ; Clear sign of theta for COS (cos(-x) = cos(x))
+.not_cos:
+    STO 14, DL                  ; SCR[14] <- q
     CMP CL, 2
-    JZ ZERO, RECONSTRUCT_TAN
-    CMP CL, 1
-    JNZ ZERO, RECONSTRUCT_SIN   ; If SIN (CL == 0): jump to RECONSTRUCT_SIN
+    JZ ZERO, .dispatch_tan
 
-    ; Opcode == 1 (COS): cos(theta) = sin(|theta| + pi/2)
-    LDI CH, 0                   ; Clear theta sign (cos(-x) = cos(x))
-    ADD EB, EB, 1
-    AND EB, EB, 3               ; EB <- (q + 1) & 3
+    ; --- USER_SIN_F32 & USER_COS_F32 ---
+    AND DL, DL, 1
+    JNZ ZERO, .sin_odd_q
+    CALL EVAL_SIN_F32
+    JMP .check_quad_neg
+.sin_odd_q:
+    CALL EVAL_COS_F32
+.check_quad_neg:
+    LD DL, 14
+    AND DL, DL, 2               ; Negate if q == 2 or q == 3 (bit 1 set)
+    JZ ZERO, .apply_sign_and_halt
+    FCHS AL
+    JMP .apply_sign_and_halt
 
-RECONSTRUCT_SIN:
-    ; Even quadrant (q=0,2): mag = |Y| (BL); Odd quadrant (q=1,3): mag = X (FL)
-    AND AL, EB, 1
-    JNZ ZERO, SIN_ODD_Q
-
-    ; Even quadrant (q = 0, 2):
-    MOV AL, BL                  ; AL <- Y (signed)
-    LDI AH, 0                   ; Default sign = 0
-    CMP EB, 2
-    JNZ ZERO, SIN_HANDLE_Y_SIGN
-    LDI AH, 1
-    LSL AH, 31                  ; q == 2: negate sign (AH = 0x80000000)
-
-SIN_HANDLE_Y_SIGN:
-    OR AL, AL
-    JZ SIGN, SIN_FINISH_SIGN    ; If Y >= 0, sign is ready
-    NOT AL
-    ADD AL, 1                   ; AL <- |Y|
-    FCHS AH                     ; Flip target sign bit
-    JMP SIN_FINISH_SIGN
-
-SIN_ODD_Q:
-    ; Odd quadrant (q = 1, 3):
-    MOV AL, FL                  ; AL <- X (always positive)
-    LDI AH, 0
-    CMP EB, 3
-    JNZ ZERO, SIN_FINISH_SIGN
-    LDI AH, 1
-    LSL AH, 31                  ; q == 3: sign = 0x80000000
-
-SIN_FINISH_SIGN:
-    XOR AH, AH, CH              ; Combine with original theta sign (Ternary XOR)
-    ; Falls directly into TRIG_PACK_FLOAT (saves 1 JMP instruction!)
-
-    ; --------------------------------------------------------------------------
-    ; Pack Normalized Float for SIN / COS
-    ; --------------------------------------------------------------------------
-TRIG_PACK_FLOAT:
-    LSR AL, 7
-    LDI EA, 127
-    CALL NORMALIZE_F32
-    HALT AL
-
-    ; --- Tangent Reconstruction ---
-RECONSTRUCT_TAN:
-    LDI AH, 0                   ; Initial sign = 0
-    OR BL, BL
-    JZ SIGN, TAN_Y_IS_POS
-    NOT BL
-    ADD BL, 1                   ; BL <- |Y|
-    LDI AH, 1
-    LSL AH, 31                  ; AH <- 0x80000000
-TAN_Y_IS_POS:
-
-    AND AL, EB, 1
-    JZ ZERO, TAN_EVEN_Q
-    ; Odd quadrant (q = 1, 3): N = X, D = |Y|, flip sign
-    MOV AL, FL                  ; AL <- Numerator X
-    FCHS AH
-    JMP TAN_FINISH_SIGN
-
-TAN_EVEN_Q:
-    ; Even quadrant (q = 0, 2): N = |Y|, D = X
-    MOV AL, BL                  ; AL <- Numerator |Y|
-    MOV BL, FL                  ; BL <- Denominator X
-
-TAN_FINISH_SIGN:
-    XOR AH, AH, CH              ; Combine with theta sign (Ternary XOR)
-    MOV DH, AH                  ; DH[31] <- final sign
-
-    ; Check for zero denominator (asymptote at +/- pi/2)
-    OR BL, BL
-    JZ ZERO, TAN_DIV_ZERO
-    OR AL, AL
-    JZ ZERO, TAN_ZERO
-
-    ; Convert numerator (AL) and denominator (BL) to float32
-    LSR AL, 7
-    LDI EA, 127
-    LDI AH, 0
-    CALL NORMALIZE_F32          ; AL <- float32(Numerator)
-    MOV DL, AL                  ; DL <- float32(Numerator)
-
+    ; --- USER_TAN_F32 ---
+.dispatch_tan:
+    CALL EVAL_SIN_F32
+    STO 16, AL                  ; SCR[16] <- sin(r)
+    CALL EVAL_COS_F32
+    MOV BL, AL                  ; BL <- cos(r)
+    LD AL, 16                   ; AL <- sin(r)
+    LD DL, 14
+    AND DL, DL, 1
+    JZ ZERO, .tan_div
+    MOV DH, AL                  ; Odd quadrant: num = -cos(r), den = sin(r)
     MOV AL, BL
-    LSR AL, 7
-    LDI EA, 127
-    LDI AH, 0
-    CALL NORMALIZE_F32          ; AL <- float32(Denominator)
-    MOV BL, AL                  ; BL <- float32(Denominator)
-    MOV AL, DL                  ; AL <- float32(Numerator)
+    FCHS AL
+    MOV BL, DH
+.tan_div:
+    CALL DIV_F32_CORE
 
-    ; Perform float division: AL / BL
-    OR AL, AL, DH               ; Attach computed sign to numerator
-    CALL DIV_F32_CORE           ; AL <- AL / BL
-    HALT AL
-
-TAN_ZERO:
-    XOR AL, AL                  ; Return zero mantissa
-    MOV AH, DH                  ; Preserve computed sign
-    CALL NORMALIZE_F32
-    HALT AL
-
-TAN_DIV_ZERO:
-    XOR BL, BL
-    DIVU AL, BL                 ; Asserts ERR=1, VF=1 in hardware
-    LDC AL, CONST, POS_INF_F32  ; POS_INF_F32 (0x7F800000)
-    OR AL, AL, DH               ; Attach computed sign
+.apply_sign_and_halt:
+    LD BH, 6                    ; BH <- original theta
+    LSR BH, 31                  ; Test sign bit of theta
+    JZ ZERO, .halt_al
+    FCHS AL                     ; Invert sign if theta was negative
+.halt_al:
     HALT AL
 
     ; --------------------------------------------------------------------------
-    ; Special Cases (Zero, NaN, Small Angle)
+    ; Special Cases
     ; --------------------------------------------------------------------------
-TRIG_SMALL_ANGLE:               ; Merged ZERO and SMALL_ANGLE handlers (saves 5 words)
+.trig_zero:
+.trig_small_angle:
+    LD CL, 15                   ; CL <- user opcode
     CMP CL, 1
-    JZ ZERO, TRIG_RET_ONE       ; COS(0 or small) -> 1.0
-    MOV AL, CH                  ; Return original theta / 0.0
+    JZ ZERO, .trig_ret_one      ; cos(0 or small) = 1.0
+    LD AL, 6                    ; Return original theta for SIN and TAN
     HALT AL
 
-TRIG_RET_ONE:
-    LDC AL, CONST, ONE_F32      ; ONE_F32 (0x3F800000 = 1.0)
+.trig_ret_one:
+    LDC AL, CONST, 32           ; AL <- 1.0 (ONE_F32)
     HALT AL
 
-TRIG_NAN_ERR:
-    LDC AL, CONST, NAN_F32      ; NAN_F32 (0x7FC00000)
+.trig_nan_or_inf:
+    LD AL, 6                    ; Load original theta
+    MOV DH, AL
+    LSL DH, 9                   ; Clear sign and exponent bits
+    JZ ZERO, .trig_inf_err      ; If fraction == 0: Infinity -> Domain Error!
+
+    ; NaN: Return NaN as-is with ERR=1
     LDI ERR, 1
     HALT AL
+
+.trig_inf_err:
+    ; Return Quiet NaN (0x7FC00000) with ERR=1
+    LDC AL, CONST, 35           ; AL <- NAN_F32
+    LDI ERR, 1
+    HALT AL
+
+; ==============================================================================
+; Polynomial Evaluators
+; ==============================================================================
+; EVAL_SIN_F32: sin(r) = r * (1 - x * (c1 - x * (c2 - x * c3)))
+; Inputs: SCR[0] = r, SCR[2] = x = r^2
+; Output: AL = sin(r)
+EVAL_SIN_F32:
+    LD AL, 2                    ; AL <- x
+    LDC BL, CHEB, SIN_C3        ; BL <- c3
+    CALL MUL_F32_CORE           ; AL <- x * c3
+    MOV BL, AL
+    LDC AL, CHEB, SIN_C2        ; AL <- c2
+    CALL SUB_F32_CORE           ; AL <- c2 - x * c3
+    LD BL, 2                    ; BL <- x
+    CALL MUL_F32_CORE           ; AL <- x * (c2 - x * c3)
+    MOV BL, AL
+    LDC AL, CHEB, SIN_C1        ; AL <- c1
+    CALL SUB_F32_CORE           ; AL <- c1 - x * (...)
+    LD BL, 2                    ; BL <- x
+    CALL MUL_F32_CORE           ; AL <- x * (c1 - ...)
+    MOV BL, AL
+    LDC AL, CONST, 32           ; AL <- 1.0
+    CALL SUB_F32_CORE           ; AL <- 1.0 - x * (...)
+    LD BL, 0                    ; BL <- r
+    CALL MUL_F32_CORE           ; AL <- r * (1.0 - ...)
+    RET
+
+; EVAL_COS_F32: cos(r) = 1 - x * (d1 - x * (d2 - x * (d3 - x * d4)))
+; Inputs: SCR[2] = x = r^2
+; Output: AL = cos(r)
+EVAL_COS_F32:
+    LD AL, 2                    ; AL <- x
+    LDC BL, CHEB, COS_D4        ; BL <- d4
+    CALL MUL_F32_CORE           ; AL <- x * d4
+    MOV BL, AL
+    LDC AL, CHEB, COS_D3        ; AL <- d3
+    CALL SUB_F32_CORE           ; AL <- d3 - x * d4
+    LD BL, 2                    ; BL <- x
+    CALL MUL_F32_CORE           ; AL <- x * (d3 - x * d4)
+    MOV BL, AL
+    LDC AL, CHEB, COS_D2        ; AL <- d2
+    CALL SUB_F32_CORE           ; AL <- d2 - x * (...)
+    LD BL, 2                    ; BL <- x
+    CALL MUL_F32_CORE           ; AL <- x * (d2 - ...)
+    MOV BL, AL
+    LDC AL, CHEB, COS_D1        ; AL <- d1
+    CALL SUB_F32_CORE           ; AL <- d1 - x * (...)
+    LD BL, 2                    ; BL <- x
+    CALL MUL_F32_CORE           ; AL <- x * (d1 - ...)
+    MOV BL, AL
+    LDC AL, CONST, 32           ; AL <- 1.0
+    CALL SUB_F32_CORE           ; AL <- 1.0 - x * (...)
+    RET

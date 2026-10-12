@@ -230,6 +230,13 @@ CHEB_DEF = [
     ("LOG2_C2", 9, 0x1274D895, "log2 minimax c2 (0.57676343 in Q3.29)"),
     ("LOG2_C3", 10, 0x0DC63ED4, "log2 minimax c3 (0.43044988 in Q3.29)"),
     ("SQRT2_MANT", 11, 0x00B504F3, "sqrt(2) mantissa threshold (bit 23 implicit 1)"),
+    ("SIN_C1", 12, 0x3E2AAAAB, "sin Taylor c1 (1/6 in IEEE-754 single float)"),
+    ("SIN_C2", 13, 0x3C088889, "sin Taylor c2 (1/120 in IEEE-754 single float)"),
+    ("SIN_C3", 14, 0x39500D01, "sin Taylor c3 (1/5040 in IEEE-754 single float)"),
+    ("COS_D1", 15, 0x3F000000, "cos Taylor d1 (1/2 in IEEE-754 single float)"),
+    ("COS_D2", 16, 0x3D2AAAAB, "cos Taylor d2 (1/24 in IEEE-754 single float)"),
+    ("COS_D3", 17, 0x3AB60B61, "cos Taylor d3 (1/720 in IEEE-754 single float)"),
+    ("COS_D4", 18, 0x37D00D01, "cos Taylor d4 (1/40320 in IEEE-754 single float)"),
 ]
 
 

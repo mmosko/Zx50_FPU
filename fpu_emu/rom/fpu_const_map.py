@@ -44,6 +44,13 @@ class FpuCheb(IntEnum):
     LOG2_C2 = 9  # log2 minimax c2 (0.57676343 in Q3.29)
     LOG2_C3 = 10  # log2 minimax c3 (0.43044988 in Q3.29)
     SQRT2_MANT = 11  # sqrt(2) mantissa threshold (bit 23 implicit 1)
+    SIN_C1 = 12  # sin Taylor c1 (1/6 in IEEE-754 single float)
+    SIN_C2 = 13  # sin Taylor c2 (1/120 in IEEE-754 single float)
+    SIN_C3 = 14  # sin Taylor c3 (1/5040 in IEEE-754 single float)
+    COS_D1 = 15  # cos Taylor d1 (1/2 in IEEE-754 single float)
+    COS_D2 = 16  # cos Taylor d2 (1/24 in IEEE-754 single float)
+    COS_D3 = 17  # cos Taylor d3 (1/720 in IEEE-754 single float)
+    COS_D4 = 18  # cos Taylor d4 (1/40320 in IEEE-754 single float)
 
 
 class FpuConst(IntEnum):
