@@ -1,173 +1,63 @@
 #!/usr/bin/env python3
 """
 tools/build_flash.py
-ZX50 FPU Flash ROM LUT Generator & Serializer
+ZX50 FPU Flash ROM Generator & Serializer
 
-Defines individual generator functions for each lookup table:
-  1. Reciprocal      (FLASH_RECIP_BASE  = 0x0400)
-  2. Sqrt Seed       (FLASH_SQRT_BASE   = 0x0600)
-  3. Exp2            (FLASH_EXP2_BASE   = 0x0800)
-  4. Log2            (FLASH_LOG2_BASE   = 0x0A00)
-  5. Sine            (FLASH_SIN_BASE    = 0x0C00)
-  6. Cosine          (FLASH_COS_BASE    = 0x0E00)
-  7. Tangent         (FLASH_TAN_BASE    = 0x1000)
-  8. Natural Log     (FLASH_LN_BASE     = 0x1200)
-  9. Base-10 Log     (FLASH_LOG10_BASE  = 0x1400)
+Reads:
+  - build/ucode.bin : Assembled microcode binary (EBR 0..5, 6144 bytes / 1536 words)
+  - build/ucode.sym : Microcode symbol table for UserOpcode entry addresses
 
-Serializes all tables into:
-  - bin/fpu_flash.bin  : Raw 32KB binary image for physical EEPROM/Flash burners
-  - sim/fpu_rom.hex    : Verilog $readmemh image for simulation
-  - src/fpu_rom_map.vh : Verilog header containing memory base addresses
+Defines:
+  - UCODE_ROM_OFFSET = 0x0000 (Bytes 0x0000..0x17FF / Words 0..1535)
+  - DATA_ROM_OFFSET  = 0x1800 (Bytes 0x1800..0x1FFF / Words 1536..2047)
+
+Emits:
+  - bin/fpu_flash.bin          : Unified 8 KB binary image (6144 B ucode + 2048 B data)
+  - fpu_emu/rom/fpu_flash.bin  : Emulator copy of 8 KB binary
+  - bin/fpu_code_rom.bin       : Split 6 KB Code ROM binary (6144 bytes)
+  - bin/fpu_data_ram.bin       : Split 2 KB Data RAM initialization binary (2048 bytes)
+  - sim/fpu_rom.hex            : Verilog $readmemh image (2048 words)
+  - src/fpu_rom_map.vh         : Verilog header with offsets and jump table defines
+  - fpu_emu/rom/fpu_rom_map.py: Python constants, RAM map, and USER_OPCODE_MAP
 """
 
-from decimal import Decimal, getcontext
-import math
 import os
 import struct
+import sys
+from typing import Dict, List, Tuple
 
 # ROM Parameters & Base Addresses (8 KB Single Flash ROM: 2048 words x 32-bit)
-FLASH_SIZE = 8192  # 8 KB active region for CA[12:0]
+FLASH_SIZE = 8192        # 8 KB active region
 TOTAL_WORDS = 2048
-DATA_RAM_WORDS = 1024
-CODE_ROM_WORDS = 1024
 
-# Base Word Offsets
-DATA_RAM_BASE_WORD = 0       # 0x000 (Bytes 0x0000..0x0FFF)
-CODE_ROM_BASE_WORD = 1024    # 0x400 (Bytes 0x1000..0x1FFF)
+UCODE_ROM_OFFSET = 0x0000  # Byte offset 0x0000 (Words 0..1535)
+DATA_ROM_OFFSET = 0x1800   # Byte offset 0x1800 (Words 1536..2047)
 
-# DATA_RAM Word Offsets (EBR 0)
-DATA_RAM_MTH_WORD = 0x000    # Words 0..127 (Stack RAM)
-DATA_RAM_SCR_WORD = 0x080    # Words 128..191 (Scratchpad RAM)
-DATA_RAM_USR_WORD = 0x0C0    # Words 192..207 (User Word Storage)
-DATA_RAM_EXT_WORD = 0x0D0    # Words 208..255 (RAM Headroom)
-DATA_RAM_CNS_WORD = 0x100    # Words 256..319 (Math Constants, 64 words)
-DATA_RAM_TRIG_WORD = 0x200   # Words 512..639 (Trig & CORDIC Angles, 128 words)
-DATA_RAM_CHEB_WORD = 0x280   # Words 640..767 (Chebyshev Coefficients, 128 words)
-DATA_RAM_SEEDS_WORD = 0x300  # Words 768..1023 (Combined Seeds, 256 words)
+UCODE_ROM_WORDS = 1536     # 6144 bytes / 4
+DATA_RAM_WORDS = 512       # 2048 bytes / 4
 
-TABLES_DEF = [
-    ("DATA_RAM", 0x0000, "DATA_RAM Image (4096 bytes, Words 0..1023)"),
-    ("CODE_ROM", 0x1000, "CODE_ROM Image (4096 bytes, Words 1024..2047)"),
-]
+# Data RAM Partition Word Offsets (within 512-word EBR 6)
+DATA_RAM_MTH_BASE = 0x000   # Stack RAM: words 0..127 (128 words)
+DATA_RAM_SCR_BASE = 0x080   # Scratchpad RAM: words 128..191 (64 words)
+DATA_RAM_USR_BASE = 0x0C0   # User Storage: words 192..207 (16 words)
+DATA_RAM_EXT_BASE = 0x0D0   # RAM Headroom: words 208..255 (48 words)
+CONST_OFFSET = 0x100        # Math Constants Base: words 256..319 (64 words)
+
+UCODE_BIN_FILE = "build/ucode.bin"
+UCODE_SYM_FILE = "build/ucode.sym"
 
 HEADER_FILE = "src/fpu_rom_map.vh"
 HEX_FILE = "sim/fpu_rom.hex"
 BIN_FILE = "bin/fpu_flash.bin"
 EMU_BIN_FILE = "fpu_emu/rom/fpu_flash.bin"
-PY_CONST_MAP_FILE = "fpu_emu/rom/fpu_const_map.py"
-
+SPLIT_CODE_FILE = "bin/fpu_code_rom.bin"
+SPLIT_DATA_FILE = "bin/fpu_data_ram.bin"
+PY_ROM_MAP_FILE = "fpu_emu/rom/fpu_rom_map.py"
 
 # =============================================================================
-# Individual Lookup Table Generators
+# Mathematical Constants Definition (64 words: words 0..63 relative to CONST_OFFSET)
 # =============================================================================
-def generate_recip_table() -> bytearray:
-    """Table 2: Reciprocal [ f(x) = ceil(65536 / x) ] for x in [1..255]"""
-    data = bytearray(256 * 2)
-    for x in range(1, 256):
-        val = min(65535, math.ceil(65536.0 / x))
-        data[x * 2] = val & 0xFF
-        data[x * 2 + 1] = (val >> 8) & 0xFF
-    return data
-
-
-def generate_sqrt_table() -> bytearray:
-    """Table 3: Reciprocal Square Root Seeds for mantissa M in [1.0, 4.0).
-
-    Index (8 bits):
-      - Bit 7: Exponent parity bit (0: M in [1.0, 2.0), 1: M in [2.0, 4.0))
-      - Bits 6..0: Top 7 fraction bits of mantissa.
-    Value (16-bit unsigned Q0.16):
-      - r0 = round((1.0 / sqrt(M)) * 65536)
-    """
-    data = bytearray(256 * 2)
-    for x in range(256):
-        if x < 128:
-            # Even exponent: M in [1.0, 2.0)
-            m = 1.0 + (x + 0.5) / 128.0
-        else:
-            # Odd exponent: M in [2.0, 4.0)
-            m = 2.0 * (1.0 + (x - 128 + 0.5) / 128.0)
-        r = 1.0 / math.sqrt(m)
-        val = min(65535, int(round(r * 65536.0)))
-        data[x * 2] = val & 0xFF
-        data[x * 2 + 1] = (val >> 8) & 0xFF
-    return data
-
-
-def generate_exp2_table() -> bytearray:
-    """Table 4: Exp2 [ f(x) = 2^(x/256) * 256 ] for x in [0..255]"""
-    data = bytearray(256 * 2)
-    for x in range(256):
-        val = int(2 ** (x / 256.0) * 256) & 0xFFFF
-        data[x * 2] = val & 0xFF
-        data[x * 2 + 1] = (val >> 8) & 0xFF
-    return data
-
-
-def generate_log2_table() -> bytearray:
-    """Table 5: Log2 [ f(x) = log2(1 + x/256) * 256 ] for x in [0..255]"""
-    data = bytearray(256 * 2)
-    for x in range(256):
-        val = int(math.log2(1.0 + (x / 256.0)) * 256) & 0xFFFF
-        data[x * 2] = val & 0xFF
-        data[x * 2 + 1] = (val >> 8) & 0xFF
-    return data
-
-
-def generate_sin_table() -> bytearray:
-    """Table 6: Sine [ f(x) = sin(x/256 * pi/2) * 256 ] for x in [0..255] (0 to 90 degrees)"""
-    data = bytearray(256 * 2)
-    for x in range(256):
-        rad = (x / 256.0) * (math.pi / 2.0)
-        val = min(65535, int(round(math.sin(rad) * 256.0)))
-        data[x * 2] = val & 0xFF
-        data[x * 2 + 1] = (val >> 8) & 0xFF
-    return data
-
-
-def generate_cos_table() -> bytearray:
-    """Table 7: Cosine [ f(x) = cos(x/256 * pi/2) * 256 ] for x in [0..255] (0 to 90 degrees)"""
-    data = bytearray(256 * 2)
-    for x in range(256):
-        rad = (x / 256.0) * (math.pi / 2.0)
-        val = min(65535, int(round(math.cos(rad) * 256.0)))
-        data[x * 2] = val & 0xFF
-        data[x * 2 + 1] = (val >> 8) & 0xFF
-    return data
-
-
-def generate_tan_table() -> bytearray:
-    """Table 8: Tangent [ f(x) = tan(x/256 * pi/4) * 256 ] for x in [0..255] (0 to 45 degrees)"""
-    data = bytearray(256 * 2)
-    for x in range(256):
-        rad = (x / 256.0) * (math.pi / 4.0)
-        val = min(65535, int(round(math.tan(rad) * 256.0)))
-        data[x * 2] = val & 0xFF
-        data[x * 2 + 1] = (val >> 8) & 0xFF
-    return data
-
-
-def generate_ln_table() -> bytearray:
-    """Table 9: Natural Log [ f(x) = ln(1 + x/256) * 256 ] for x in [0..255]"""
-    data = bytearray(256 * 2)
-    for x in range(256):
-        val = int(round(math.log(1.0 + (x / 256.0)) * 256.0)) & 0xFFFF
-        data[x * 2] = val & 0xFF
-        data[x * 2 + 1] = (val >> 8) & 0xFF
-    return data
-
-
-def generate_log10_table() -> bytearray:
-    """Table 10: Base-10 Log [ f(x) = log10(1 + x/256) * 256 ] for x in [0..255]"""
-    data = bytearray(256 * 2)
-    for x in range(256):
-        val = int(round(math.log10(1.0 + (x / 256.0)) * 256.0)) & 0xFFFF
-        data[x * 2] = val & 0xFF
-        data[x * 2 + 1] = (val >> 8) & 0xFF
-    return data
-
-
-CONSTANTS_DEF = [
+CONSTANTS_DEF: List[Tuple[str, int, int, int, str]] = [
     # (enum_name, slot, hex_val, num_bytes, description)
     # Mathematical Constants (0xA0..0xAF push opcodes)
     ("PI_F32", 0, 0x40490FDB, 4, "pi in IEEE-754 single precision"),
@@ -224,241 +114,165 @@ CONSTANTS_DEF = [
 ]
 
 
-def generate_cordic_atan32_table() -> bytearray:
-    """Table 12: CORDIC Arctangent 32-bit Table [ theta_i = atan(2^-i) in Q2.30 ] for i in [0..31]."""
-    getcontext().prec = 100
-    pi = Decimal(
-        "3.1415926535897932384626433832795028841971693993751058209749445923078164062862089986280348253421170679"
-    )
-    scale30 = Decimal(1 << 30)
+def load_ucode_bin(bin_path: str = UCODE_BIN_FILE) -> List[int]:
+    """Reads 1536 32-bit words from microcode binary (padded with NOPs if needed)."""
+    if not os.path.exists(bin_path):
+        raise FileNotFoundError(f"Microcode binary not found: {bin_path}. Run fpu_asm first.")
+    with open(bin_path, "rb") as f:
+        data = f.read()
 
-    data = bytearray(32 * 4)
-    for i in range(32):
-        if i == 0:
-            angle = pi / Decimal(4)
-        else:
-            x = Decimal(1) / (Decimal(2) ** i)
-            term = x
-            x_sq = x * x
-            angle = x
-            sign = -1
-            denom = 3
-            for _ in range(50):
-                term *= x_sq
-                delta = term / denom
-                if delta == 0:
-                    break
-                angle += sign * delta
-                sign = -sign
-                denom += 2
-        val = int(round(angle * scale30)) & 0xFFFFFFFF
-        data[i * 4 : i * 4 + 4] = val.to_bytes(4, byteorder="little")
-    return data
+    num_words = len(data) // 4
+    words = list(struct.unpack(f">{num_words}I", data[: num_words * 4]))
+    if len(words) < UCODE_ROM_WORDS:
+        # NOP instruction word: 0xE0000000
+        words.extend([0xE0000000] * (UCODE_ROM_WORDS - len(words)))
+    elif len(words) > UCODE_ROM_WORDS:
+        raise ValueError(f"Microcode binary exceeds {UCODE_ROM_WORDS} words: {len(words)}")
+    return words[:UCODE_ROM_WORDS]
 
 
-def generate_cordic_atan64_table() -> bytearray:
-    """Table 13: CORDIC Arctangent 64-bit Table [ theta_i = atan(2^-i) in Q2.62 ] for i in [0..63]."""
-    getcontext().prec = 100
-    pi = Decimal(
-        "3.1415926535897932384626433832795028841971693993751058209749445923078164062862089986280348253421170679"
-    )
-    scale62 = Decimal(1 << 62)
-
-    data = bytearray(64 * 8)
-    for i in range(64):
-        if i == 0:
-            angle = pi / Decimal(4)
-        else:
-            x = Decimal(1) / (Decimal(2) ** i)
-            term = x
-            x_sq = x * x
-            angle = x
-            sign = -1
-            denom = 3
-            for _ in range(60):
-                term *= x_sq
-                delta = term / denom
-                if delta == 0:
-                    break
-                angle += sign * delta
-                sign = -sign
-                denom += 2
-        val = int(round(angle * scale62)) & 0xFFFFFFFFFFFFFFFF
-        data[i * 8 : i * 8 + 8] = val.to_bytes(8, byteorder="little")
-    return data
+def load_ucode_sym(sym_path: str = UCODE_SYM_FILE) -> Dict[str, int]:
+    """Reads symbol table from assembler output (.sym)."""
+    if not os.path.exists(sym_path):
+        raise FileNotFoundError(f"Microcode symbol table not found: {sym_path}. Run fpu_asm first.")
+    symbols: Dict[str, int] = {}
+    with open(sym_path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith(";") or line.startswith("["):
+                continue
+            parts = line.split()
+            if len(parts) >= 2:
+                name = parts[0]
+                try:
+                    addr = int(parts[1], 16) if parts[1].startswith("0x") else int(parts[1])
+                    symbols[name] = addr
+                except ValueError:
+                    pass
+    return symbols
 
 
-def generate_trig_constants_table() -> bytearray:
-    """Table 14: Trigonometric & CORDIC Constants (16 entries * 8 bytes = 128 bytes)."""
-    getcontext().prec = 100
-    pi = Decimal(
-        "3.1415926535897932384626433832795028841971693993751058209749445923078164062862089986280348253421170679"
-    )
-    # Compute CORDIC K for 64 stages
-    k = Decimal(1)
-    for i in range(64):
-        k *= (Decimal(1) + (Decimal(1) / (Decimal(4) ** i))).sqrt()
-    inv_k = Decimal(1) / k
+def generate_data_ram_words() -> List[int]:
+    """Generates the 512 32-bit words for DATA_RAM (EBR 6).
 
-    inv_k_32 = int(round(inv_k * Decimal(1 << 30))) & 0xFFFFFFFF
-    inv_k_64 = int(round(inv_k * Decimal(1 << 62))) & 0xFFFFFFFFFFFFFFFF
-    half_pi_32 = int(round((pi / Decimal(2)) * Decimal(1 << 30))) & 0xFFFFFFFF
-    half_pi_64 = int(round((pi / Decimal(2)) * Decimal(1 << 62))) & 0xFFFFFFFFFFFFFFFF
-    two_over_pi_32 = int(round((Decimal(2) / pi) * Decimal(1 << 31))) & 0xFFFFFFFF
-    two_over_pi_64 = int(round((Decimal(2) / pi) * Decimal(1 << 63))) & 0xFFFFFFFFFFFFFFFF
-    quarter_pi_32 = int(round((pi / Decimal(4)) * Decimal(1 << 30))) & 0xFFFFFFFF
-    quarter_pi_64 = int(round((pi / Decimal(4)) * Decimal(1 << 62))) & 0xFFFFFFFFFFFFFFFF
-
-    constants = [
-        # (slot, hex_val, num_bytes)
-        (0x00, inv_k_32, 4),  # INV_K_32 (Q2.30)
-        (0x01, inv_k_64, 8),  # INV_K_64 (Q2.62)
-        (0x02, half_pi_32, 4),  # HALF_PI_32 (Q2.30)
-        (0x03, half_pi_64, 8),  # HALF_PI_64 (Q2.62)
-        (0x04, two_over_pi_32, 4),  # TWO_OVER_PI_32 (Q1.31)
-        (0x05, two_over_pi_64, 8),  # TWO_OVER_PI_64 (Q1.63)
-        (0x06, quarter_pi_32, 4),  # QUARTER_PI_32 (Q2.30)
-        (0x07, quarter_pi_64, 8),  # QUARTER_PI_64 (Q2.62)
-        (0x08, 0x3F22F983, 4),  # TWO_OVER_PI_F32 (IEEE-754)
-        (0x09, 0x3FE45F306DC9C883, 8),  # TWO_OVER_PI_F64 (IEEE-754)
-        (0x0A, 0x3FC90FDB, 4),  # HALF_PI_F32 (IEEE-754)
-        (0x0B, 0x3FF921FB54442D18, 8),  # HALF_PI_F64 (IEEE-754)
-        (0x0C, 0x40490FDB, 4),  # PI_F32 (IEEE-754)
-        (0x0D, 0x400921FB54442D18, 8),  # PI_F64 (IEEE-754)
-        (0x0E, 0x3F1B74EE, 4),  # INV_K_F32 (IEEE-754)
-        (0x0F, 0x3FE36E9DE57788A5, 8),  # INV_K_F64 (IEEE-754)
-    ]
-
-    data = bytearray(16 * 8)
-    for idx, hex_val, nbytes in constants:
-        offset = idx * 8
-        raw = hex_val.to_bytes(nbytes, byteorder="little")
-        data[offset : offset + nbytes] = raw
-    return data
-
-
-# =============================================================================
-# In-Memory Flash Population Helper (Used by fpu_sim.py)
-# =============================================================================
-# =============================================================================
-# In-Memory Flash Population & 8KB Image Generation
-# =============================================================================
-def generate_flash_words() -> list[int]:
-    """Generates the 2048 32-bit words representing DATA_RAM (0..1023) and CODE_ROM (1024..2047)."""
-    words = [0] * TOTAL_WORDS
-
-    # 1. Mathematical Constants at words 256..319 (DATA_RAM offset 0x100)
+    Words 0..255: 0 (Stack/Scratch/User/Ext RAM space)
+    Words 256..319 (CONST_OFFSET = 0x100): 64 words of IEEE-754 Math Constants
+    Words 320..511: 0 (Headroom)
+    """
+    words = [0] * DATA_RAM_WORDS
     for _, slot, hex_val, nbytes, _ in CONSTANTS_DEF:
         if nbytes == 4:
-            words[DATA_RAM_CNS_WORD + slot] = hex_val & 0xFFFFFFFF
+            words[CONST_OFFSET + slot] = hex_val & 0xFFFFFFFF
         elif nbytes == 8:
-            # 64-bit constant: slot is LO word, slot+1 is HI word
-            words[DATA_RAM_CNS_WORD + slot] = hex_val & 0xFFFFFFFF
-            words[DATA_RAM_CNS_WORD + slot + 1] = (hex_val >> 32) & 0xFFFFFFFF
-
-    # 2. CORDIC ATAN32 Table at words 512..543 (DATA_RAM offset 0x200)
-    cordic_atan32 = generate_cordic_atan32_table()
-    for i in range(32):
-        words[DATA_RAM_TRIG_WORD + i] = int.from_bytes(cordic_atan32[i * 4 : i * 4 + 4], byteorder="little")
-
-    # 3. Combined 16-bit Seed Tables at words 768..1023 (DATA_RAM offset 0x300)
-    # Bit [31:16]: SQRT seed, Bit [15:0]: RECIP seed
-    recip = generate_recip_table()
-    sqrt = generate_sqrt_table()
-    for k in range(256):
-        r_val = recip[k * 2] | (recip[k * 2 + 1] << 8)
-        s_val = sqrt[k * 2] | (sqrt[k * 2 + 1] << 8)
-        words[DATA_RAM_SEEDS_WORD + k] = ((s_val & 0xFFFF) << 16) | (r_val & 0xFFFF)
-
-    # 4. Microcode Store (CODE_ROM) at words 1024..2047
-    try:
-        from fpu_emu.ucode import fpu_ucode
-        for i, inst in enumerate(fpu_ucode):
-            if i < CODE_ROM_WORDS:
-                words[CODE_ROM_BASE_WORD + i] = inst.to_int()
-    except ImportError:
-        pass
-
+            words[CONST_OFFSET + slot] = hex_val & 0xFFFFFFFF
+            words[CONST_OFFSET + slot + 1] = (hex_val >> 32) & 0xFFFFFFFF
     return words
 
 
-def populate_flash_memory(flash_mem: bytearray) -> bytearray:
-    """Populate an existing bytearray with the 8KB Flash ROM image."""
-    words = generate_flash_words()
-    packed = struct.pack(f">{len(words)}I", *words)
-    flash_mem[:len(packed)] = packed
-    return flash_mem
+def generate_flash_words(ucode_words: List[int], data_words: List[int]) -> List[int]:
+    """Combines Code ROM (1536 words) and Data RAM (512 words) into 2048 words."""
+    assert len(ucode_words) == UCODE_ROM_WORDS
+    assert len(data_words) == DATA_RAM_WORDS
+    return ucode_words + data_words
 
 
-def generate_flash_image() -> bytearray:
-    """Generate an 8KB Flash ROM binary image in big-endian byte order."""
-    words = generate_flash_words()
-    return bytearray(struct.pack(f">{len(words)}I", *words))
-
-
-# =============================================================================
-# Verilog Header & Hex Serialization
-# =============================================================================
-def write_verilog_header(header_path: str):
+def write_verilog_header(header_path: str, symbols: Dict[str, int]) -> None:
+    """Emits src/fpu_rom_map.vh with flash base offsets, RAM partition offsets, and opcode jump table."""
     os.makedirs(os.path.dirname(header_path), exist_ok=True)
     with open(header_path, "w") as f:
         f.write("/***************************************************************************************\n")
         f.write(" * FILE: src/fpu_rom_map.vh\n")
-        f.write(" * DESCRIPTION: Auto-generated Flash ROM Address Map for ZX50 FPU Coprocessor.\n")
+        f.write(" * DESCRIPTION: Auto-generated Flash ROM Address Map & Microcode Jump Table.\n")
         f.write(" * DO NOT EDIT MANUALLY - Generated by tools/build_flash.py\n")
         f.write(" ***************************************************************************************/\n\n")
         f.write("`ifndef FPU_ROM_MAP_VH\n`define FPU_ROM_MAP_VH\n\n")
+
         f.write("  // Flash Image 32-bit Word Base Offsets (8 KB total / 2048 words)\n")
-        f.write(f"  `define FLASH_DATA_RAM_BASE      13'h{DATA_RAM_BASE_WORD * 4:04X} // Words 0..1023 (4096 bytes)\n")
-        f.write(f"  `define FLASH_CODE_ROM_BASE      13'h{CODE_ROM_BASE_WORD * 4:04X} // Words 1024..2047 (4096 bytes)\n\n")
-        f.write("  // DATA_RAM Sub-table Word Offsets (EBR 0)\n")
-        f.write(f"  `define DATA_RAM_CONST_BASE      10'h{DATA_RAM_CNS_WORD:03X} // Words 256..319\n")
-        f.write(f"  `define DATA_RAM_TRIG_BASE       10'h{DATA_RAM_TRIG_WORD:03X} // Words 512..639\n")
-        f.write(f"  `define DATA_RAM_SEEDS_BASE      10'h{DATA_RAM_SEEDS_WORD:03X} // Words 768..1023\n\n")
-        f.write("  // FPU Constants Word Slot Map (32-bit words from DATA_RAM_CONST_BASE)\n")
+        f.write(f"  `define FLASH_UCODE_ROM_BASE     13'h{UCODE_ROM_OFFSET:04X} // Bytes 0..6143 (Words 0..1535)\n")
+        f.write(f"  `define FLASH_DATA_RAM_BASE      13'h{DATA_ROM_OFFSET:04X} // Bytes 6144..8191 (Words 1536..2047)\n\n")
+
+        f.write("  // DATA_RAM Partition Word Offsets (within 512-word EBR 6)\n")
+        f.write(f"  `define DATA_RAM_MTH_BASE        10'h{DATA_RAM_MTH_BASE:03X} // Stack RAM: words 0..127\n")
+        f.write(f"  `define DATA_RAM_SCR_BASE        10'h{DATA_RAM_SCR_BASE:03X} // Scratchpad RAM: words 128..191\n")
+        f.write(f"  `define DATA_RAM_USR_BASE        10'h{DATA_RAM_USR_BASE:03X} // User Storage: words 192..207\n")
+        f.write(f"  `define DATA_RAM_EXT_BASE        10'h{DATA_RAM_EXT_BASE:03X} // Headroom: words 208..255\n")
+        f.write(f"  `define DATA_RAM_CONST_BASE      10'h{CONST_OFFSET:03X} // Math Constants: words 256..319\n\n")
+
+        f.write("  // FPU Constants Word Slot Map (relative to DATA_RAM_CONST_BASE)\n")
         for name, slot, _, _, _ in CONSTANTS_DEF:
             f.write(f"  `define CONST_SLOT_{name:<18} 6'd{slot}\n")
         f.write("\n")
+
+        f.write("  // Microcode User Opcode Jump Table (Start PC in UCODE_ROM)\n")
+        user_symbols = {k: v for k, v in symbols.items() if k.startswith("USER_")}
+        for sym_name, addr in sorted(user_symbols.items()):
+            op_name = sym_name[5:]  # Strip 'USER_'
+            macro_name = f"USER_OP_{op_name}_PC"
+            f.write(f"  `define {macro_name:<30} 11'd{addr}\n")
+        f.write("\n")
+
         f.write("`endif // FPU_ROM_MAP_VH\n")
 
 
-def write_python_constants(py_path: str):
+def write_python_rom_map(py_path: str, symbols: Dict[str, int]) -> None:
+    """Emits fpu_emu/rom/fpu_rom_map.py with flash offsets, RAM partition map, and USER_OPCODE_MAP."""
     os.makedirs(os.path.dirname(py_path), exist_ok=True)
+
+    # Import UserOpcode to validate mapping
+    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+    from fpu_emu.user_opcodes import UserOpcode
+
     with open(py_path, "w") as f:
         f.write('"""Auto-generated by tools/build_flash.py - DO NOT EDIT MANUALLY.\n\n')
-        f.write("FPU Tables Base Addresses and Word Slot Maps for EBR / Flash ROM.\n")
+        f.write("FPU Flash ROM Map, EBR Data RAM Partitions, and User Opcode Jump Table.\n")
         f.write('"""\n\n')
-        f.write("from enum import IntEnum\n\n\n")
+        f.write("from enum import IntEnum\n")
+        f.write("from typing import Dict\n")
+        f.write("from fpu_emu.user_opcodes import UserOpcode\n\n\n")
+
+        f.write("class FpuFlashOffsets(IntEnum):\n")
+        f.write('    """Flash ROM Byte Base Offsets (8 KB single flash image)."""\n')
+        f.write(f"    UCODE_ROM_OFFSET = 0x{UCODE_ROM_OFFSET:04X}  # 6144 bytes / 1536 words (EBR 0..5)\n")
+        f.write(f"    DATA_ROM_OFFSET = 0x{DATA_ROM_OFFSET:04X}   # 2048 bytes / 512 words (EBR 6..7)\n\n\n")
+
         f.write("class FpuTables(IntEnum):\n")
-        f.write('    """Flash ROM Image Base Byte Addresses."""\n')
-        for name, base_addr, desc in TABLES_DEF:
-            f.write(f"    {name} = 0x{base_addr:04X}  # {desc}\n")
-        f.write("\n\n")
+        f.write('    """Flash ROM Image Base Byte Addresses (backwards compatibility)."""\n')
+        f.write(f"    UCODE_ROM = 0x{UCODE_ROM_OFFSET:04X}\n")
+        f.write(f"    DATA_RAM = 0x{DATA_ROM_OFFSET:04X}\n\n\n")
+
+        f.write("class FpuRamMap(IntEnum):\n")
+        f.write('    """Memory partition word offsets within the 512-word Data RAM (EBR 6)."""\n')
+        f.write(f"    MTH_BASE = 0x{DATA_RAM_MTH_BASE:03X}      # Stack RAM: words 0..127\n")
+        f.write(f"    SCR_BASE = 0x{DATA_RAM_SCR_BASE:03X}      # Scratchpad RAM: words 128..191\n")
+        f.write(f"    USR_BASE = 0x{DATA_RAM_USR_BASE:03X}      # User Storage: words 192..207\n")
+        f.write(f"    EXT_BASE = 0x{DATA_RAM_EXT_BASE:03X}      # Headroom: words 208..255\n")
+        f.write(f"    CONST_OFFSET = 0x{CONST_OFFSET:03X}  # Math Constants: words 256..319 (64 words)\n")
+        f.write(f"    CNS_BASE = 0x{CONST_OFFSET:03X}      # Alias for CONST_OFFSET\n\n\n")
+
         f.write("class FpuTable(IntEnum):\n")
-        f.write('    """Table Identifier for LDC instruction (MicroOp.LDC).\n\n')
-        f.write("    Mapped to base offsets in unified DATA_RAM (1024x32, EBR 0):\n")
-        f.write("      - CONST: Base 0x100 (words 256..319, 32-bit)\n")
-        f.write("      - TRIG:  Base 0x200 (words 512..639, 32-bit)\n")
-        f.write("      - CHEB:  Reserved (obsolete)\n")
-        f.write("      - RECIP: Base 0x300 (words 768..1023, low 16-bit slice)\n")
-        f.write("      - SQRT:  Base 0x300 (words 768..1023, high 16-bit slice)\n")
-        f.write('    """\n')
+        f.write('    """Table identifier for LDC instruction (MicroOp.LDC)."""\n')
         f.write("    CONST = 0\n")
         f.write("    TRIG = 1\n")
         f.write("    CHEB = 2\n")
         f.write("    RECIP = 3\n")
         f.write("    SQRT = 4\n\n\n")
+
         f.write("class FpuConst(IntEnum):\n")
-        f.write('    """FPU Constants Word Slot Map for EBR Constants ROM.\n')
-        f.write("    Each slot represents a 32-bit word offset from CONST table base (0x100).\n")
-        f.write('    """\n')
+        f.write('    """FPU Constants Word Slot Map (relative to CONST_OFFSET)."""\n')
         for name, slot, _, _, desc in CONSTANTS_DEF:
             f.write(f"    {name} = {slot}  # {desc}\n")
-        f.write("\n")
-        f.write("\n")
+        f.write("\n\n")
+
+        # Map each UserOpcode to its start PC address
+        f.write("USER_OPCODE_MAP: Dict[UserOpcode, int] = {\n")
+        for op in UserOpcode:
+            sym_name = f"USER_{op.name}"
+            if sym_name in symbols:
+                f.write(f"    UserOpcode.{op.name}: {symbols[sym_name]},\n")
+        f.write("}\n")
 
 
-def write_verilog_hex(hex_path: str, words: list[int]):
+def write_verilog_hex(hex_path: str, words: List[int]) -> None:
     """Writes 32-bit words in big-endian hex format (one 8-digit hex word per line)."""
     os.makedirs(os.path.dirname(hex_path), exist_ok=True)
     with open(hex_path, "w") as f:
@@ -466,29 +280,50 @@ def write_verilog_hex(hex_path: str, words: list[int]):
             f.write(f"{w:08X}\n")
 
 
-def main():
+def main() -> None:
     os.makedirs("bin", exist_ok=True)
     os.makedirs("sim", exist_ok=True)
     os.makedirs(os.path.dirname(EMU_BIN_FILE), exist_ok=True)
 
-    words = generate_flash_words()
-    image = struct.pack(f">{len(words)}I", *words)
+    # 1. Load microcode binary and symbol table
+    ucode_words = load_ucode_bin(UCODE_BIN_FILE)
+    symbols = load_ucode_sym(UCODE_SYM_FILE)
 
+    # 2. Generate Data RAM image
+    data_words = generate_data_ram_words()
+
+    # 3. Combine into unified 8 KB flash image (2048 words)
+    flash_words = generate_flash_words(ucode_words, data_words)
+
+    # Pack binary images
+    ucode_bin = struct.pack(f">{len(ucode_words)}I", *ucode_words)
+    data_bin = struct.pack(f">{len(data_words)}I", *data_words)
+    flash_bin = ucode_bin + data_bin
+
+    # 4. Write output files
     with open(BIN_FILE, "wb") as f:
-        f.write(image)
+        f.write(flash_bin)
 
     with open(EMU_BIN_FILE, "wb") as f:
-        f.write(image)
+        f.write(flash_bin)
 
-    write_verilog_hex(HEX_FILE, words)
-    write_verilog_header(HEADER_FILE)
-    write_python_constants(PY_CONST_MAP_FILE)
+    with open(SPLIT_CODE_FILE, "wb") as f:
+        f.write(ucode_bin)
 
-    print(f"[*] Generated Binary Image: {BIN_FILE} ({len(image)} bytes)")
-    print(f"[*] Generated Emulator Image: {EMU_BIN_FILE} ({len(image)} bytes)")
-    print(f"[*] Generated Simulation Hex: {HEX_FILE} ({len(words)} words)")
-    print(f"[*] Generated Verilog Header: {HEADER_FILE}")
-    print(f"[*] Generated Python Map: {PY_CONST_MAP_FILE}")
+    with open(SPLIT_DATA_FILE, "wb") as f:
+        f.write(data_bin)
+
+    write_verilog_hex(HEX_FILE, flash_words)
+    write_verilog_header(HEADER_FILE, symbols)
+    write_python_rom_map(PY_ROM_MAP_FILE, symbols)
+
+    print(f"[*] Generated Unified Flash Image: {BIN_FILE} ({len(flash_bin)} bytes)")
+    print(f"[*] Generated Emulator Copy:       {EMU_BIN_FILE} ({len(flash_bin)} bytes)")
+    print(f"[*] Generated Split Code ROM:      {SPLIT_CODE_FILE} ({len(ucode_bin)} bytes)")
+    print(f"[*] Generated Split Data RAM:      {SPLIT_DATA_FILE} ({len(data_bin)} bytes)")
+    print(f"[*] Generated Simulation Hex:      {HEX_FILE} ({len(flash_words)} words)")
+    print(f"[*] Generated Verilog Header:      {HEADER_FILE}")
+    print(f"[*] Generated Python ROM Map:      {PY_ROM_MAP_FILE}")
 
 
 if __name__ == "__main__":

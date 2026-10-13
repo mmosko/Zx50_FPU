@@ -1,7 +1,7 @@
 """Command Dispatcher and Micro-sequencer execution engine."""
 
 import logging
-from typing import List
+from typing import List, Optional
 
 from fpu_emu.blocks.functional_block import FunctionalBlock
 from fpu_emu.fpga_resource import fpga_resource

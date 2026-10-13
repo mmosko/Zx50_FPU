@@ -34,8 +34,8 @@ def test_push_basic(fpga: FpgaModel):
     # SP should now be 1
     assert fpga.reg_file.sp.read_int() == 1
 
-    # EBR 0 has 32-bit word
-    assert fpga.memory.read(0, 0) == 0x12345678
+    # EBR 6 has 32-bit word
+    assert fpga.memory.read(6, 0) == 0x12345678
 
     # Status flags VF and ERR should be clear
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
@@ -58,13 +58,13 @@ def test_push_multiple(fpga: FpgaModel):
 
     assert fpga.reg_file.sp.read_int() == 3
 
-    assert fpga.memory.read(0, 0) == 0xAAAAAAAA
+    assert fpga.memory.read(6, 0) == 0xAAAAAAAA
 
     fpga.clock.tick(1)
-    assert fpga.memory.read(0, 1) == 0xBBBBBBBB
+    assert fpga.memory.read(6, 1) == 0xBBBBBBBB
 
     fpga.clock.tick(1)
-    assert fpga.memory.read(0, 2) == 0xCCCCCCCC
+    assert fpga.memory.read(6, 2) == 0xCCCCCCCC
 
 
 def test_push_overflow(fpga: FpgaModel):
@@ -83,7 +83,7 @@ def test_push_overflow(fpga: FpgaModel):
     assert fpga.reg_file.sp.read_int() == 127
 
     # Memory at address 127 should NOT have been written
-    assert fpga.memory.read(0, 127) == 0
+    assert fpga.memory.read(6, 127) == 0
 
     # Status flags should indicate error, preserving ALU flags like OVERFLOW
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
@@ -241,7 +241,7 @@ def test_push64_overflow_at_127(fpga: FpgaModel):
     fpga.dispatcher._run(microcode)
 
     assert fpga.reg_file.sp.read_int() == 127
-    assert fpga.memory.read(0, 127) == 0
+    assert fpga.memory.read(6, 127) == 0
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
 
@@ -259,7 +259,7 @@ def test_push64_overflow_at_126(fpga: FpgaModel):
     fpga.dispatcher._run(microcode)
 
     assert fpga.reg_file.sp.read_int() == 127  # Incremented once by low word
-    assert fpga.memory.read(0, 126) == 0x12345678  # Low word was written
+    assert fpga.memory.read(6, 126) == 0x12345678  # Low word was written
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
 
@@ -402,7 +402,7 @@ def test_scratchpad_ld_sto_32_indirect(fpga: FpgaModel):
     ]
     fpga.dispatcher._run(microcode)
     assert fpga.reg_file.bl.read_int() == 0xDEADBEEF
-    assert fpga.memory.read(0, 0x080 | 6) == 0xDEADBEEF
+    assert fpga.memory.read(6, 0x080 | 6) == 0xDEADBEEF
 
 
 def test_scratchpad_ld_sto_64_indirect(fpga: FpgaModel):
@@ -417,9 +417,9 @@ def test_scratchpad_ld_sto_64_indirect(fpga: FpgaModel):
     fpga.dispatcher._run(microcode)
     assert fpga.reg_file.dl.read_int() == 0x12345678
     assert fpga.reg_file.dh.read_int() == 0x9ABCDEF0
-    assert fpga.memory.read(0, 0x080 | 0x0A) == 0x12345678
+    assert fpga.memory.read(6, 0x080 | 0x0A) == 0x12345678
     fpga.clock.tick()
-    assert fpga.memory.read(0, 0x080 | 0x0B) == 0x9ABCDEF0
+    assert fpga.memory.read(6, 0x080 | 0x0B) == 0x9ABCDEF0
 
 
 def test_scratchpad_ld_64_indirect_odd_base_raises(fpga: FpgaModel):
@@ -671,7 +671,7 @@ def test_ldi_flag_set_and_clear(fpga: FpgaModel):
 
 def test_ldc_immediate_const_pi_f32(fpga: FpgaModel):
     """LDC AL, CONST, PI_F32 loads 32-bit float pi (0x40490FDB) from EBR 2/3."""
-    from fpu_emu.rom.fpu_const_map import FpuTable, FpuConst
+    from fpu_emu.rom.fpu_rom_map import FpuTable, FpuConst
     microcode = [
         MicroInstruction(
             op=MicroOp.LDC,
@@ -689,7 +689,7 @@ def test_ldc_immediate_const_64bit(fpga: FpgaModel):
     """LDC AL, CONST, PI_F64 with W64 loads 64-bit IEEE double pi into (AL, AH)."""
     import math
     import struct
-    from fpu_emu.rom.fpu_const_map import FpuTable, FpuConst
+    from fpu_emu.rom.fpu_rom_map import FpuTable, FpuConst
 
     pi_bytes = struct.pack("<d", math.pi)
     lo_word, hi_word = struct.unpack("<II", pi_bytes)
@@ -711,7 +711,7 @@ def test_ldc_immediate_const_64bit(fpga: FpgaModel):
 
 def test_ldc_immediate_const_one_and_magic_f64(fpga: FpgaModel):
     """LDC with ONE_F64 and MAGIC_F64 loads correct 64-bit float values."""
-    from fpu_emu.rom.fpu_const_map import FpuTable, FpuConst
+    from fpu_emu.rom.fpu_rom_map import FpuTable, FpuConst
 
     microcode = [
         MicroInstruction(
@@ -738,52 +738,49 @@ def test_ldc_immediate_const_one_and_magic_f64(fpga: FpgaModel):
     assert fpga.reg_file.bh.read_int() == 0x43380000
 
 
-def test_ldc_dynamic_reg_sqrt_c(fpga: FpgaModel):
-    """LDC AH, SQRT, C loads zero-extended 16-bit seed from EBR 4 at offset 0x100 + C using 6-bit counter C."""
-    from fpu_emu.rom.fpu_const_map import FpuTable
+def test_ldc_dynamic_reg_const_c(fpga: FpgaModel):
+    """LDC AH, CONST, C loads 32-bit constant from EBR 6 at offset 0x100 + C using 6-bit counter C."""
+    from fpu_emu.rom.fpu_rom_map import FpuTable, FpuConst, FpuRamMap
 
-    # Test index C = 0x25 (fits within 6-bit counter register C)
-    fpga.reg_file.c.write(0x25)
+    # Test index C = FpuConst.PI_F32
+    fpga.reg_file.c.write(FpuConst.PI_F32)
     microcode = [
         MicroInstruction(
             op=MicroOp.LDC,
             dst=Reg.AH,
-            src1=FpuTable.SQRT,
+            src1=FpuTable.CONST,
             src2=Reg.C,
         ),
     ]
     fpga.dispatcher._run(microcode)
-    expected_seed = (fpga.memory.read(0, 0x300 | 0x25) >> 16) & 0xFFFF
-    assert fpga.reg_file.ah.read_int() == expected_seed
-    assert fpga.reg_file.ah.read_int() & 0xFFFF0000 == 0
+    expected_val = fpga.memory.read(6, FpuRamMap.CONST_OFFSET | FpuConst.PI_F32)
+    assert fpga.reg_file.ah.read_int() == expected_val
 
 
-def test_ldc_dynamic_reg_sqrt_bl(fpga: FpgaModel):
-    """LDC AH, SQRT, BL loads seed using full 8-bit index in BL (testing offset bit 7 = 1)."""
-    from fpu_emu.rom.fpu_const_map import FpuTable
+def test_ldc_dynamic_reg_const_bl(fpga: FpgaModel):
+    """LDC AH, CONST, BL loads constant using index in BL."""
+    from fpu_emu.rom.fpu_rom_map import FpuTable, FpuConst, FpuRamMap
 
-    # Test 8-bit index with bit 7 = 1: BL = 0x95
-    fpga.reg_file.bl.write(0x95)
+    # Test index BL = FpuConst.E_F32
+    fpga.reg_file.bl.write(FpuConst.E_F32)
     microcode = [
         MicroInstruction(
             op=MicroOp.LDC,
             dst=Reg.AH,
-            src1=FpuTable.SQRT,
+            src1=FpuTable.CONST,
             src2=Reg.BL,
         ),
     ]
     fpga.dispatcher._run(microcode)
-    expected_seed = (fpga.memory.read(0, 0x300 | 0x95) >> 16) & 0xFFFF
-    assert fpga.reg_file.ah.read_int() == expected_seed
-    assert fpga.reg_file.ah.read_int() & 0xFFFF0000 == 0
+    expected_val = fpga.memory.read(6, FpuRamMap.CONST_OFFSET | FpuConst.E_F32)
+    assert fpga.reg_file.ah.read_int() == expected_val
 
 
-def test_ldc_dynamic_reg_recip(fpga: FpgaModel):
-    """LDC BL, RECIP, AL loads zero-extended 16-bit seed from DATA_RAM at offset 0x300 + AL."""
-    from fpu_emu.rom.fpu_const_map import FpuTable
+def test_ldc_invalid_table_raises(fpga: FpgaModel):
+    """LDC with deprecated or invalid table selector raises HardwareBusError."""
+    from fpu_emu.rom.fpu_rom_map import FpuTable
+    from fpu_emu.hardware.registers import HardwareBusError
 
-    # Test 8-bit index AL = 0x85
-    fpga.reg_file.al.write(0x85)
     microcode = [
         MicroInstruction(
             op=MicroOp.LDC,
@@ -792,28 +789,8 @@ def test_ldc_dynamic_reg_recip(fpga: FpgaModel):
             src2=Reg.AL,
         ),
     ]
-    fpga.dispatcher._run(microcode)
-    expected_seed = fpga.memory.read(0, 0x300 | 0x85) & 0xFFFF
-    assert fpga.reg_file.bl.read_int() == expected_seed
-    assert fpga.reg_file.bl.read_int() & 0xFFFF0000 == 0
-
-
-def test_ldc_immediate_trig_cordic(fpga: FpgaModel):
-    """LDC DL, TRIG, imm=0 loads 32-bit CORDIC atan constant from DATA_RAM at offset 0x200."""
-    from fpu_emu.rom.fpu_const_map import FpuTable
-
-    microcode = [
-        MicroInstruction(
-            op=MicroOp.LDC,
-            dst=Reg.DL,
-            src1=FpuTable.TRIG,
-            src2=Reg.IMM,
-            imm=0,
-        ),
-    ]
-    fpga.dispatcher._run(microcode)
-    expected_val = fpga.memory.read(0, 0x200 | 0x000)
-    assert fpga.reg_file.dl.read_int() == expected_val
+    with pytest.raises(HardwareBusError):
+        fpga.dispatcher._run(microcode)
 
 
 def test_user_ldu_stu_32(fpga: FpgaModel):
@@ -825,7 +802,7 @@ def test_user_ldu_stu_32(fpga: FpgaModel):
     ]
     fpga.dispatcher._run(microcode)
     assert fpga.reg_file.bl.read_int() == 0x12345678
-    assert fpga.memory.read(0, 0x0C0 | 2) == 0x12345678
+    assert fpga.memory.read(6, 0x0C0 | 2) == 0x12345678
 
 
 def test_user_ldu_stu_64(fpga: FpgaModel):
@@ -839,9 +816,9 @@ def test_user_ldu_stu_64(fpga: FpgaModel):
     fpga.dispatcher._run(microcode)
     assert fpga.reg_file.bl.read_int() == 0xAABBCCDD
     assert fpga.reg_file.bh.read_int() == 0x11223344
-    assert fpga.memory.read(0, 0x0C0 | 4) == 0xAABBCCDD
+    assert fpga.memory.read(6, 0x0C0 | 4) == 0xAABBCCDD
     fpga.clock.tick(1)
-    assert fpga.memory.read(0, 0x0C0 | 5) == 0x11223344
+    assert fpga.memory.read(6, 0x0C0 | 5) == 0x11223344
 
 
 def test_user_ldu_64_odd_base_raises(fpga: FpgaModel):
@@ -891,7 +868,7 @@ def test_memory_halt_push_32(fpga: FpgaModel):
     assert fpga.reg_file.status.is_bit_set(StatusFlag.BUSY) is False
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR) is False
     assert fpga.reg_file.sp.read_int() == sp_before + 1
-    assert fpga.memory.read(0, 0x000 | sp_before) == 0x12345678
+    assert fpga.memory.read(6, 0x000 | sp_before) == 0x12345678
 
 
 def test_memory_halt_push_64(fpga: FpgaModel):
@@ -906,9 +883,9 @@ def test_memory_halt_push_64(fpga: FpgaModel):
     assert fpga.reg_file.status.is_bit_set(StatusFlag.BUSY) is False
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR) is False
     assert fpga.reg_file.sp.read_int() == sp_before + 2
-    assert fpga.memory.read(0, 0x000 | sp_before) == 0x11223344
+    assert fpga.memory.read(6, 0x000 | sp_before) == 0x11223344
     fpga.clock.tick(1)
-    assert fpga.memory.read(0, 0x000 | (sp_before + 1)) == 0x55667788
+    assert fpga.memory.read(6, 0x000 | (sp_before + 1)) == 0x55667788
 
 
 def test_memory_halt_push_overflow_sets_err(fpga: FpgaModel):

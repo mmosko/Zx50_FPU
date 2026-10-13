@@ -6,7 +6,7 @@ from fpu_emu.hardware.reg import Reg
 from fpu_emu.hardware.register import Register
 from fpu_emu.hardware.registers import StatusFlag
 from fpu_emu.micro_opcodes import MicroOp
-from fpu_emu.rom.fpu_const_map import FpuTable
+from fpu_emu.rom.fpu_rom_map import FpuTable
 
 
 class IW(IntEnum):

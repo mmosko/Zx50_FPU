@@ -12,7 +12,7 @@ from fpu_emu.hardware.register import Register, StatusRegister
 from fpu_emu.hardware.registers import HardwareBusError, StatusFlag
 from fpu_emu.micro_instruction import MicroInstruction
 from fpu_emu.micro_opcodes import MicroOp
-from fpu_emu.rom.fpu_const_map import FpuTable
+from fpu_emu.rom.fpu_rom_map import FpuTable, FpuRamMap
 
 
 @fpga_resource(
@@ -42,16 +42,14 @@ class MemoryBlock(FunctionalBlock):
           * Interleaved RECIP (low 16b) and SQRT (high 16b) seeds: words 768..1023 (256 words x 32-bit)
     """
 
-    # DATA_RAM (EBR 0, 1024 words x 32-bit) Memory Map Bases
-    MTH_BASE = 0x000  # Stack: words 0..127
-    SCR_BASE = 0x080  # Scratchpad: words 128..191
-    USR_BASE = 0x0C0  # User storage: words 192..207
-    EXT_BASE = 0x0D0  # Free RAM headroom: words 208..255
+    DATA_RAM_BLOCK = 6
 
-    CNS_BASE = 0x100  # IEEE-754 Constants: words 256..319
-    TRIG_BASE = 0x200  # Trig & CORDIC Angles: words 512..639
-    CHEB_BASE = 0x280  # Chebyshev Coefficients: words 640..767
-    SEEDS_BASE = 0x300  # Combined Seeds: words 768..1023
+    # DATA_RAM (EBR 6, 512 words x 32-bit) Memory Map Bases
+    MTH_BASE = FpuRamMap.MTH_BASE
+    SCR_BASE = FpuRamMap.SCR_BASE
+    USR_BASE = FpuRamMap.USR_BASE
+    EXT_BASE = FpuRamMap.EXT_BASE
+    CNS_BASE = FpuRamMap.CONST_OFFSET
 
     def __init__(self,
                  name: str,
@@ -217,7 +215,7 @@ class MemoryBlock(FunctionalBlock):
 
         # 1 cycle to present address and data
         addr = self.MTH_BASE | (self._sp.read_int() & 0x7F)
-        self._memory.write(0, addr, value & 0xFFFFFFFF)
+        self._memory.write(self.DATA_RAM_BLOCK, addr, value & 0xFFFFFFFF)
         self._clock.tick()
 
         # Writeback the updated SP
@@ -294,7 +292,7 @@ class MemoryBlock(FunctionalBlock):
 
         # 1 cycle to present address and data
         addr = self.MTH_BASE | (new_sp & 0x7F)
-        val = self._memory.read(0, addr)
+        val = self._memory.read(self.DATA_RAM_BLOCK, addr)
 
         # Writeback the updated SP
         self._sp.write(self._stack_adder.read())
@@ -356,19 +354,7 @@ class MemoryBlock(FunctionalBlock):
         """Reads from DATA_RAM (EBR 0) constant/LUT tables using zero-cost bitwise OR addressing."""
         if tbl == FpuTable.CONST or tbl == 0:
             addr = self.CNS_BASE | (offset & 0x3F)
-            val = self._memory.read(0, addr)
-        elif tbl == FpuTable.TRIG or tbl == 1:
-            addr = self.TRIG_BASE | (offset & 0x7F)
-            val = self._memory.read(0, addr)
-        elif tbl == FpuTable.CHEB or tbl == 2:
-            addr = self.CHEB_BASE | (offset & 0x7F)
-            val = self._memory.read(0, addr)
-        elif tbl == FpuTable.RECIP or tbl == 3:
-            addr = self.SEEDS_BASE | (offset & 0xFF)
-            val = self._memory.read(0, addr) & 0xFFFF
-        elif tbl == FpuTable.SQRT or tbl == 4:
-            addr = self.SEEDS_BASE | (offset & 0xFF)
-            val = (self._memory.read(0, addr) >> 16) & 0xFFFF
+            val = self._memory.read(self.DATA_RAM_BLOCK, addr)
         else:
             raise HardwareBusError(f"Invalid LDC table selector: {tbl}")
 
@@ -461,7 +447,7 @@ class MemoryBlock(FunctionalBlock):
 
     def _ld_core(self, dst: int, addr: int):
         ram_addr = self.SCR_BASE | (addr & 0x3F)
-        val = self._memory.read(0, ram_addr)
+        val = self._memory.read(self.DATA_RAM_BLOCK, ram_addr)
         self._clock.tick()
         self._outputs.block_res.set(val)
         self._outputs.block_res_sel.set(dst)
@@ -503,7 +489,7 @@ class MemoryBlock(FunctionalBlock):
         self._inputs.hb_mux.select(src)
         val = self._inputs.hb_mux.read_int()
         ram_addr = self.SCR_BASE | (addr & 0x3F)
-        self._memory.write(0, ram_addr, val & 0xFFFFFFFF)
+        self._memory.write(self.DATA_RAM_BLOCK, ram_addr, val & 0xFFFFFFFF)
         self._clock.tick()
 
     def _ldu(self, instr: MicroInstruction) -> None:
@@ -538,7 +524,7 @@ class MemoryBlock(FunctionalBlock):
 
     def _ldu_core(self, dst: int, addr: int):
         ram_addr = self.USR_BASE | (addr & 0x0F)
-        val = self._memory.read(0, ram_addr)
+        val = self._memory.read(self.DATA_RAM_BLOCK, ram_addr)
         self._clock.tick()
         self._outputs.block_res.set(val)
         self._outputs.block_res_sel.set(dst)
@@ -580,7 +566,7 @@ class MemoryBlock(FunctionalBlock):
         self._inputs.hb_mux.select(src)
         val = self._inputs.hb_mux.read_int()
         ram_addr = self.USR_BASE | (addr & 0x0F)
-        self._memory.write(0, ram_addr, val & 0xFFFFFFFF)
+        self._memory.write(self.DATA_RAM_BLOCK, ram_addr, val & 0xFFFFFFFF)
         self._clock.tick()
 
     def _mov(self, instr: MicroInstruction) -> None:

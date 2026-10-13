@@ -16,14 +16,14 @@ def get_default_rom_path() -> Path:
 def load_ebr_rom_buffers(rom_path: Optional[Path] = None) -> List[Optional[List[int]]]:
     """Generates the EBR initialization buffers for Memory.
 
-    The 8KB flash ROM image is split directly in half:
-      - EBR 0: DATA_RAM (1024 words x 32-bit, first 4096 bytes)
-      - EBR 1..3: NullEbr (unallocated)
-      - EBR 4: CODE_ROM (1024 words x 32-bit, second 4096 bytes)
-      - EBR 5..7: NullEbr (unallocated)
+    The 8KB flash ROM image is split into:
+      - EBR 0: CODE_ROM (1536 words x 32-bit, first 6144 bytes)
+      - EBR 1..5: NullEbr (unallocated)
+      - EBR 6: DATA_RAM (512 words x 32-bit, last 2048 bytes)
+      - EBR 7: NullEbr (unallocated)
     """
-    data_ram = [0] * 1024
-    code_rom = [0] * 1024
+    code_rom = [0] * 1536
+    data_ram = [0] * 512
 
     path = rom_path if (rom_path is not None and rom_path.exists()) else get_default_rom_path()
     if path.exists():
@@ -31,7 +31,7 @@ def load_ebr_rom_buffers(rom_path: Optional[Path] = None) -> List[Optional[List[
             data = f.read()
 
         if len(data) >= 8192:
-            data_ram = list(struct.unpack(">1024I", data[:4096]))
-            code_rom = list(struct.unpack(">1024I", data[4096:8192]))
+            code_rom = list(struct.unpack(">1536I", data[:6144]))
+            data_ram = list(struct.unpack(">512I", data[6144:8192]))
 
-    return [data_ram, code_rom, None, None, None, None, None, None]
+    return [code_rom, None, None, None, None, None, data_ram, None]

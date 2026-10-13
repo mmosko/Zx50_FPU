@@ -20,6 +20,9 @@ else:
     from fpu_emu.ucode import fpu_symbols, fpu_ucode
 
 
+from fpu_emu.rom.fpu_rom_map import USER_OPCODE_MAP
+
+
 class MicroCode:
     """Microcode ROM lookup table."""
 
@@ -31,6 +34,8 @@ class MicroCode:
     @classmethod
     def get_address(cls, opcode: UserOpcode) -> int:
         """Returns the start UPC address for an opcode in the microcode ROM."""
+        if opcode in USER_OPCODE_MAP:
+            return USER_OPCODE_MAP[opcode]
         sym = f"USER_{opcode.name}"
         if sym in fpu_symbols:
             return fpu_symbols[sym]
@@ -52,8 +57,7 @@ class MicroCode:
         :param opcode:
         :return:
         """
-        sym = f"USER_{opcode.name}"
-        if sym in fpu_symbols:
+        if opcode in USER_OPCODE_MAP or f"USER_{opcode.name}" in fpu_symbols:
             return fpu_ucode
         raise NotImplementedError(f"Microcode for opcode {opcode} not implemented")
 

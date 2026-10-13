@@ -5,7 +5,7 @@ from fpu_emu.hardware.reg import Reg
 from fpu_emu.hardware.register import StatusFlag
 from fpu_emu.micro_instruction import IW
 from fpu_emu.micro_opcodes import MicroOp
-from fpu_emu.rom.fpu_const_map import FpuConst, FpuTable
+from fpu_emu.rom.fpu_rom_map import FpuConst, FpuTable
 
 
 def test_assemble_sample_program():

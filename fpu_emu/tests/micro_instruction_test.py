@@ -86,7 +86,7 @@ def test_micro_instruction_ldc_immediate_round_trip():
     imm_reg = Register(name=Reg.IMM, size_in_bits=13, clock=clock)
 
     # Encode LDC AL, CONST, PI_F32 (imm=0)
-    from fpu_emu.rom.fpu_const_map import FpuTable, FpuConst
+    from fpu_emu.rom.fpu_rom_map import FpuTable, FpuConst
     orig = MicroInstruction(
         op=MicroOp.LDC,
         dst=Reg.AL,
@@ -110,7 +110,7 @@ def test_micro_instruction_ldc_dynamic_reg_round_trip():
     imm_reg = Register(name=Reg.IMM, size_in_bits=13, clock=clock)
 
     # Encode LDC AH, SQRT, C
-    from fpu_emu.rom.fpu_const_map import FpuTable
+    from fpu_emu.rom.fpu_rom_map import FpuTable
     orig = MicroInstruction(
         op=MicroOp.LDC,
         dst=Reg.AH,
@@ -180,7 +180,7 @@ def test_micro_instruction_to_bytes_three_operand_and_w64():
 
 
 def test_micro_instruction_round_trip_bytes():
-    from fpu_emu.rom.fpu_const_map import FpuTable, FpuConst
+    from fpu_emu.rom.fpu_rom_map import FpuTable, FpuConst
 
     test_cases = [
         MicroInstruction(op=MicroOp.ADD, w=IW.W32, dst=Reg.AL, src2=Reg.BL),
@@ -208,7 +208,7 @@ def test_micro_instruction_round_trip_bytes():
 
 
 def test_micro_instruction_emit_bin_rom_image():
-    from fpu_emu.rom.fpu_const_map import FpuTable, FpuConst
+    from fpu_emu.rom.fpu_rom_map import FpuTable, FpuConst
 
     # Emulate a small routine: PUSH_PI_32
     routine = [

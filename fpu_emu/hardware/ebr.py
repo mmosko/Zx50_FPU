@@ -6,7 +6,7 @@ from fpu_emu.hardware.clock import Clock
 class EBR:
     def __init__(self, name: str, size: int, width: int, read_only_buffer: Optional[List[int]], clock: Clock, readonly: Optional[bool] = None):
         self._name = name
-        assert self._is_power_of_two(size)
+        assert self._is_power_of_two(size) or (size > 0 and size % 512 == 0)
         self._size = size
         self._width = width
         self._mask = (1 << width) - 1
@@ -39,7 +39,7 @@ class EBR:
         assert 0 <= data <= self._mask, f"Data 0x{data:X} exceeds width of {self._width} bits"
         assert self._last_write_tick != self._clock.cycles, f"EBR {self._name}: Multiple writes in cycle {self._clock.cycles}"
         assert not self._readonly, f"EBR {self._name}: Cannot write to read-only buffer"
-        if self._name == "0":
+        if self._name == "6":
             # Hardware write-protection: only lower 256 words (0x000..0x0FF) are writable
             assert addr < 0x100, f"EBR {self._name}: Write to protected ROM address 0x{addr:03X}"
 

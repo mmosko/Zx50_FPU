@@ -122,20 +122,39 @@ trigonometrics are implemented as thin wrappers calling the verified 64-bit core
   - Removed `CHEB_DEF` and `generate_cheb_table()` from `tools/build_flash.py`, removed `CHEB_SLOT_*` definitions from `src/fpu_rom_map.vh`, and eliminated `FpuCheb` from `fpu_emu/rom/fpu_const_map.py`.
   - Updated `fpu_asm/assembler.py` to remove `FpuCheb` imports and symbol resolution.
   - Verified no active microcode or tests reference `CHEB`. Regenerated all artifacts via `build_flash.py`.
-- [ ] **Step 9: Microcode Reassembly & Verification**
-  - Reassemble unified microcode and verify that total microcode drops from **1,563 words to ~1,287 words** (saving ~276 words and well within the 1,536 limit).
-  - Run the full test suite (2,183+ tests) to confirm all operations pass.
+- [x] **Step 9: Microcode Reassembly & Verification**
+  - Reassembled unified microcode into `fpu_emu/ucode.py` and `/tmp/ucode.py`: total microcode dropped from **1,563 words down to 1,309 words** (saving 254 words and easily fitting inside the 1,536-word limit with 227 words of free headroom).
+  - Rebuilt flash image, emulator image, simulation hex, and Verilog headers with `tools/build_flash.py`.
+  - Ran full test suite: all 2,183 tests passed with 0 failures or regressions.
 
 #### Phase 4: Hardware Memory, Flash Packaging & Microcode Execution Refactor
-- [ ] **Step 10: Update `hardware/memory.py` for 8-EBR Layout**
-  - Reconfigure `Memory` in `fpu_emu/hardware/memory.py`:
-    - EBR 0..5: 1,536 words $\times$ 32-bit Code ROM (`readonly=True`).
-    - EBR 6..7: 512 words $\times$ 32-bit Data RAM (`readonly=False`).
-- [ ] **Step 11: Update `build_flash.py` for 8 KB Image and 6 KB / 2 KB Split**
-  - Generate unified 8 KB binary with exact byte-for-byte order matching EBR layout (EBR 0..5 = 6 KB Code ROM, EBR 6..7 = 2 KB Data RAM) for the bootloader.
-  - Automatically produce split outputs: 6 KB Code ROM binary and 2 KB Data RAM binary.
-- [ ] **Step 12: Convert `micro_code.py` to Fetch from Hardware Memory**
-  - Refactor `fpu_emu/micro_code.py` to decode and read micro-instructions from `Memory` rather than importing them directly from `ucode.py` (detailed breakdown to follow).
+- [x] **Step 10: Delegate `sqrt_f32.asm` to `SQRT_F64_CORE`**
+  - Replaced seed-based table Newton-Raphson in `fpu_emu/asm/sqrt_f32.asm` with delegation via `CONV_F32_F64_CORE` -> `SQRT_F64_CORE` -> `CONV_F64_F32_CORE`. Original routine safely archived to `fpu_emu/asm/archive/sqrt_f32.asm`.
+  - Saved 35 microcode instructions (total footprint dropped from 1,309 down to 1,274 instructions).
+  - Eliminates the last table dependency (`SQRT` seeds) from microcode, allowing Data RAM to be self-contained in 512 words. All 38 `sqrt_f32` tests and 43 `sqrt_f64` tests passing.
+- [x] **Step 11: Build Directory Pipeline (`build/ucode.bin` & `build/ucode.sym`)**
+  - Configured microcode assembly to emit to `build/ucode.bin` (padded to 1,536 words, 6,144 bytes) and `build/ucode.sym`.
+  - Assembled 1,274 instructions into `build/ucode.bin` and verified `build/ucode.sym` symbol tables.
+- [x] **Step 12: Redesign `tools/build_flash.py`**
+  - Reads `build/ucode.bin` and `build/ucode.sym`.
+  - Places Code ROM at offset `0x0000` (Bytes 0..6143 / Words 0..1535) and Data RAM at offset `0x1800` (Bytes 6144..8191 / Words 1536..2047).
+  - Emits unified 8 KB image (`bin/fpu_flash.bin`, `fpu_emu/rom/fpu_flash.bin`) and simulation hex (`sim/fpu_rom.hex`).
+  - Emits split binaries (`bin/fpu_code_rom.bin` 6144 B, `bin/fpu_data_ram.bin` 2048 B).
+  - Emits `fpu_emu/rom/fpu_rom_map.py` with `FpuFlashOffsets`, `FpuRamMap` (`CONST_OFFSET = 0x100`), `FpuConst`, and `USER_OPCODE_MAP`.
+  - Emits `src/fpu_rom_map.vh` with Verilog constants, RAM partition offsets, and opcode jump table address defines.
+- [x] **Step 13: Update `hardware/memory.py`, `hardware/ebr.py`, and `ebr_loader.py`**
+  - `Memory`: EBR[0] = 1,536 words Code ROM (`readonly=True`), NullEbr 1..5, EBR[6] = 512 words Data RAM (`readonly=False`), NullEbr 7.
+  - `hardware/ebr.py`: Updated write-protection check to target EBR 6 (`addr < 0x100`) and support size 1,536 words.
+  - `ebr_loader.py`: Splits 8 KB flash image into 6,144 bytes (1,536 words) for EBR 0 and 2,048 bytes (512 words) for EBR 6.
+- [x] **Step 14: Refactor `memory_block.py` to Use `FpuRamMap` and `EBR 6`**
+  - Removed hardcoded partition addresses from `memory_block.py`; imported and used `FpuRamMap` from `fpu_rom_map.py`.
+  - Routed all Data RAM reads and writes to `EBR 6` (`self.DATA_RAM_BLOCK = 6`).
+  - Updated `_ldc_core` for constants at `CONST_OFFSET`.
+- [ ] **Step 15: Refactor `micro_code.py` to Fetch from Hardware `Memory`**
+  - Refactor `MicroCode.get_address(opcode)` to look up `USER_OPCODE_MAP[opcode]`.
+  - Fetch and decode micro-instructions directly from `fpga.memory.read(block=0, addr=upc)`.
+- [ ] **Step 16: Full Test Suite Verification**
+  - Run complete test suite (2,183 tests) to verify 100% test passage.
 
 ### 5. Hardware Simulation & Verilog RTL
 

@@ -16,7 +16,7 @@ from fpu_emu.micro_instruction import MicroInstruction, IW
 from fpu_emu.micro_opcodes import MicroOp
 from fpu_emu.hardware.reg import Reg
 from fpu_emu.hardware.register import StatusFlag
-from fpu_emu.rom.fpu_const_map import FpuTable
+from fpu_emu.rom.fpu_rom_map import FpuTable
 
 
 def test_pad_instructions_default_512():
@@ -158,11 +158,11 @@ def test_cli_main_success_bin(tmp_path: Path, capsys):
     ret = main(["-i", str(asm_file), "-o", str(bin_file)])
     assert ret == 0
     assert bin_file.exists()
-    # 512 words * 4 bytes = 2048 bytes
-    assert len(bin_file.read_bytes()) == 512 * 4
+    # 1536 words * 4 bytes = 6144 bytes
+    assert len(bin_file.read_bytes()) == 1536 * 4
 
     captured = capsys.readouterr()
-    assert "Successfully assembled 2 instructions (padded to 512 words)" in captured.out
+    assert "Successfully assembled 2 instructions (padded to 1536 words)" in captured.out
 
 
 def test_cli_main_success_python_and_sym(tmp_path: Path, capsys):

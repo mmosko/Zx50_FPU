@@ -160,8 +160,12 @@ def test_ebr():
 def test_memory():
     clock = Clock()
     mem = Memory(rom_blocks=[None] * 8, clock=clock)
-    mem.write(block=0, addr=5, data=0x1234)
-    assert mem.read(block=0, addr=5) == 0x1234
+    # EBR 0 is read-only Code ROM
+    with pytest.raises(AssertionError):
+        mem.write(block=0, addr=5, data=0x1234)
+    # EBR 6 is read-write Data RAM
+    mem.write(block=6, addr=5, data=0x1234)
+    assert mem.read(block=6, addr=5) == 0x1234
 
 
 def test_rom(tmp_path: Path):
