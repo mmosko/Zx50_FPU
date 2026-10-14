@@ -1,8 +1,8 @@
 """Opcode matcher and dictionary dispatcher for IEEE-754 test vectors."""
 
 from typing import Dict, Optional, Tuple
+from fpu_emu.rom.fpu_rom_map import USER_OPCODE_MAP
 from fpu_emu.tests.integration.ieee754.vector_parser import TestVector
-from fpu_emu.ucode import fpu_symbols
 from fpu_emu.user_opcodes import UserOpcode
 
 
@@ -42,8 +42,7 @@ def is_opcode_implemented(opcode: UserOpcode) -> bool:
     """Checks whether the opcode is available in the microcode ROM symbol table or stubbed."""
     if is_stubbed_pass_through(opcode):
         return True
-    sym = f"USER_{opcode.name}"
-    return sym in fpu_symbols
+    return opcode in USER_OPCODE_MAP
 
 
 def match_test_vector(vector: TestVector) -> Optional[UserOpcode]:

@@ -58,7 +58,7 @@ def test_user_opcode_conv_u32_u64_overflow(fpga: FpgaModel) -> None:
     """Tests CONV_U32_U64 when stack is full (SP=127) traps overflow on pushing second word."""
     # Set SP to maximum capacity (127 words)
     fpga.reg_file.sp.write(127)
-    fpga.memory.write(0, fpga.memory_block.MTH_BASE | 126, 0x12345678)
+    fpga.memory.write(fpga.memory_block.DATA_RAM_BLOCK, fpga.memory_block.MTH_BASE | 126, 0x12345678)
 
     fpga.dispatcher.execute(UserOpcode.CONV_U32_U64)
 

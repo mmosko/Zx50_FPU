@@ -150,13 +150,91 @@ trigonometrics are implemented as thin wrappers calling the verified 64-bit core
   - Removed hardcoded partition addresses from `memory_block.py`; imported and used `FpuRamMap` from `fpu_rom_map.py`.
   - Routed all Data RAM reads and writes to `EBR 6` (`self.DATA_RAM_BLOCK = 6`).
   - Updated `_ldc_core` for constants at `CONST_OFFSET`.
-- [ ] **Step 15: Refactor `micro_code.py` to Fetch from Hardware `Memory`**
-  - Refactor `MicroCode.get_address(opcode)` to look up `USER_OPCODE_MAP[opcode]`.
-  - Fetch and decode micro-instructions directly from `fpga.memory.read(block=0, addr=upc)`.
-- [ ] **Step 16: Full Test Suite Verification**
-  - Run complete test suite (2,183 tests) to verify 100% test passage.
+- [x] **Step 15: Clean & Unified Microcode Architecture (`micro_code.py` & `dispatcher.py`)**
+  - Made `micro_code.py` the single source for microcode:
+    - Runs from `ucode.py` (if present) for development/debugging, or unpacks from `fpu_flash.bin` (default).
+    - `get_address(cls, opcode: UserOpcode) -> int`: resolves via `ucode.py` symbols or `fpu_rom_map.USER_OPCODE_MAP`.
+    - `get_instruction(cls, address: int) -> MicroInstruction`: direct indexed instruction fetch from ROM or test override.
+    - `has_instruction(cls, address: int) -> bool`: clean bounds check for pipeline termination without `is None` checks.
+  - Simplified `dispatcher.py`:
+    - Removed `_fetch_instruction` and direct `self._memory.read(block=0)`.
+    - Eliminated all `if microcode is None / is not None` conditionals from the pipelined execution loop (`_run`).
+    - Both cycle T0 priming and T1..TN execution fetch exclusively through `MicroCode.get_instruction(current_upc)`.
+- [x] **Step 16: Full Test Suite Verification**
+  - Ran complete test suite: 2,182 tests passing (100% passage rate).
+#### Phase 5: Opcode Jump Table, Invalid Opcode Trap & Entry Point Optimization
+- [ ] **Step 17: Microcode Invalid Opcode Trap at `.org 0x0000`**
+  - Add `TRAP_INVALID_OPCODE: SET ERR, 1; HALT` at microcode address `0x0000` (words 0..1).
+  - All unassigned or invalid opcodes in the jump table point to address `0x000`, cleanly raising `ERR` and halting without modifying the operand stack.
+- [ ] **Step 18: Entry Point Bitwidth Optimization (`fpu_asm --opt-entry`)**
+  - Implement `--opt-entry` in `fpu_asm` to partition code into entry preambles (`0x000..0x0FF`) and core execution bodies (`0x100+`).
+  - Packs all ~70 unique `USER_*` entry preambles into < 256 words, shrinking jump table targets from 11 bits down to 8 bits (`[7:0]`).
+  - Verilog sequencer UPC latch simplifies to zero-extension: `upc <= {3'b000, entry_addr}`.
+- [ ] **Step 19: Opcode Space Reorganization & Table Compaction (MachXO2-2000 Optimization)**
+  - Reorganize `UserOpcode` encoding into 4 structured zones using top bits `[7:6]`:
+    - **Zone 0 (`0b00xx_yyyy`, `0x00..0x3F`) - Parameterized Microcode (64 opcodes)**:
+      - `xx` = 2-bit operation selector, `yyyy` = 4-bit parameter directly latched to `reg_c` (`opcode[3:0]`).
+      - `0b0000_yyyy` (`0x00..0x0F`): `CP_MEMx_TOS` (16 storage slots) -> `USER_CP_MEM_TOS`
+      - `0b0001_yyyy` (`0x10..0x1F`): `CP_TOS_MEMx` (16 storage slots) -> `USER_CP_TOS_MEM`
+      - `0b0010_yyyy` (`0x20..0x2F`): `PUSH_CONST_32` (16 constant slots) -> `USER_PUSH_CONST_32`
+      - `0b0011_yyyy` (`0x30..0x3F`): `PUSH_CONST_64` (16 constant slots) -> `USER_PUSH_CONST_64`
+      - Mapped to **only 4 microcode entry points** via a 4:1 multiplexer (0 LUT-RAM).
+    - **Zone 1 (`0b01xx_xxxx`, `0x40..0x7F`) - Hardware Control Operations (64 opcodes)**:
+      - 1-cycle FPGA hardware operations: `CLEAR_STACK`, `RESET`, `SET_BATCH`, `SET_IMMEDIATE`, `SET_BLOCKING`, `SET_NONBLOCKING`, `EXEC_BATCH`, `PUSH_STACK`.
+      - Handled directly by host interface / dispatcher control logic; bypasses the micro-sequencer completely (0 jump table entries).
+    - **Zone 2 (`0b10zz_zzzz`, `0x80..0xBF`) - Sequential Computational Microcode (64 opcodes)**:
+      - All ~56 computational opcodes indexed by 6-bit `zz_zzzz` (`opcode[5:0]`):
+        - `0x80..0x97` (0..23): `ADD`, `SUB`, `MUL`, `DIV` (`I32, F32, U32, I64, F64, U64`)
+        - `0x98..0xA5` (24..37): `SQRT`, `POW`, `LOG2`, `EXP2`, `TRIG` (`F32, F64`)
+        - `0xA6..0xB1` (38..49): `CHS`, `ABS`, `FLOOR`, `CEIL` (`F32, F64`)
+        - `0xB2..0xBF` (50..63): `CONV_*`, `DUP4`, `DUP8`, `ZERO_MEM`
+      - Implemented as a single **$64 \times 8$-bit Distributed ROM** (512 bits total).
+    - **Zone 3 (`0b11xx_xxxx`, `0xC0..0xFF`) - Reserved / Invalid Traps (64 opcodes)**:
+      - All unmapped opcodes trap to `0x000` (`TRAP_INVALID_OPCODE`).
+  - **FPGA Resource Impact on Lattice MachXO2-2000 (`LCMXO2-2000HC-4TG100C`, 2,112 LUTs)**:
+    - Unoptimized: $256 \times 11 \text{ bits} = 2,816 \text{ bits}$ $\rightarrow$ 44 LUT4s (11 PFU slices).
+    - Compact 3-Zone: 4-entry mux (~4 LUTs) + $64 \times 8 \text{ bits}$ Distributed ROM (8 LUT4s) $\rightarrow$ **~12 LUT4s total** (3 PFU slices).
+    - **Saves 32 LUT4s** on the MachXO2-2000 (a > 70% reduction in dispatch table logic).
+- [ ] **Step 20: Emit Jump Table Artifacts in `build_flash.py`**
+  - Emit compact jump table defines and macros in `src/fpu_rom_map.vh`.
+  - Emit simulation table hex `sim/opcode_table.hex` (64 lines).
+  - Emit `OPCODE_JUMP_TABLE` in `fpu_emu/rom/fpu_rom_map.py` and update `Dispatcher`.
 
-### 5. Hardware Simulation & Verilog RTL
+#### Phase 6: MicroCode Dependency Injection & Integration Test Standardization
+- [ ] **Step 21: Refactor `MicroCode` to Instantiable Component with Dependency Injection**
+  - Replace static class `MicroCode` with an instantiable architecture:
+    - Base protocol / class `MicroCodeSource` defining `get_address(opcode)`, `get_instruction(addr)`, `has_instruction(addr)`.
+    - Concrete `EbrMicroCode(memory: Memory, rom_map=USER_OPCODE_MAP)`: reads 32-bit words directly from `memory.read(block=0, addr=addr)` and decodes via `MicroInstruction.from_int`.
+    - Concrete `ListMicroCode(instructions: Sequence[MicroInstruction])`: in-memory sequence for isolated unit tests.
+  - Eliminate all global mutable override state and class-level monkeypatching.
+- [ ] **Step 22: Update `Dispatcher` and `FpgaModel` for Injected Memory**
+  - In `Dispatcher.__init__(..., memory: Memory, microcode: Optional[MicroCodeSource] = None)`:
+    - Default `self._microcode = microcode or EbrMicroCode(memory=self._memory)`.
+  - In `Dispatcher._run(microcode=None)`:
+    - If passed a sequence of instructions (unit tests), wrap in a local `ListMicroCode(instructions)` scoped to the call.
+    - Fetch instructions strictly via `active_microcode.get_instruction(current_upc)`.
+- [ ] **Step 23: Standardize All Integration Tests to Use Baked-In ROM**
+  - Refactor all 12 isolated 64-bit test suites that currently assemble ad-hoc microcode or patch ROM:
+    1. `sin_f64_test.py`
+    2. `cos_f64_test.py`
+    3. `tan_f64_test.py`
+    4. `exp2_f64_test.py`
+    5. `log2_f64_test.py`
+    6. `pow_f64_test.py`
+    7. `sqrt_f64_test.py`
+    8. `conv_f64_f32_test.py`
+    9. `conv_f32_f64_test.py`
+    10. `conv_i64_f64_test.py`
+    11. `conv_f64_i64_test.py`
+    12. `conv_u64_f64_test.py`
+  - Remove all `Assembler()` invocations, local `.asm` include snippets, and temporary `Rom()` directories.
+  - Standardize on:
+    - Standard `fpga: FpgaModel` fixture (loads baked-in `fpu_flash.bin` into EBR).
+    - `user_push64(fpga, ...)` / `user_push32(fpga, ...)`.
+    - `fpga.dispatcher.execute(UserOpcode.<OP>)`.
+    - `user_pop64(fpga)` / `user_pop32(fpga)` and assert IEEE-754 correctness.
+
+### 6. Hardware Simulation & Verilog RTL
 
 - [ ] **Host Interface Simulation**:
     - Combinatorial Z80 SRAM memory mapping/decoding and strobe qualification model.

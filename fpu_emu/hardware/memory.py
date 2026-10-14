@@ -6,10 +6,10 @@ from fpu_emu.hardware.ebr import EBR, NullEbr
 
 
 @fpga_resource(
-    approach="SysMEM EBR Blocks (EBR 0-5 1536x32 CODE ROM, EBR 6-7 512x32 DATA RAM)",
+    approach="SysMEM EBR Blocks (EBR 6-7 512x32 DATA RAM; EBR 0-5 allocated to ebr_microcode_rom)",
     luts=0,
     ffs=0,
-    ebr=8,
+    ebr=2,
     delay_ns=3.2,
     cycles=1,
     shared_unit="ebr_sysmem_ram",

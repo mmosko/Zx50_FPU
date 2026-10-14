@@ -122,7 +122,7 @@ def load_ucode_bin(bin_path: str = UCODE_BIN_FILE) -> List[int]:
         data = f.read()
 
     num_words = len(data) // 4
-    words = list(struct.unpack(f">{num_words}I", data[: num_words * 4]))
+    words = list(struct.unpack(f"<{num_words}I", data[: num_words * 4]))
     if len(words) < UCODE_ROM_WORDS:
         # NOP instruction word: 0xE0000000
         words.extend([0xE0000000] * (UCODE_ROM_WORDS - len(words)))
@@ -295,9 +295,9 @@ def main() -> None:
     # 3. Combine into unified 8 KB flash image (2048 words)
     flash_words = generate_flash_words(ucode_words, data_words)
 
-    # Pack binary images
-    ucode_bin = struct.pack(f">{len(ucode_words)}I", *ucode_words)
-    data_bin = struct.pack(f">{len(data_words)}I", *data_words)
+    # Pack binary images (little-endian 32-bit words)
+    ucode_bin = struct.pack(f"<{len(ucode_words)}I", *ucode_words)
+    data_bin = struct.pack(f"<{len(data_words)}I", *data_words)
     flash_bin = ucode_bin + data_bin
 
     # 4. Write output files

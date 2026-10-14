@@ -31,7 +31,7 @@ def load_ebr_rom_buffers(rom_path: Optional[Path] = None) -> List[Optional[List[
             data = f.read()
 
         if len(data) >= 8192:
-            code_rom = list(struct.unpack(">1536I", data[:6144]))
-            data_ram = list(struct.unpack(">512I", data[6144:8192]))
+            code_rom = list(struct.unpack("<1536I", data[:6144]))
+            data_ram = list(struct.unpack("<512I", data[6144:8192]))
 
     return [code_rom, None, None, None, None, None, data_ram, None]
