@@ -79,9 +79,7 @@ class DivCore:
         :return: DivResult with quotient, remainder, and status flags
         """
         if len(a) != 4 or len(b) != 4:
-            raise ValueError(
-                f"Operands must be 4 bytes each, got len(a)={len(a)}, len(b)={len(b)}"
-            )
+            raise ValueError(f"Operands must be 4 bytes each, got len(a)={len(a)}, len(b)={len(b)}")
 
         d_raw = int.from_bytes(b, byteorder="little", signed=False)
 

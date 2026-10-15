@@ -26,14 +26,69 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "fpu_emu/tests/**" = ["SLF001", "C901"]
-"fpu_emu/memory/registers.py" = ["C901"] # Protected by agents.md rule 16
+"fpu_emu/hardware/registers.py" = ["C901"] # Protected by agents.md rule 16
 
 [tool.ruff.lint.mccabe]
 max-complexity = 12
+
+[tool.ruff.format]
+exclude = [
+    "fpu_emu/hardware/registers.py",
+    "fpu_emu/rom/fpu_rom_map.py",
+]
 
 [tool.pyright]
 venvPath = "."
 venv = ".venv"
 include = ["fpu_emu"]
 extraPaths = [".", "tools"]
+
+[tool.vulture]
+exclude = [
+    ".venv/",
+    "fpu_emu_v1/",
+]
+ignore_decorators = [
+    "@fpga_resource",
+    "@pytest.fixture",
+]
+ignore_names = [
+    "elapsed_seconds",
+    "elapsed_us",
+    "is_w64",
+    "block_id",
+    "sub_op",
+    "CONV_U64_U32",
+    "PUSH_STACK",
+    "dir_*",
+    "inst_*",
+    "HEX_INT",
+    "BIN_INT",
+    "SIGNED_INT",
+    "SYMBOL",
+    "FLAG",
+    "TABLE_NAME",
+    "WIDTH_SUFFIX",
+    "COMMENT",
+    "comment",
+    "label",
+    "instruction",
+    "directive",
+    "statement",
+    "start",
+    "reg_or_imm",
+    "imm_operand",
+    "reg_indirect",
+    "mem_addr",
+    "table_ref",
+    "line_eof",
+    "raw_line",
+    "FpuFlashOffsets",
+    "FpuTables",
+    "UCODE_ROM",
+    "DATA_RAM",
+    "*_F32",
+    "*_F64",
+    "*_F64_HI",
+]
 

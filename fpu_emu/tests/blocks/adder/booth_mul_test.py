@@ -1,10 +1,10 @@
 """Unit tests for Radix-4 Modified Booth Multiplier primitive (BoothMulCore)."""
 
 import pytest
-from fpu_emu.blocks.adder.booth_mul import BoothMulCore, BoothMulResult
+from fpu_emu.blocks.adder.booth_mul import BoothMulCore
 
 
-def to_bytes(val: int, signed: bool = False) -> bytes:
+def to_bytes(val: int) -> bytes:
     """Helper to pack 32-bit int into 4-byte little-endian bytes."""
     val &= 0xFFFFFFFF
     return val.to_bytes(4, byteorder="little", signed=False)
@@ -130,7 +130,7 @@ class TestBoothMulCore:
 
     def test_resource_annotation(self):
         assert hasattr(BoothMulCore, "__fpga_resource__")
-        res = getattr(BoothMulCore, "__fpga_resource__")
+        res = BoothMulCore.__fpga_resource__  # pyright: ignore[reportAttributeAccessIssue]
         assert res.shared_unit == "alu_booth_mul"
         assert res.luts == 77
         assert res.slices_ccu2c == 17

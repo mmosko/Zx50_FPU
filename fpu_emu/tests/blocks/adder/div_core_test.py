@@ -1,5 +1,7 @@
 """Unit tests for DivCore (Radix-2 Non-Restoring Divider)."""
 
+from typing import Union
+
 import pytest
 from fpu_emu.blocks.adder.div_core import DivCore
 
@@ -7,12 +9,9 @@ MASK_32 = 0xFFFFFFFF
 SIGN_32 = 0x80000000
 
 
-def to_bytes32(val: int, signed: bool = False) -> bytes:
+def to_bytes32(val: int) -> bytes:
     """Helper to convert integer to 4-byte little-endian bytes."""
     return (val & MASK_32).to_bytes(4, byteorder="little", signed=False)
-
-
-from typing import Union
 
 
 def from_bytes32_unsigned(b: Union[bytes, bytearray]) -> int:
@@ -63,9 +62,7 @@ class TestDivCore:
             (0x7FFFFFFF, 2, 0x3FFFFFFF, 1, "Max positive 32-bit int divided by 2"),
         ],
     )
-    def test_signed_positive_division(
-        self, a: int, b: int, expected_q: int, expected_r: int, desc: str
-    ):
+    def test_signed_positive_division(self, a: int, b: int, expected_q: int, expected_r: int, desc: str):
         res = DivCore.div_core(to_bytes32(a), to_bytes32(b), signed=True)
         assert not res.err, desc
         assert not res.vf, desc
@@ -89,9 +86,7 @@ class TestDivCore:
             (-5, 10, 0, -5, "(-5) / 10 = 0 rem -5"),
         ],
     )
-    def test_signed_negative_division(
-        self, a: int, b: int, expected_q: int, expected_r: int, desc: str
-    ):
+    def test_signed_negative_division(self, a: int, b: int, expected_q: int, expected_r: int, desc: str):
         res = DivCore.div_core(to_bytes32(a), to_bytes32(b), signed=True)
         assert not res.err, desc
         assert not res.vf, desc
@@ -123,9 +118,7 @@ class TestDivCore:
             (0xFFFFFFFE, 1, 0xFFFFFFFE, 0, "Large / 1"),
         ],
     )
-    def test_unsigned_division(
-        self, a: int, b: int, expected_q: int, expected_r: int, desc: str
-    ):
+    def test_unsigned_division(self, a: int, b: int, expected_q: int, expected_r: int, desc: str):
         res = DivCore.div_core(to_bytes32(a), to_bytes32(b), signed=False)
         assert not res.err, desc
         assert not res.vf, desc

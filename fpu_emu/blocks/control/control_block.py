@@ -1,4 +1,4 @@
-from typing import Callable, Optional
+from typing import Callable
 
 from fpu_emu.blocks.control.count_adder import CountAdder
 from fpu_emu.blocks.functional_block import FunctionalBlock, BlockInputs
@@ -24,13 +24,9 @@ from fpu_emu.micro_opcodes import MicroOp
     shared_unit="control_block",
 )
 class ControlBlock(FunctionalBlock):
-    def __init__(self,
-                 name: str,
-                 inputs: BlockInputs,
-                 memory: Memory,
-                 writeback: Callable,
-                 clock: Clock,
-                 c_reg: Register):
+    def __init__(
+        self, name: str, inputs: BlockInputs, memory: Memory, writeback: Callable, clock: Clock, c_reg: Register
+    ):
         super().__init__(name, inputs, memory, writeback, clock)
         self._none_bus = Bus(name="none_bus", size_in_bits=4)
         self._upc_bus = Bus(name="upc_bus", size_in_bits=4)
@@ -45,10 +41,13 @@ class ControlBlock(FunctionalBlock):
         self._c_reg = c_reg
         self._count_adder = CountAdder(c_reg)
 
-        self._dst_mux = Mux(name="ctrl_dst_mux", inputs=[
-            self._none_bus,
-            self._upc_bus,
-        ])
+        self._dst_mux = Mux(
+            name="ctrl_dst_mux",
+            inputs=[
+                self._none_bus,
+                self._upc_bus,
+            ],
+        )
 
     def execute(self):
         self._outputs.status_wr_sel.set(0)

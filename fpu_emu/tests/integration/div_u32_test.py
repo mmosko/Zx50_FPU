@@ -39,7 +39,7 @@ def test_user_opcode_div_u32(
     assert fpga.reg_file.status.is_bit_set(StatusFlag.SIGN) == exp_sf
 
     res = user_pop32(fpga)
-    assert res == expected_quot
+    assert res == expected_quot, desc
     assert fpga.reg_file.sp.read_int() == 0
 
 

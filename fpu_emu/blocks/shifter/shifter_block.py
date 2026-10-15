@@ -86,6 +86,7 @@ class ShifterBlock(FunctionalBlock):
         src = instr.src2 if instr.src2 is not Reg.NONE else Reg.AL
         dst = instr.dst if instr.dst is not Reg.NONE else Reg.C
         assert isinstance(src, Reg)
+        assert isinstance(dst, Reg)
         assert src.is_lo_half(), f"64-bit LZC source must be low-half register, got {src}"
 
         # Cycle 1: Read high half (src | 1)
@@ -193,19 +194,15 @@ class ShifterBlock(FunctionalBlock):
 
         shift_res = shift_fn(val, count, self._sub_adder)
 
-        wr_mask = (
-            (1 << StatusFlag.ZERO.value)
-            | (1 << StatusFlag.SIGN.value)
-            | (1 << StatusFlag.CARRY.value)
-        )
+        wr_mask = (1 << StatusFlag.ZERO.value) | (1 << StatusFlag.SIGN.value) | (1 << StatusFlag.CARRY.value)
         status_val = (
             (int(shift_res.zf) << StatusFlag.ZERO.value)
             | (int(shift_res.sf) << StatusFlag.SIGN.value)
             | (int(shift_res.cf) << StatusFlag.CARRY.value)
         )
         if instr.op == MicroOp.ASL:
-            wr_mask |= (1 << StatusFlag.OVERFLOW.value)
-            status_val |= (int(shift_res.vf) << StatusFlag.OVERFLOW.value)
+            wr_mask |= 1 << StatusFlag.OVERFLOW.value
+            status_val |= int(shift_res.vf) << StatusFlag.OVERFLOW.value
 
         self._outputs.block_res.set(shift_res.res)
         self._outputs.block_res_sel.set(dst.value)
@@ -216,6 +213,7 @@ class ShifterBlock(FunctionalBlock):
 
     def _shift_64(self, instr: MicroInstruction, shift_fn: Callable[[int, int, ShifterAdder], ShifterResult]) -> None:
         assert instr.dst is not Reg.NONE, "Shift destination register must be specified"
+        assert isinstance(instr.dst, Reg)
         assert instr.dst.is_lo_half(), f"64-bit shift destination must be low-half register, got {instr.dst}"
         assert instr.src1 is Reg.NONE
         src = instr.src2 if instr.src2 is not Reg.NONE else Reg.C
@@ -247,19 +245,15 @@ class ShifterBlock(FunctionalBlock):
         self._writeback()
 
         # Cycle 3: Write high half and commit status flags
-        wr_mask = (
-            (1 << StatusFlag.ZERO.value)
-            | (1 << StatusFlag.SIGN.value)
-            | (1 << StatusFlag.CARRY.value)
-        )
+        wr_mask = (1 << StatusFlag.ZERO.value) | (1 << StatusFlag.SIGN.value) | (1 << StatusFlag.CARRY.value)
         status_val = (
             (int(shift_res.zf) << StatusFlag.ZERO.value)
             | (int(shift_res.sf) << StatusFlag.SIGN.value)
             | (int(shift_res.cf) << StatusFlag.CARRY.value)
         )
         if instr.op == MicroOp.ASL:
-            wr_mask |= (1 << StatusFlag.OVERFLOW.value)
-            status_val |= (int(shift_res.vf) << StatusFlag.OVERFLOW.value)
+            wr_mask |= 1 << StatusFlag.OVERFLOW.value
+            status_val |= int(shift_res.vf) << StatusFlag.OVERFLOW.value
 
         self._outputs.block_res.set((shift_res.res >> 32) & 0xFFFFFFFF)
         self._outputs.block_res_sel.set(dst.value | 1)
@@ -267,4 +261,3 @@ class ShifterBlock(FunctionalBlock):
         self._outputs.status_wr_sel.set(wr_mask)
         self._outputs.exec_done.set(1)
         self._writeback()
-

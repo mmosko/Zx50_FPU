@@ -4,7 +4,15 @@ from fpu_emu.hardware.clock import Clock
 
 
 class EBR:
-    def __init__(self, name: str, size: int, width: int, read_only_buffer: Optional[List[int]], clock: Clock, readonly: Optional[bool] = None):
+    def __init__(
+        self,
+        name: str,
+        size: int,
+        width: int,
+        read_only_buffer: Optional[List[int]],
+        clock: Clock,
+        readonly: Optional[bool] = None,
+    ):
         self._name = name
         assert self._is_power_of_two(size) or (size > 0 and size % 512 == 0)
         self._size = size
@@ -30,14 +38,18 @@ class EBR:
 
     def read(self, addr: int) -> int:
         assert 0 <= addr < self._size, f"Address {addr} out of bounds"
-        assert self._last_read_tick != self._clock.cycles, f"EBR {self._name}: Multiple reads in cycle {self._clock.cycles}"
+        assert self._last_read_tick != self._clock.cycles, (
+            f"EBR {self._name}: Multiple reads in cycle {self._clock.cycles}"
+        )
         self._last_read_tick = self._clock.cycles
         return self._data[addr]
 
     def write(self, addr: int, data: int) -> None:
         assert 0 <= addr < self._size, f"Address {addr} out of bounds"
         assert 0 <= data <= self._mask, f"Data 0x{data:X} exceeds width of {self._width} bits"
-        assert self._last_write_tick != self._clock.cycles, f"EBR {self._name}: Multiple writes in cycle {self._clock.cycles}"
+        assert self._last_write_tick != self._clock.cycles, (
+            f"EBR {self._name}: Multiple writes in cycle {self._clock.cycles}"
+        )
         assert not self._readonly, f"EBR {self._name}: Cannot write to read-only buffer"
         if self._name == "6":
             # Hardware write-protection: only lower 256 words (0x000..0x0FF) are writable
@@ -52,7 +64,7 @@ class NullEbr(EBR):
         super().__init__("NullEbr", 1, 1, None, clock)
 
     def read(self, addr: int) -> int:
-        raise RuntimeError("NullEbr does not support read")
+        raise RuntimeError(f"NullEbr does not support read (addr={addr})")
 
     def write(self, addr: int, data: int) -> None:
-        raise RuntimeError("NullEbr does not support write")
+        raise RuntimeError(f"NullEbr does not support write (addr={addr}, data={data})")

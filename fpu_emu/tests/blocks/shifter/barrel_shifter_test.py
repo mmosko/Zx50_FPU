@@ -345,4 +345,3 @@ def test_asr_64(clock: Clock, sub_adder: ShifterAdder):
     assert res.cf
     assert not res.zf
     assert res.sf
-

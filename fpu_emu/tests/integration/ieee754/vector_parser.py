@@ -9,17 +9,18 @@ from typing import Iterator, List, Optional, Union
 @dataclass
 class TestVector:
     """Represents a single parsed IEEE-754 test vector."""
-    op_str: str              # e.g., "b32+", "b64*", "b32V"
-    precision: int           # 32 or 64
-    operation_name: str      # e.g., "+", "-", "*", "/", "V", "~", "A", "b64cff"
-    rounding_mode: str       # e.g., "=0", "0", ">", "<", "=^"
+
+    op_str: str  # e.g., "b32+", "b64*", "b32V"
+    precision: int  # 32 or 64
+    operation_name: str  # e.g., "+", "-", "*", "/", "V", "~", "A", "b64cff"
+    rounding_mode: str  # e.g., "=0", "0", ">", "<", "=^"
     trapped_exceptions: str  # e.g., "i", "x", "oz", or ""
     operands_raw: List[str]  # Raw string operands
-    operands: List[int]      # Decoded IEEE-754 bit representations (uint32 or uint64)
-    expected_raw: str        # e.g., "+1.6C40BEP-91", "#", "Q", "+Zero"
+    operands: List[int]  # Decoded IEEE-754 bit representations (uint32 or uint64)
+    expected_raw: str  # e.g., "+1.6C40BEP-91", "#", "Q", "+Zero"
     expected: Optional[int]  # Decoded expected bit representation, or None if '#'
-    expected_flags: str      # Result exception flags: "x", "u", "o", "z", "i", ""
-    is_trapped: bool         # True if output is '#' (trapped invalid)
+    expected_flags: str  # Result exception flags: "x", "u", "o", "z", "i", ""
+    is_trapped: bool  # True if output is '#' (trapped invalid)
     raw_line: str
     source_file: str = ""
     line_num: int = 0
@@ -122,7 +123,7 @@ def parse_fptest_line(line: str, source_file: str = "", line_num: int = 0) -> Op
 
     expected_raw = rhs[0]
     expected_flags = rhs[1] if len(rhs) > 1 else ""
-    is_trapped = (expected_raw == "#")
+    is_trapped = expected_raw == "#"
 
     expected: Optional[int] = None
     if not is_trapped:

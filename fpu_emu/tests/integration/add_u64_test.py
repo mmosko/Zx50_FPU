@@ -17,10 +17,34 @@ from fpu_emu.user_opcodes import UserOpcode
         (0x00000000_00000001, 0x00000001_00000000, 0x00000001_00000001, False, False, False, "low and high non-zero"),
         (0x00000001_00000000, 0x00000002_00000000, 0x00000003_00000000, False, False, False, "high words only"),
         (0xFFFFFFFFFFFFFFFF, 1, 0, True, True, False, "max uint64 + 1 (wrap to 0, carry set)"),
-        (0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFE, True, False, True, "max uint64 + max uint64 (carry set)"),
-        (0x8000000000000000, 0x8000000000000000, 0, True, True, False, "0x8000000000000000 + 0x8000000000000000 (carry set)"),
+        (
+            0xFFFFFFFFFFFFFFFF,
+            0xFFFFFFFFFFFFFFFF,
+            0xFFFFFFFFFFFFFFFE,
+            True,
+            False,
+            True,
+            "max uint64 + max uint64 (carry set)",
+        ),
+        (
+            0x8000000000000000,
+            0x8000000000000000,
+            0,
+            True,
+            True,
+            False,
+            "0x8000000000000000 + 0x8000000000000000 (carry set)",
+        ),
         (0x7FFFFFFFFFFFFFFF, 1, 0x8000000000000000, False, False, True, "0x7FFFFFFFFFFFFFFF + 1 (no carry, MSB set)"),
-        (0xF000000000000000, 0x2000000000000000, 0x1000000000000000, True, False, False, "carry out without MSB in result"),
+        (
+            0xF000000000000000,
+            0x2000000000000000,
+            0x1000000000000000,
+            True,
+            False,
+            False,
+            "carry out without MSB in result",
+        ),
     ],
 )
 def test_user_opcode_add_u64(
@@ -43,7 +67,7 @@ def test_user_opcode_add_u64(
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
 
     res = user_pop64(fpga)
-    assert res == expected_res
+    assert res == expected_res, desc
     assert fpga.reg_file.sp.read_int() == 0
 
 

@@ -23,9 +23,7 @@ from fpu_emu.user_opcodes import UserOpcode
         (0xFFFFFFFE, 0xFFFFFFFFFFFFFFFE, False, True),  # -2
     ],
 )
-def test_user_opcode_conv_i32_i64(
-    fpga: FpgaModel, val: int, expected_res: int, exp_zf: bool, exp_sf: bool
-) -> None:
+def test_user_opcode_conv_i32_i64(fpga: FpgaModel, val: int, expected_res: int, exp_zf: bool, exp_sf: bool) -> None:
     """Tests CONV_I32_I64 widening signed 32-bit integer to 64-bit integer."""
     user_push32(fpga, val)
     assert fpga.reg_file.sp.read_int() == 1

@@ -27,12 +27,12 @@ def test_bus_pad_read_int_and_bytes():
     assert pad.read_int() == 0x2AA
     raw = pad.read()
     assert len(raw) == 4
-    assert raw == b"\xAA\x02\x00\x00"
+    assert raw == b"\xaa\x02\x00\x00"
 
     clock.tick(1)
     reg.write(0x3FF)  # 1023 (max 10-bit)
     assert pad.read_int() == 0x3FF
-    assert pad.read() == b"\xFF\x03\x00\x00"
+    assert pad.read() == b"\xff\x03\x00\x00"
 
 
 def test_bus_pad_c_register_zero_extension():
@@ -42,7 +42,7 @@ def test_bus_pad_c_register_zero_extension():
 
     c_reg.write(0x3F)  # 63 (max 6-bit)
     assert pad.read_int() == 63
-    assert pad.read() == b"\x3F\x00\x00\x00"
+    assert pad.read() == b"\x3f\x00\x00\x00"
 
 
 def test_bus_pad_with_bus():
@@ -54,7 +54,7 @@ def test_bus_pad_with_bus():
 
     bus.set(0x0E)
     assert pad.read_int() == 14
-    assert pad.read() == b"\x0E\x00"
+    assert pad.read() == b"\x0e\x00"
 
 
 def test_bus_pad_invalid_size():
@@ -79,5 +79,4 @@ def test_bus_pad_signed_extension():
     clock.tick(1)
     reg.write((-1000) & 0x0FFF)
     assert pad.read_int() == 0xFFFFFC18
-    assert pad.read() == b"\x18\xFC\xFF\xFF"
-
+    assert pad.read() == b"\x18\xfc\xff\xff"

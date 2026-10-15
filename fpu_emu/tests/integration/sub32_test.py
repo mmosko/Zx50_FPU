@@ -29,7 +29,15 @@ from fpu_emu.user_opcodes import UserOpcode
     ],
 )
 def test_user_opcode_sub_i32(
-    fpga: FpgaModel, a: int, b: int, expected_res: int, exp_cf: bool, exp_zf: bool, exp_sf: bool, exp_vf: bool, desc: str
+    fpga: FpgaModel,
+    a: int,
+    b: int,
+    expected_res: int,
+    exp_cf: bool,
+    exp_zf: bool,
+    exp_sf: bool,
+    exp_vf: bool,
+    desc: str,
 ) -> None:
     """Tests executing UserOpcode.SUB_I32 via dispatcher with stack operands (a - b)."""
     # Push minuend a then subtrahend b
@@ -54,7 +62,7 @@ def test_user_opcode_sub_i32(
 
     # Pop result from stack
     res = user_pop32(fpga)
-    assert res == expected_res
+    assert res == expected_res, desc
     assert fpga.reg_file.sp.read_int() == 0
 
 

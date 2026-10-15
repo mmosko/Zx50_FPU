@@ -7,7 +7,6 @@ from fpu_emu.tests.test_helpers import user_pop64, user_push32, user_push64
 from fpu_emu.user_opcodes import UserOpcode
 
 MASK_64 = 0xFFFFFFFFFFFFFFFF
-SIGN_64 = 0x8000000000000000
 MIN_INT64 = -0x8000000000000000
 
 
@@ -142,7 +141,7 @@ def test_user_opcode_div_i64(
     # Pop quotient from stack
     res = user_pop64(fpga)
     expected_u64 = expected_quot & MASK_64
-    assert res == expected_u64
+    assert res == expected_u64, desc
     assert fpga.reg_file.sp.read_int() == 0
 
 

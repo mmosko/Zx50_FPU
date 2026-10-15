@@ -51,7 +51,7 @@ def test_user_opcode_div_u64(
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
 
     res = user_pop64(fpga)
-    assert res == expected_quot & MASK_64
+    assert res == expected_quot & MASK_64, desc
     assert fpga.reg_file.sp.read_int() == 0
 
 

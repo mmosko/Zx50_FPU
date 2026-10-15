@@ -1,19 +1,9 @@
 """Dedicated 10-bit adder for UPC (Microcode Program Counter)."""
 
-from dataclasses import dataclass
-
 from fpu_emu.fpga_resource import fpga_resource
 from fpu_emu.hardware.bus import Bus
 from fpu_emu.hardware.readable import Readable
 from fpu_emu.hardware.register import Register
-
-
-@dataclass(frozen=True)
-class UpcAdderResult:
-    """Result of a 10-bit UPC addition operation."""
-
-    val: int
-    carry: bool
 
 
 @fpga_resource(
@@ -31,13 +21,14 @@ class UpcAdder(Readable):
     A dedicated 10-bit incrementer calculates UPC + 1.
     If the counter overflows (1023 + 1 = 1024), carry is asserted, indicating an error.
     """
+
     WIDTH: int = 11
     MAX_VAL: int = (1 << WIDTH) - 1  # 2047 (0x7FF)
     MASK: int = MAX_VAL
 
     def __init__(self, upc: Register) -> None:
         self._upc = upc
-        self._upc_adder_bus = Bus(name="upc_adder", size_in_bits=self.WIDTH+1)
+        self._upc_adder_bus = Bus(name="upc_adder", size_in_bits=self.WIDTH + 1)
 
     def inc(self):
         """Adds 1 to a 10-bit UPC value.
@@ -71,15 +62,3 @@ class UpcAdder(Readable):
     def carry(self) -> bool:
         """The carry/overflow bit (bit 11, mask 0x800)."""
         return (self.read_int() & (1 << self.WIDTH)) != 0
-
-    # def add(self, upc: int, step: int = 1) -> UpcAdderResult:
-    #     """Adds an offset to a 10-bit UPC value.
-    #
-    #     :param upc: 10-bit current UPC (0..1023)
-    #     :param step: Step to add (default 1)
-    #     :return: UpcAdderResult containing the incremented 10-bit value and carry flag
-    #     """
-    #     assert 0 <= upc <= cls.MAX_VAL, f"UPC 0x{upc:X} out of 10-bit range (0..{cls.MAX_VAL})"
-    #     raw = upc + step
-    #     carry = raw > cls.MAX_VAL or raw < 0
-    #     return UpcAdderResult(val=raw & cls.MASK, carry=carry)

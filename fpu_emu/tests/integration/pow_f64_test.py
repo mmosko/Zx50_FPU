@@ -1,63 +1,24 @@
 """Integration tests for 64-bit IEEE-754 double precision power (POW_F64)."""
 
 import math
-import tempfile
-from pathlib import Path
-from typing import Any
 
 import pytest
 
-from fpu_asm.assembler import Assembler
+from fpu_emu.dispatcher import UserOpcode
 from fpu_emu.fpga_model import FpgaModel
 from fpu_emu.hardware.registers import StatusFlag
-from fpu_emu.hardware.rom import Rom
 from fpu_emu.tests.test_helpers import bits_to_f64, f64_to_bits, user_pop64, user_push64
-
-POW_F64_SOURCE = """
-.include "fpu_emu/asm/pop_two_64.asm"
-.include "fpu_emu/asm/align_f64.asm"
-.include "fpu_emu/asm/normalize_f64.asm"
-.include "fpu_emu/asm/add_f64.asm"
-.include "fpu_emu/asm/sub_f64.asm"
-.include "fpu_emu/asm/mul_f64.asm"
-.include "fpu_emu/asm/div_f64.asm"
-.include "fpu_emu/asm/log2_f64.asm"
-.include "fpu_emu/asm/exp2_f64.asm"
-.include "fpu_emu/asm/pow_f64.asm"
-"""
-
-
-@pytest.fixture(scope="module")
-def pow_f64_program() -> tuple[list[Any], int, Any]:
-    """Assembles the POW_F64 microcode routine once for all tests in this module."""
-    asm = Assembler()
-    assembled = asm.assemble(POW_F64_SOURCE)
-    instructions = [instr for _, instr in assembled]
-    entry = asm.symbols["USER_POW_F64"]
-    tmp_dir = tempfile.TemporaryDirectory()
-    return instructions, entry, tmp_dir
-
-
-@pytest.fixture
-def fpga(pow_f64_program: tuple[list[Any], int, Any]) -> FpgaModel:
-    """Creates a fresh FPGA model with an empty ROM."""
-    _, _, tmp_dir = pow_f64_program
-    rom = Rom(size=1024, rom_path=Path(tmp_dir.name) / "dummy.rom")
-    return FpgaModel(rom=rom)
 
 
 def run_pow_f64(
     fpga: FpgaModel,
-    instructions: list[Any],
-    entry: int,
     base: float,
     exp: float,
 ) -> tuple[float | None, int]:
     """Pushes base and exp (Forth: base exp -- base^exp) and executes USER_POW_F64."""
     user_push64(fpga, f64_to_bits(base))
     user_push64(fpga, f64_to_bits(exp))
-    fpga.reg_file.upc.write(entry)
-    fpga.dispatcher._run(instructions)
+    fpga.dispatcher.execute(UserOpcode.POW_F64)
     st = fpga.reg_file.status.read_int()
     if fpga.reg_file.sp.read_int() >= 2:
         res = bits_to_f64(user_pop64(fpga))
@@ -115,15 +76,13 @@ def run_pow_f64(
 )
 def test_pow_f64_normals(
     fpga: FpgaModel,
-    pow_f64_program: tuple[list[Any], int, Any],
     base: float,
     exp: float,
     expected: float,
     desc: str,
 ) -> None:
     """Verifies that POW_F64 computes base^exp with high precision."""
-    instructions, entry, _ = pow_f64_program
-    result, st = run_pow_f64(fpga, instructions, entry, base, exp)
+    result, st = run_pow_f64(fpga, base, exp)
     assert result is not None
     assert not bool(st & (1 << StatusFlag.ERR.value)), f"Unexpected ERR flag for {desc}"
 
@@ -132,66 +91,48 @@ def test_pow_f64_normals(
 
     diff = abs(res_bits - expected_bits)
     assert diff <= 512, (
-        f"{desc}: got {result} (0x{res_bits:016x}), "
-        f"expected {expected} (0x{expected_bits:016x}), "
-        f"diff = {diff} ULP"
+        f"{desc}: got {result} (0x{res_bits:016x}), expected {expected} (0x{expected_bits:016x}), diff = {diff} ULP"
     )
 
 
-def test_pow_f64_negative_base_domain_error(
-    fpga: FpgaModel, pow_f64_program: tuple[list[Any], int, Any]
-) -> None:
+def test_pow_f64_negative_base_domain_error(fpga: FpgaModel) -> None:
     """Tests that negative base raises domain error (ERR=1)."""
-    instructions, entry, _ = pow_f64_program
-    result, st = run_pow_f64(fpga, instructions, entry, -2.0, 3.0)
+    _, st = run_pow_f64(fpga, -2.0, 3.0)
     assert bool(st & (1 << StatusFlag.ERR.value))
 
 
-def test_pow_f64_zero_negative_exp(
-    fpga: FpgaModel, pow_f64_program: tuple[list[Any], int, Any]
-) -> None:
+def test_pow_f64_zero_negative_exp(fpga: FpgaModel) -> None:
     """Tests that 0^negative returns +inf and sets ERR=1, OVERFLOW=1."""
-    instructions, entry, _ = pow_f64_program
-    result, st = run_pow_f64(fpga, instructions, entry, 0.0, -2.0)
+    result, st = run_pow_f64(fpga, 0.0, -2.0)
     assert result is not None
     assert math.isinf(result) and result > 0
     assert bool(st & (1 << StatusFlag.ERR.value))
     assert bool(st & (1 << StatusFlag.OVERFLOW.value))
 
 
-def test_pow_f64_overflow(
-    fpga: FpgaModel, pow_f64_program: tuple[list[Any], int, Any]
-) -> None:
+def test_pow_f64_overflow(fpga: FpgaModel) -> None:
     """Tests that powers exceeding double limits overflow to +inf."""
-    instructions, entry, _ = pow_f64_program
-    result, st = run_pow_f64(fpga, instructions, entry, 2.0, 1024.0)
+    result, st = run_pow_f64(fpga, 2.0, 1024.0)
     assert result is not None
     assert math.isinf(result) and result > 0
     assert bool(st & (1 << StatusFlag.OVERFLOW.value))
 
 
-def test_pow_f64_underflow(
-    fpga: FpgaModel, pow_f64_program: tuple[list[Any], int, Any]
-) -> None:
+def test_pow_f64_underflow(fpga: FpgaModel) -> None:
     """Tests that tiny powers underflow to +0.0."""
-    instructions, entry, _ = pow_f64_program
-    result, st = run_pow_f64(fpga, instructions, entry, 2.0, -1075.0)
+    result, st = run_pow_f64(fpga, 2.0, -1075.0)
     assert result is not None
     assert result == 0.0
     assert bool(st & (1 << StatusFlag.UNDERFLOW.value))
 
 
 @pytest.mark.parametrize("depth", [0, 1, 2, 3])
-def test_pow_f64_stack_underflow(
-    fpga: FpgaModel, pow_f64_program: tuple[list[Any], int, Any], depth: int
-) -> None:
+def test_pow_f64_stack_underflow(fpga: FpgaModel, depth: int) -> None:
     """Tests that executing POW_F64 with fewer than 4 stack words halts with ERR=1."""
-    instructions, entry, _ = pow_f64_program
     for _ in range(depth):
         user_push64(fpga, 0)
     fpga.reg_file.sp.write(depth)
 
-    fpga.reg_file.upc.write(entry)
-    fpga.dispatcher._run(instructions)
+    fpga.dispatcher.execute(UserOpcode.POW_F64)
 
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR)

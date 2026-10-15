@@ -1,4 +1,5 @@
 """Top-level FPGA system model."""
+
 from fpu_emu.blocks.adder.adder_block import AdderBlock
 from fpu_emu.blocks.control.control_block import ControlBlock
 from fpu_emu.blocks.empty_block import EmptyBlock
@@ -16,6 +17,7 @@ from fpu_emu.hardware.reg import Reg
 from fpu_emu.hardware.registers import Registers, HardwareBusError, StatusFlag
 from fpu_emu.hardware.rom import Rom
 from fpu_emu.hardware.upc_adder import UpcAdder
+from fpu_emu.rom.ebr_loader import load_ebr_rom_buffers
 from fpu_emu.writeback_mux import WritebackMux
 
 
@@ -31,26 +33,23 @@ class DatapathMuxes:
 
     def __init__(self, reg_file: Registers):
         inputs = [
-            reg_file.al,                              # 0b0000 (0): AL
-            reg_file.ah,                              # 0b0001 (1): AH
-            reg_file.bl,                              # 0b0010 (2): BL
-            reg_file.bh,                              # 0b0011 (3): BH
-            reg_file.cl,                              # 0b0100 (4): CL
-            reg_file.ch,                              # 0b0101 (5): CH
-            reg_file.dl,                              # 0b0110 (6): DL
-            reg_file.dh,                              # 0b0111 (7): DH
-            reg_file.fl,                              # 0b1000 (8): FL
-            reg_file.fh,                              # 0b1001 (9): FH
-            BusPad(reg_file.ea, 32, signed=True),     # 0b1010 (10): EA
-            BusPad(reg_file.eb, 32, signed=True),     # 0b1011 (11): EB
-            BusPad(reg_file.c, 32),                   # 0b1100 (12): C
-            BusPad(reg_file.imm, 32),                 # 0b1101 (13): IMM
+            reg_file.al,  # 0b0000 (0): AL
+            reg_file.ah,  # 0b0001 (1): AH
+            reg_file.bl,  # 0b0010 (2): BL
+            reg_file.bh,  # 0b0011 (3): BH
+            reg_file.cl,  # 0b0100 (4): CL
+            reg_file.ch,  # 0b0101 (5): CH
+            reg_file.dl,  # 0b0110 (6): DL
+            reg_file.dh,  # 0b0111 (7): DH
+            reg_file.fl,  # 0b1000 (8): FL
+            reg_file.fh,  # 0b1001 (9): FH
+            BusPad(reg_file.ea, 32, signed=True),  # 0b1010 (10): EA
+            BusPad(reg_file.eb, 32, signed=True),  # 0b1011 (11): EB
+            BusPad(reg_file.c, 32),  # 0b1100 (12): C
+            BusPad(reg_file.imm, 32),  # 0b1101 (13): IMM
         ]
         self.ha_mux = Mux(name="ha", inputs=list(inputs))
         self.hb_mux = Mux(name="hb", inputs=list(inputs))
-
-
-from fpu_emu.rom.ebr_loader import load_ebr_rom_buffers
 
 
 @fpga_resource(
@@ -76,47 +75,35 @@ class FpgaModel:
     def __init__(self, rom: Rom):
         self.clock = Clock()
         self.rom = rom
-        rom_path = rom._rom_path if hasattr(rom, "_rom_path") else None
-        self.memory = Memory(
-            rom_blocks=load_ebr_rom_buffers(rom_path),
-            clock = self.clock
-        )
+        self.memory = Memory(rom_blocks=load_ebr_rom_buffers(rom.rom_path), clock=self.clock)
         self.reg_file = Registers(clock=self.clock)
         self.datapath_muxes = DatapathMuxes(self.reg_file)
         self.ha_mux = self.datapath_muxes.ha_mux
         self.hb_mux = self.datapath_muxes.hb_mux
 
         self.inputs = BlockInputs(
-            ha_mux = self.ha_mux,
-            hb_mux = self.hb_mux,
-            status = self.reg_file.status,
-            instr = self.reg_file.instr,
-            exec_ready = self.reg_file.exec_ready
+            ha_mux=self.ha_mux,
+            hb_mux=self.hb_mux,
+            status=self.reg_file.status,
+            instr=self.reg_file.instr,
+            exec_ready=self.reg_file.exec_ready,
         )
 
         self.adder = AdderBlock(
-            name="adder",
-            inputs=self.inputs,
-            memory=self.memory,
-            writeback=self._writeback,
-            clock=self.clock
+            name="adder", inputs=self.inputs, memory=self.memory, writeback=self._writeback, clock=self.clock
         )
 
         self.empty_block = EmptyBlock(
-            name="empty",
-            inputs=self.inputs,
-            memory=self.memory,
-            writeback=self._writeback,
-            clock=self.clock
+            name="empty", inputs=self.inputs, memory=self.memory, writeback=self._writeback, clock=self.clock
         )
 
         self.control_inputs = BlockInputs(
             # HA hardwired to UPC register output
-            ha_mux = self.reg_file.upc,
-            hb_mux = self.hb_mux,
-            status = self.reg_file.status,
-            instr = self.reg_file.instr,
-            exec_ready = self.reg_file.exec_ready
+            ha_mux=self.reg_file.upc,
+            hb_mux=self.hb_mux,
+            status=self.reg_file.status,
+            instr=self.reg_file.instr,
+            exec_ready=self.reg_file.exec_ready,
         )
 
         self.control_block = ControlBlock(
@@ -125,15 +112,11 @@ class FpgaModel:
             memory=self.memory,
             writeback=self._writeback,
             clock=self.clock,
-            c_reg=self.reg_file.c
+            c_reg=self.reg_file.c,
         )
 
         self.logic_block = LogicBlock(
-            name="logic",
-            inputs=self.inputs,
-            memory=self.memory,
-            writeback=self._writeback,
-            clock=self.clock
+            name="logic", inputs=self.inputs, memory=self.memory, writeback=self._writeback, clock=self.clock
         )
 
         self.memory_block = MemoryBlock(
@@ -146,23 +129,19 @@ class FpgaModel:
         )
 
         self.shifter_block = ShifterBlock(
-            name="shifter",
-            inputs=self.inputs,
-            memory=self.memory,
-            writeback=self._writeback,
-            clock=self.clock
+            name="shifter", inputs=self.inputs, memory=self.memory, writeback=self._writeback, clock=self.clock
         )
 
         # Map of the opcode block (0..7) to functional blocks
         self.blocks = [
-            self.adder,         # 0 (0b000): Arithmetic / Adder
-            self.adder,         # 1 (0b001): Math / Float / Divider
-            self.logic_block,   # 2 (0b010): Logic
-            self.control_block,   # 3 (0b011): Control
+            self.adder,  # 0 (0b000): Arithmetic / Adder
+            self.adder,  # 1 (0b001): Math / Float / Divider
+            self.logic_block,  # 2 (0b010): Logic
+            self.control_block,  # 3 (0b011): Control
             self.memory_block,  # 4 (0b100): Memory / Stack
             self.memory_block,  # 5 (0b101): Memory / Storage
-            self.shifter_block,   # 6 (0b110): Shifter / LZC
-            self.empty_block,   # 7 (0b111): Reserved / Empty
+            self.shifter_block,  # 6 (0b110): Shifter / LZC
+            self.empty_block,  # 7 (0b111): Reserved / Empty
         ]
 
         self.writeback_mux = WritebackMux(blocks=self.blocks)
@@ -171,12 +150,15 @@ class FpgaModel:
         # The UPC takes its value either from the pre-calculated +1 or from the result
         # of a control JUMP.
         # Bit 11 is the overflow (carray) bit
-        self.upc_mux = Mux(name="upc", inputs=[
-            # 11 bits
-            self.upc_adder,
-            # 32-bits, but we only use the bottom 11
-            self.control_block.outputs.block_res
-        ])
+        self.upc_mux = Mux(
+            name="upc",
+            inputs=[
+                # 11 bits
+                self.upc_adder,
+                # 32-bits, but we only use the bottom 11
+                self.control_block.outputs.block_res,
+            ],
+        )
 
         self.dispatcher = Dispatcher(
             blocks=self.blocks,
@@ -190,7 +172,7 @@ class FpgaModel:
             imm_reg=self.reg_file.imm,
             memory=self.memory,
             writeback_mux=self.writeback_mux,
-            c_reg = self.reg_file.c
+            c_reg=self.reg_file.c,
         )
 
     def _writeback(self):
@@ -242,4 +224,3 @@ class FpgaModel:
             if status_sel & mask:
                 bit_val: bool = (status_byte & mask) != 0
                 self.reg_file.status.set_bit(flag, bit_val)
-

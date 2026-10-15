@@ -29,9 +29,7 @@ MASK_64 = 0xFFFFFFFFFFFFFFFF
         (0xFFFFFFFF_FFFFFFFF, 0xFFFFFFFF_FFFFFFFF, 1, True, "(2^64 - 1)^2 wraps to 1 mod 2^64 (overflow)"),
     ],
 )
-def test_user_opcode_mul_u64(
-    fpga: FpgaModel, a: int, b: int, expected_res: int, exp_cf: bool, desc: str
-) -> None:
+def test_user_opcode_mul_u64(fpga: FpgaModel, a: int, b: int, expected_res: int, exp_cf: bool, desc: str) -> None:
     """Tests executing UserOpcode.MUL_U64 via dispatcher with 64-bit stack operands."""
     user_push64(fpga, a)
     user_push64(fpga, b)
@@ -47,7 +45,7 @@ def test_user_opcode_mul_u64(
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
 
     res = user_pop64(fpga)
-    assert res == expected_res
+    assert res == expected_res, desc
     assert fpga.reg_file.sp.read_int() == 0
 
 

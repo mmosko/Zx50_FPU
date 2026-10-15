@@ -11,22 +11,22 @@ class Reg(IntEnum):
     """
 
     # 32-bit General & Math Registers (4-bit encoding 0..15)
-    AL = 0b0000   # 0
-    AH = 0b0001   # 1
-    BL = 0b0010   # 2
-    BH = 0b0011   # 3
-    CL = 0b0100   # 4
-    CH = 0b0101   # 5
-    DL = 0b0110   # 6
-    DH = 0b0111   # 7
-    FL = 0b1000   # 8
-    FH = 0b1001   # 9
-    EA = 0b1010   # 10
-    EB = 0b1011   # 11
-    C = 0b1100    # 12
+    AL = 0b0000  # 0
+    AH = 0b0001  # 1
+    BL = 0b0010  # 2
+    BH = 0b0011  # 3
+    CL = 0b0100  # 4
+    CH = 0b0101  # 5
+    DL = 0b0110  # 6
+    DH = 0b0111  # 7
+    FL = 0b1000  # 8
+    FH = 0b1001  # 9
+    EA = 0b1010  # 10
+    EB = 0b1011  # 11
+    C = 0b1100  # 12
     IMM = 0b1101  # 13
     UPC = 0b1110  # 14
-    NONE = 0b1111 # 15
+    NONE = 0b1111  # 15
 
     # Control, Status, and Pointers
     STATUS = 16
@@ -55,4 +55,3 @@ class Reg(IntEnum):
 
     def is_lo_half(self) -> bool:
         return self in [Reg.AL, Reg.BL, Reg.CL, Reg.DL, Reg.FL]
-

@@ -51,13 +51,9 @@ class MemoryBlock(FunctionalBlock):
     EXT_BASE = FpuRamMap.EXT_BASE
     CNS_BASE = FpuRamMap.CONST_OFFSET
 
-    def __init__(self,
-                 name: str,
-                 inputs: BlockInputs,
-                 memory: Memory,
-                 writeback: Callable,
-                 clock: Clock,
-                 sp_reg: Register):
+    def __init__(
+        self, name: str, inputs: BlockInputs, memory: Memory, writeback: Callable, clock: Clock, sp_reg: Register
+    ):
         super().__init__(name, inputs, memory, writeback, clock)
         assert isinstance(inputs.ha_mux, Mux)
         self._ha_mux: Mux = inputs.ha_mux
@@ -161,6 +157,7 @@ class MemoryBlock(FunctionalBlock):
         # the end set the HALT condition if the opcode was HALT
         assert instr.op == MicroOp.HALT
         if instr.src1 is not Reg.NONE:
+            assert isinstance(instr.src1, Reg)
             if instr.is_w32():
                 self._push32_reg(instr.src1, clear_err=False)
             else:
@@ -249,6 +246,7 @@ class MemoryBlock(FunctionalBlock):
     def _pop64(self, instr: MicroInstruction) -> None:
         """Pops TOS to dst (64-bit), pops high order word first"""
         assert instr.dst is not Reg.NONE
+        assert isinstance(instr.dst, Reg)
         assert instr.dst.is_lo_half()
 
         # 1. Read HI word from TOS
@@ -300,7 +298,6 @@ class MemoryBlock(FunctionalBlock):
         # writeback the destination register
         self._outputs.block_res.set(val)
 
-
     def _ldc(self, instr: MicroInstruction) -> None:
         """Loads from constant/seed tables in DATA_RAM (EBR 0) using zero-cost bitwise OR addressing.
 
@@ -339,6 +336,7 @@ class MemoryBlock(FunctionalBlock):
             self._outputs.exec_done.set(1)
             self._writeback()
         else:
+            assert isinstance(instr.dst, Reg)
             assert instr.dst.is_lo_half(), "64-bit LDC destination must be an even register (low half)"
 
             # 1. Read LO word from offset
@@ -433,6 +431,7 @@ class MemoryBlock(FunctionalBlock):
             self._outputs.exec_done.set(1)
             self._writeback()
         else:
+            assert isinstance(instr.dst, Reg)
             assert instr.dst.is_lo_half()
             assert addr % 2 == 0, "64-bit LD must use even base"
 
@@ -510,6 +509,7 @@ class MemoryBlock(FunctionalBlock):
             self._outputs.exec_done.set(1)
             self._writeback()
         else:
+            assert isinstance(instr.dst, Reg)
             assert instr.dst.is_lo_half()
             assert imm % 2 == 0, "64-bit LDU must use even base"
 
@@ -586,6 +586,7 @@ class MemoryBlock(FunctionalBlock):
             self._writeback()
         else:
             assert isinstance(instr.src2, Reg)
+            assert isinstance(instr.dst, Reg)
             assert instr.src2.is_lo_half()
             assert instr.dst.is_lo_half()
             # 1. Transfer LO word
@@ -606,6 +607,7 @@ class MemoryBlock(FunctionalBlock):
         assert instr.src2 is not Reg.NONE
         assert instr.dst is not Reg.NONE
         src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
+        assert isinstance(src1, Reg)
 
         if instr.is_w32():
             self._swap_32(instr, src1)
@@ -741,4 +743,3 @@ class MemoryBlock(FunctionalBlock):
         self._outputs.status_wr_sel.set(0x3F)
         self._outputs.exec_done.set(1)
         self._writeback()
-

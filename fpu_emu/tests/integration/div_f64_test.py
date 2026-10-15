@@ -72,9 +72,7 @@ from fpu_emu.user_opcodes import UserOpcode
         (1.0, 1e-25, 1e25, "1.0 / 1e-25"),
     ],
 )
-def test_user_opcode_div_f64(
-    fpga: FpgaModel, a: float, b: float, expected: float, desc: str
-) -> None:
+def test_user_opcode_div_f64(fpga: FpgaModel, a: float, b: float, expected: float, desc: str) -> None:
     """Tests executing UserOpcode.DIV_F64 via dispatcher: computes (a / b)."""
     user_push64(fpga, f64_to_bits(a))
     user_push64(fpga, f64_to_bits(b))
@@ -87,20 +85,14 @@ def test_user_opcode_div_f64(
 
     if expected == 0.0:
         if math.copysign(1.0, expected) < 0:
-            assert math.copysign(1.0, res_float) < 0, (
-                f"Failed {desc}: expected negative zero"
-            )
+            assert math.copysign(1.0, res_float) < 0, f"Failed {desc}: expected negative zero"
             assert fpga.reg_file.status.is_bit_set(StatusFlag.SIGN)
         else:
-            assert math.copysign(1.0, res_float) > 0, (
-                f"Failed {desc}: expected positive zero"
-            )
+            assert math.copysign(1.0, res_float) > 0, f"Failed {desc}: expected positive zero"
             assert not fpga.reg_file.status.is_bit_set(StatusFlag.SIGN)
         assert fpga.reg_file.status.is_bit_set(StatusFlag.ZERO)
     else:
-        assert pytest.approx(res_float, rel=1e-12) == expected, (
-            f"Failed {desc}: got {res_float}, expected {expected}"
-        )
+        assert pytest.approx(res_float, rel=1e-12) == expected, f"Failed {desc}: got {res_float}, expected {expected}"
         assert not fpga.reg_file.status.is_bit_set(StatusFlag.ZERO)
         if expected < 0:
             assert fpga.reg_file.status.is_bit_set(StatusFlag.SIGN)

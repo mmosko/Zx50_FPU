@@ -87,6 +87,7 @@ def test_micro_instruction_ldc_immediate_round_trip():
 
     # Encode LDC AL, CONST, PI_F32 (imm=0)
     from fpu_emu.rom.fpu_rom_map import FpuTable, FpuConst
+
     orig = MicroInstruction(
         op=MicroOp.LDC,
         dst=Reg.AL,
@@ -111,6 +112,7 @@ def test_micro_instruction_ldc_dynamic_reg_round_trip():
 
     # Encode LDC AH, SQRT, C
     from fpu_emu.rom.fpu_rom_map import FpuTable
+
     orig = MicroInstruction(
         op=MicroOp.LDC,
         dst=Reg.AH,
@@ -264,8 +266,3 @@ def test_status_flags_bit_encoding_roundtrip():
         assert flag_in_word == expected_val
         recovered = MicroInstruction.from_int(word)
         assert recovered.dst == flag
-
-
-
-
-

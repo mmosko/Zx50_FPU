@@ -27,21 +27,21 @@ import sys
 from typing import Dict, List, Tuple
 
 # ROM Parameters & Base Addresses (8 KB Single Flash ROM: 2048 words x 32-bit)
-FLASH_SIZE = 8192        # 8 KB active region
+FLASH_SIZE = 8192  # 8 KB active region
 TOTAL_WORDS = 2048
 
 UCODE_ROM_OFFSET = 0x0000  # Byte offset 0x0000 (Words 0..1535)
-DATA_ROM_OFFSET = 0x1800   # Byte offset 0x1800 (Words 1536..2047)
+DATA_ROM_OFFSET = 0x1800  # Byte offset 0x1800 (Words 1536..2047)
 
-UCODE_ROM_WORDS = 1536     # 6144 bytes / 4
-DATA_RAM_WORDS = 512       # 2048 bytes / 4
+UCODE_ROM_WORDS = 1536  # 6144 bytes / 4
+DATA_RAM_WORDS = 512  # 2048 bytes / 4
 
 # Data RAM Partition Word Offsets (within 512-word EBR 6)
-DATA_RAM_MTH_BASE = 0x000   # Stack RAM: words 0..127 (128 words)
-DATA_RAM_SCR_BASE = 0x080   # Scratchpad RAM: words 128..191 (64 words)
-DATA_RAM_USR_BASE = 0x0C0   # User Storage: words 192..207 (16 words)
-DATA_RAM_EXT_BASE = 0x0D0   # RAM Headroom: words 208..255 (48 words)
-CONST_OFFSET = 0x100        # Math Constants Base: words 256..319 (64 words)
+DATA_RAM_MTH_BASE = 0x000  # Stack RAM: words 0..127 (128 words)
+DATA_RAM_SCR_BASE = 0x080  # Scratchpad RAM: words 128..191 (64 words)
+DATA_RAM_USR_BASE = 0x0C0  # User Storage: words 192..207 (16 words)
+DATA_RAM_EXT_BASE = 0x0D0  # RAM Headroom: words 208..255 (48 words)
+CONST_OFFSET = 0x100  # Math Constants Base: words 256..319 (64 words)
 
 UCODE_BIN_FILE = "build/ucode.bin"
 UCODE_SYM_FILE = "build/ucode.sym"
@@ -77,7 +77,6 @@ CONSTANTS_DEF: List[Tuple[str, int, int, int, str]] = [
     ("SQRT2_F64_HI", 27, 0x3FF6A09E, 4, "high 32-bit word of sqrt(2) in IEEE-754 double precision"),
     ("INV_SQRT2_F32", 28, 0x3F3504F3, 4, "1/sqrt(2) in IEEE-754 single precision"),
     ("INV_SQRT2_F64", 30, 0x3FE6A09E667F3BCD, 8, "1/sqrt(2) in IEEE-754 double precision"),
-
     # IEEE-754 Special Constants
     ("ONE_F32", 32, 0x3F800000, 4, "1.0 in IEEE-754 single precision"),
     ("ONE_F64", 33, 0x3FF0000000000000, 8, "1.0 in IEEE-754 double precision"),
@@ -88,26 +87,21 @@ CONSTANTS_DEF: List[Tuple[str, int, int, int, str]] = [
     ("NEG_INF_F32", 39, 0xFF800000, 4, "-Infinity in IEEE-754 single precision"),
     ("POS_INF_F64", 40, 0x7FF0000000000000, 8, "+Infinity in IEEE-754 double precision"),
     ("NEG_INF_F64", 42, 0xFFF0000000000000, 8, "-Infinity in IEEE-754 double precision"),
-
     # Range Reduction Constants
     ("TWO_OVER_PI_F32", 44, 0x3F22F983, 4, "2/pi in IEEE-754 single precision"),
     ("TWO_OVER_PI_F64", 45, 0x3FE45F306DC9C883, 8, "2/pi in IEEE-754 double precision"),
-
     # Cody-Waite Split Constants
     ("CW_C1_F32", 47, 0x3FC90F80, 4, "Cody-Waite C1 in IEEE-754 single precision"),
     ("CW_C2_F32", 48, 0x37354443, 4, "Cody-Waite C2 in IEEE-754 single precision"),
     ("CW_C1_F64", 49, 0x3FF921FB54400000, 8, "Cody-Waite C1 in IEEE-754 double precision"),
     ("CW_C2_F64", 51, 0x3DD0B4611A626331, 8, "Cody-Waite C2 in IEEE-754 double precision"),
     ("CW_C3_F64", 53, 0x3BA3198A2E037073, 8, "Cody-Waite C3 in IEEE-754 double precision"),
-
     # Half and Scale Constants
     ("HALF_F64", 56, 0x3FE0000000000000, 8, "0.5 in IEEE-754 double precision"),
     ("HALF_F64_HI", 57, 0x3FE00000, 4, "high 32-bit word of 0.5 in IEEE-754 double precision"),
-
     # Natural Log of 10 Constants
     ("LN10_F32", 58, 0x40135D8E, 4, "ln(10) in IEEE-754 single precision"),
     ("LN10_F64", 60, 0x40026BB1BBB55516, 8, "ln(10) in IEEE-754 double precision"),
-
     # Magic Add Constant for Range Reduction (1.5 * 2^52)
     ("MAGIC_F64", 62, 0x4338000000000000, 8, "1.5 * 2^52 magic constant in IEEE-754 double precision"),
     ("MAGIC_F64_HI", 63, 0x43380000, 4, "high 32-bit word of MAGIC in IEEE-754 double precision"),
@@ -189,7 +183,9 @@ def write_verilog_header(header_path: str, symbols: Dict[str, int]) -> None:
 
         f.write("  // Flash Image 32-bit Word Base Offsets (8 KB total / 2048 words)\n")
         f.write(f"  `define FLASH_UCODE_ROM_BASE     13'h{UCODE_ROM_OFFSET:04X} // Bytes 0..6143 (Words 0..1535)\n")
-        f.write(f"  `define FLASH_DATA_RAM_BASE      13'h{DATA_ROM_OFFSET:04X} // Bytes 6144..8191 (Words 1536..2047)\n\n")
+        f.write(
+            f"  `define FLASH_DATA_RAM_BASE      13'h{DATA_ROM_OFFSET:04X} // Bytes 6144..8191 (Words 1536..2047)\n\n"
+        )
 
         f.write("  // DATA_RAM Partition Word Offsets (within 512-word EBR 6)\n")
         f.write(f"  `define DATA_RAM_MTH_BASE        10'h{DATA_RAM_MTH_BASE:03X} // Stack RAM: words 0..127\n")
@@ -294,11 +290,13 @@ def main() -> None:
 
     # 3. Combine into unified 8 KB flash image (2048 words)
     flash_words = generate_flash_words(ucode_words, data_words)
+    assert len(flash_words) == TOTAL_WORDS
 
     # Pack binary images (little-endian 32-bit words)
     ucode_bin = struct.pack(f"<{len(ucode_words)}I", *ucode_words)
     data_bin = struct.pack(f"<{len(data_words)}I", *data_words)
     flash_bin = ucode_bin + data_bin
+    assert len(flash_bin) == FLASH_SIZE
 
     # 4. Write output files
     with open(BIN_FILE, "wb") as f:

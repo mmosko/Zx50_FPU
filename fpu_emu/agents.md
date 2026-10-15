@@ -46,3 +46,4 @@ Execute the following verification steps in order. If any step fails, resolve th
    `# noqa: C901` only for necessary exceptions (e.g., large dispatcher/match statements).
 5. **Dead Code Check:** Run `vulture --exclude tests --exclude .venv .` (Identify dead code or unused imports; ignore
    intentionally uncalled public API entry points).
+

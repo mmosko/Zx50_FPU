@@ -61,4 +61,3 @@ class BusPad(Readable):
         if self._signed and (val & self._src_sign_bit):
             val |= self._sign_ext_mask
         return val & self._target_mask
-

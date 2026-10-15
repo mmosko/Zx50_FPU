@@ -46,7 +46,7 @@ def test_user_opcode_div_i32(
     # Pop quotient from stack
     res = user_pop32(fpga)
     expected_u32 = expected_quot & 0xFFFFFFFF
-    assert res == expected_u32
+    assert res == expected_u32, desc
     assert fpga.reg_file.sp.read_int() == 0
 
 

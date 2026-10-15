@@ -7,6 +7,7 @@ from fpu_emu.hardware.reg import Reg
 
 class StatusFlag(IntEnum):
     """Status register flag bit allocations (ProgrammersGuide.md Section 2)."""
+
     ZERO = 0  # Bit 0: Zero flag (1 = Result is zero)
     NONE = 0  # Used to encode an unused value / default flag
     DIFF_SIGN = 1  # Bit 1: Effective subtraction / operand signs differ
@@ -24,7 +25,7 @@ class Register(Readable):
         self._name = name
         self._size_in_bits = size_in_bits
         self._num_bytes = (size_in_bits + 7) // 8  # Ceiling division
-        self._mask = (1 << size_in_bits) - 1       # e.g., 6-bit -> 0x3F, 10-bit -> 0x03FF
+        self._mask = (1 << size_in_bits) - 1  # e.g., 6-bit -> 0x3F, 10-bit -> 0x03FF
         self._clock = clock
         self._last_write_tick: int = -1
         self._data = bytearray(self._num_bytes)

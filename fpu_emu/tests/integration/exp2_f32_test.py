@@ -84,9 +84,9 @@ def test_exp2_f32_extremes(fpga: FpgaModel, x: float, expected: float, desc: str
     res_bits = user_pop32(fpga)
     res_float = bits_to_f32(res_bits)
     if math.isinf(expected):
-        assert math.isinf(res_float) and res_float > 0
+        assert math.isinf(res_float) and res_float > 0, desc
     else:
-        assert res_float == expected
+        assert res_float == expected, desc
 
 
 def test_exp2_f32_nan(fpga: FpgaModel) -> None:

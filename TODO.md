@@ -201,19 +201,19 @@ trigonometrics are implemented as thin wrappers calling the verified 64-bit core
   - Emit `OPCODE_JUMP_TABLE` in `fpu_emu/rom/fpu_rom_map.py` and update `Dispatcher`.
 
 #### Phase 6: MicroCode Dependency Injection & Integration Test Standardization
-- [ ] **Step 21: Refactor `MicroCode` to Instantiable Component with Dependency Injection**
+- [x] **Step 21: Refactor `MicroCode` to Instantiable Component with Dependency Injection**
   - Replace static class `MicroCode` with an instantiable architecture:
     - Base protocol / class `MicroCodeSource` defining `get_address(opcode)`, `get_instruction(addr)`, `has_instruction(addr)`.
     - Concrete `EbrMicroCode(memory: Memory, rom_map=USER_OPCODE_MAP)`: reads 32-bit words directly from `memory.read(block=0, addr=addr)` and decodes via `MicroInstruction.from_int`.
     - Concrete `ListMicroCode(instructions: Sequence[MicroInstruction])`: in-memory sequence for isolated unit tests.
   - Eliminate all global mutable override state and class-level monkeypatching.
-- [ ] **Step 22: Update `Dispatcher` and `FpgaModel` for Injected Memory**
+- [x] **Step 22: Update `Dispatcher` and `FpgaModel` for Injected Memory**
   - In `Dispatcher.__init__(..., memory: Memory, microcode: Optional[MicroCodeSource] = None)`:
     - Default `self._microcode = microcode or EbrMicroCode(memory=self._memory)`.
   - In `Dispatcher._run(microcode=None)`:
     - If passed a sequence of instructions (unit tests), wrap in a local `ListMicroCode(instructions)` scoped to the call.
     - Fetch instructions strictly via `active_microcode.get_instruction(current_upc)`.
-- [ ] **Step 23: Standardize All Integration Tests to Use Baked-In ROM**
+- [x] **Step 23: Standardize All Integration Tests to Use Baked-In ROM**
   - Refactor all 12 isolated 64-bit test suites that currently assemble ad-hoc microcode or patch ROM:
     1. `sin_f64_test.py`
     2. `cos_f64_test.py`

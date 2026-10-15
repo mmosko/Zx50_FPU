@@ -21,9 +21,7 @@ from fpu_emu.user_opcodes import UserOpcode
         (0xFFFFFFFF, 0x00000000FFFFFFFF, False),  # 2^32 - 1
     ],
 )
-def test_user_opcode_conv_u32_u64(
-    fpga: FpgaModel, val_32: int, expected_res_64: int, exp_zf: bool
-) -> None:
+def test_user_opcode_conv_u32_u64(fpga: FpgaModel, val_32: int, expected_res_64: int, exp_zf: bool) -> None:
     """Tests CONV_U32_U64 zero-extending unsigned 32-bit integer to 64-bit integer."""
     user_push32(fpga, val_32)
     assert fpga.reg_file.sp.read_int() == 1

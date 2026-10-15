@@ -1,6 +1,5 @@
 """Hardware model of a 64-bit Bidirectional Barrel Shifter."""
 
-from dataclasses import dataclass
 from fpu_emu.blocks.shifter.shifter_adder import ShifterAdder
 from fpu_emu.blocks.shifter.shifter_result import ShifterResult
 from fpu_emu.fpga_resource import fpga_resource
@@ -44,7 +43,7 @@ class BarrelShifter:
             cf = False
             res = 0
 
-        zf = (res == 0)
+        zf = res == 0
         sf = bool(res & 0x80000000)
         return ShifterResult(res=res, cf=cf, zf=zf, sf=sf)
 
@@ -65,7 +64,7 @@ class BarrelShifter:
             cf = False
             res = 0
 
-        zf = (res == 0)
+        zf = res == 0
         sf = False  # MSB is always 0 for 32-bit logical shift right
         return ShifterResult(res=res, cf=cf, zf=zf, sf=sf)
 
@@ -86,7 +85,7 @@ class BarrelShifter:
             cf = False
             res = 0
 
-        zf = (res == 0)
+        zf = res == 0
         sf = bool(res & 0x8000000000000000)
         return ShifterResult(res=res, cf=cf, zf=zf, sf=sf)
 
@@ -107,7 +106,7 @@ class BarrelShifter:
             cf = False
             res = 0
 
-        zf = (res == 0)
+        zf = res == 0
         sf = False  # MSB is always 0 for logical shift right
         return ShifterResult(res=res, cf=cf, zf=zf, sf=sf)
 
@@ -132,13 +131,13 @@ class BarrelShifter:
                 norm_val = (~val & cls.MASK_32) if sign else val
                 vf = bool((norm_val >> shift_diff) != 0)
             else:
-                vf = (val != 0)
+                vf = val != 0
         else:
             cf = False
             res = 0
-            vf = (val != 0)
+            vf = val != 0
 
-        zf = (res == 0)
+        zf = res == 0
         sf = bool(res & 0x80000000)
         return ShifterResult(res=res, cf=cf, zf=zf, sf=sf, vf=vf)
 
@@ -166,7 +165,7 @@ class BarrelShifter:
             cf = sign_bit
             res = cls.MASK_32 if sign_bit else 0
 
-        zf = (res == 0)
+        zf = res == 0
         sf = bool(res & 0x80000000)
         return ShifterResult(res=res, cf=cf, zf=zf, sf=sf, vf=False)
 
@@ -191,13 +190,13 @@ class BarrelShifter:
                 norm_val = (~val & cls.MASK_64) if sign else val
                 vf = bool((norm_val >> shift_diff) != 0)
             else:
-                vf = (val != 0)
+                vf = val != 0
         else:
             cf = False
             res = 0
-            vf = (val != 0)
+            vf = val != 0
 
-        zf = (res == 0)
+        zf = res == 0
         sf = bool(res & 0x8000000000000000)
         return ShifterResult(res=res, cf=cf, zf=zf, sf=sf, vf=vf)
 
@@ -225,6 +224,6 @@ class BarrelShifter:
             cf = sign_bit
             res = cls.MASK_64 if sign_bit else 0
 
-        zf = (res == 0)
+        zf = res == 0
         sf = bool(res & 0x8000000000000000)
         return ShifterResult(res=res, cf=cf, zf=zf, sf=sf, vf=False)

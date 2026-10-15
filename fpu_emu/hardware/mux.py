@@ -10,9 +10,9 @@ class Mux(Readable):
         self._select = None
 
     def select(self, index: int) -> None:
-        assert 0 <= index < len(
-            self._inputs
-        ), f"Mux {self._name}: Selection index {index} out of range (0..{len(self._inputs) - 1})"
+        assert 0 <= index < len(self._inputs), (
+            f"Mux {self._name}: Selection index {index} out of range (0..{len(self._inputs) - 1})"
+        )
         self._select = index
 
     def read(self) -> bytes:

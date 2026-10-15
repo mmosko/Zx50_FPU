@@ -129,11 +129,7 @@ def emit_python(
     lines.append("fpu_symbols: Dict[str, int] = {")
 
     if symbols:
-        user_symbols = {
-            name: addr
-            for name, addr in symbols.items()
-            if name.upper().startswith("USER_")
-        }
+        user_symbols = {name: addr for name, addr in symbols.items() if name.upper().startswith("USER_")}
         for name, addr in sorted(user_symbols.items(), key=lambda kv: kv[0]):
             lines.append(f'    "{name}": {addr},')
 
@@ -209,6 +205,4 @@ def write_output(
     elif fmt == "py":
         path.write_text(emit_python(instructions, symbols=symbols), encoding="utf-8")
     else:
-        raise ValueError(
-            f"Unsupported output format: '{fmt}'. Expected 'bin', 'hex', 'py', or 'auto'."
-        )
+        raise ValueError(f"Unsupported output format: '{fmt}'. Expected 'bin', 'hex', 'py', or 'auto'.")

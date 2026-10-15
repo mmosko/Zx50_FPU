@@ -78,7 +78,9 @@ def test_user_opcode_div_f32(fpga: FpgaModel, a: float, b: float, expected: floa
         assert res_float == 0.0, f"Failed {desc}: got {res_float}, expected 0.0"
         expected_sign = math.copysign(1.0, a) * math.copysign(1.0, b) < 0
         actual_sign = bool(res_bits & 0x80000000)
-        assert actual_sign == expected_sign, f"Sign mismatch for {desc}: got sign {actual_sign}, expected {expected_sign}"
+        assert actual_sign == expected_sign, (
+            f"Sign mismatch for {desc}: got sign {actual_sign}, expected {expected_sign}"
+        )
     else:
         assert pytest.approx(res_float, rel=1e-5) == expected, f"Failed {desc}: got {res_float}, expected {expected}"
 

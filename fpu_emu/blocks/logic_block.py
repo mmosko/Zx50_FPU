@@ -86,6 +86,7 @@ class LogicBlock(FunctionalBlock):
         assert instr.src2 is not Reg.NONE
         assert instr.dst is not Reg.NONE
         src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
+        assert isinstance(src1, Reg)
 
         if instr.is_w32():
             self._test_32(instr, src1)
@@ -156,6 +157,8 @@ class LogicBlock(FunctionalBlock):
             self._wb_flags(result, wr_mask=wr_mask)
             self._writeback()
         else:
+            assert isinstance(instr.dst, Reg)
+            assert isinstance(src1, Reg)
             assert instr.dst.is_lo_half()
             assert src1.is_lo_half()
             # Cycle 1: invert low word
@@ -208,6 +211,8 @@ class LogicBlock(FunctionalBlock):
             self._writeback()
         else:
             # 64-bit: 2 cycles per SystemReference.md
+            assert isinstance(instr.dst, Reg)
+            assert isinstance(src1, Reg)
             assert instr.dst.is_lo_half()
             assert src1.is_lo_half()
 
@@ -258,6 +263,8 @@ class LogicBlock(FunctionalBlock):
             self._writeback()
         else:
             # 64-bit: 2 cycles per SystemReference.md
+            assert isinstance(instr.dst, Reg)
+            assert isinstance(src1, Reg)
             assert instr.dst.is_lo_half()
             assert src1.is_lo_half()
 
@@ -314,7 +321,9 @@ class LogicBlock(FunctionalBlock):
         assert instr.src2 is not Reg.NONE
         assert isinstance(instr.src2, Reg)
         assert instr.dst is not Reg.NONE
+        assert isinstance(instr.dst, Reg)
         src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
+        assert isinstance(src1, Reg)
         assert instr.src2.is_lo_half()
         assert src1.is_lo_half()
         assert instr.dst.is_lo_half()

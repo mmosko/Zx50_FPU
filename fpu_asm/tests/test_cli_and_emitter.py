@@ -1,4 +1,3 @@
-import struct
 from pathlib import Path
 import pytest
 from fpu_asm.__main__ import main
@@ -9,10 +8,9 @@ from fpu_asm.emitter import (
     emit_python,
     emit_symbols,
     write_output,
-    write_symbol_table,
     create_nop_instruction,
 )
-from fpu_emu.micro_instruction import MicroInstruction, IW
+from fpu_emu.micro_instruction import MicroInstruction
 from fpu_emu.micro_opcodes import MicroOp
 from fpu_emu.hardware.reg import Reg
 from fpu_emu.hardware.register import StatusFlag
@@ -165,24 +163,26 @@ def test_cli_main_success_bin(tmp_path: Path, capsys):
     assert "Successfully assembled 2 instructions (padded to 1536 words)" in captured.out
 
 
-def test_cli_main_success_python_and_sym(tmp_path: Path, capsys):
+def test_cli_main_success_python_and_sym(tmp_path: Path):
     asm_file = tmp_path / "code.fasm"
     asm_file.write_text(
-        "User_ADD_I32:\n"
-        "    ADD AL, BL\n"
-        "LOOP_END:\n"
-        "    HALT\n",
+        "User_ADD_I32:\n    ADD AL, BL\nLOOP_END:\n    HALT\n",
         encoding="utf-8",
     )
     py_file = tmp_path / "code.py"
     sym_file = tmp_path / "code.sym"
 
-    ret = main([
-        "-i", str(asm_file),
-        "-o", str(py_file),
-        "-s", str(sym_file),
-        "--no-pad",
-    ])
+    ret = main(
+        [
+            "-i",
+            str(asm_file),
+            "-o",
+            str(py_file),
+            "-s",
+            str(sym_file),
+            "--no-pad",
+        ]
+    )
     assert ret == 0
     assert py_file.exists()
     assert sym_file.exists()
@@ -239,4 +239,3 @@ def test_emit_python_indirect_ld_sto():
     assert namespace["fpu_ucode"][2].src1 == Reg.C
     assert namespace["fpu_ucode"][3].src1 == Reg.IMM
     assert namespace["fpu_ucode"][3].imm == 20
-

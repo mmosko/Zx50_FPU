@@ -25,13 +25,48 @@ from fpu_emu.user_opcodes import UserOpcode
         # Truncation / 32-bit wrap (high word non-zero)
         (0x00010000, 0x00010000, 0, False, False, False, True, "65536 * 65536 = 2^32 -> low 32 bits 0"),
         (0x00010000, 0x00020000, 0, False, False, False, True, "65536 * 131072 = 2 * 2^32 -> low 32 bits 0"),
-        (0x7FFFFFFF, 2, 0xFFFFFFFE, False, False, False, True, "max int32 * 2 -> 64-bit product is positive (+4294967294)"),
-        (0x80000000, 1, 0x80000000, False, False, True, False, "min int32 * 1 -> 64-bit product is negative (-2147483648)"),
-        (0x80000000, 0xFFFFFFFF, 0x80000000, False, False, False, True, "min int32 * (-1) -> 64-bit product is positive (+2147483648)"),
+        (
+            0x7FFFFFFF,
+            2,
+            0xFFFFFFFE,
+            False,
+            False,
+            False,
+            True,
+            "max int32 * 2 -> 64-bit product is positive (+4294967294)",
+        ),
+        (
+            0x80000000,
+            1,
+            0x80000000,
+            False,
+            False,
+            True,
+            False,
+            "min int32 * 1 -> 64-bit product is negative (-2147483648)",
+        ),
+        (
+            0x80000000,
+            0xFFFFFFFF,
+            0x80000000,
+            False,
+            False,
+            False,
+            True,
+            "min int32 * (-1) -> 64-bit product is positive (+2147483648)",
+        ),
     ],
 )
 def test_user_opcode_mul_i32(
-    fpga: FpgaModel, a: int, b: int, expected_res: int, exp_cf: bool, exp_zf: bool, exp_sf: bool, exp_vf: bool, desc: str
+    fpga: FpgaModel,
+    a: int,
+    b: int,
+    expected_res: int,
+    exp_cf: bool,
+    exp_zf: bool,
+    exp_sf: bool,
+    exp_vf: bool,
+    desc: str,
 ) -> None:
     """Tests executing UserOpcode.MUL_I32 via dispatcher with stack operands (a * b)."""
     # Push operand a then operand b
@@ -56,7 +91,7 @@ def test_user_opcode_mul_i32(
 
     # Pop result from stack
     res = user_pop32(fpga)
-    assert res == expected_res
+    assert res == expected_res, desc
     assert fpga.reg_file.sp.read_int() == 0
 
 

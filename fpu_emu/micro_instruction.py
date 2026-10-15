@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Optional, Union
+from typing import Union
 
 from fpu_emu.hardware.reg import Reg
 from fpu_emu.hardware.register import Register
@@ -39,14 +39,7 @@ class MicroInstruction:
         src2_val = self.src2.value & 0x0F
         imm_val = self.imm & 0x1FFF
 
-        return (
-            (op_val << 26)
-            | (w_val << 25)
-            | (dst_val << 21)
-            | (src1_val << 17)
-            | (src2_val << 13)
-            | imm_val
-        )
+        return (op_val << 26) | (w_val << 25) | (dst_val << 21) | (src1_val << 17) | (src2_val << 13) | imm_val
 
     def to_bytes(self) -> bytes:
         """

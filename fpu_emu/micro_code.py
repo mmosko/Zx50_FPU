@@ -1,27 +1,20 @@
-"""Microcode ROM mapping UserOpcode to micro-instruction sequences."""
+"""Microcode ROM sources and EBR instruction budget tracking."""
 
-import importlib.util
+from abc import ABC, abstractmethod
 from pathlib import Path
 import struct
-from typing import Dict, List, Optional
+from typing import Mapping, Optional, Sequence
 
 from fpu_emu.fpga_resource import fpga_resource
+from fpu_emu.hardware.memory import Memory
 from fpu_emu.micro_instruction import MicroInstruction
 from fpu_emu.micro_opcodes import MicroOp
+from fpu_emu.rom.fpu_rom_map import USER_OPCODE_MAP
 from fpu_emu.user_opcodes import UserOpcode
 
-
-def _locate_ucode_py() -> Optional[Path]:
-    """Check for development / debugging ucode.py."""
-    candidates = [
-        Path(__file__).parent / "ucode.py",
-        Path.cwd() / "ucode.py",
-        Path("/tmp/ucode.py"),
-    ]
-    for p in candidates:
-        if p.exists():
-            return p
-    return None
+NOP_WORD: int = 0x79FFE000
+CODE_ROM_WORDS: int = 1536
+WORD_BYTES: int = 4
 
 
 def _locate_flash_bin() -> Path:
@@ -36,80 +29,36 @@ def _locate_flash_bin() -> Path:
     raise FileNotFoundError("Could not find fpu_flash.bin in rom/ or bin/")
 
 
-class MicroCode:
-    """Microcode ROM lookup table and instruction store."""
+class MicroCodeSource(ABC):
+    """Abstract interface for a microcode instruction store and opcode entry lookup."""
 
-    # 1536 words (EBR 0-5) for runtime microcode execution store (6 KB Code ROM)
-    HARD_MAX_MICRO_INSTRUCTIONS: int = 1536
-    SOFT_MAX_MICRO_INSTRUCTIONS: int = 1536
-    MAX_MICRO_INSTRUCTIONS: int = HARD_MAX_MICRO_INSTRUCTIONS
+    @abstractmethod
+    def get_address(self, opcode: UserOpcode) -> int:
+        """Returns the start UPC address for an opcode in the microcode store."""
 
-    _using_ucode_py: bool = False
-    _symbols: Dict[str, int] = {}
-    _instructions: List[MicroInstruction] = []
-    _override: Optional[List[MicroInstruction]] = None
-    _total_instructions_count: int = 0
+    @abstractmethod
+    def get_instruction(self, address: int) -> MicroInstruction:
+        """Returns the micro-instruction at the given address."""
 
-    @classmethod
-    def _load(cls) -> None:
-        """Initializes microcode from either ucode.py (if found) or fpu_flash.bin."""
-        ucode_path = _locate_ucode_py()
-        if ucode_path is not None:
-            spec = importlib.util.spec_from_file_location("_ucode_dev", ucode_path)
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            cls._symbols = getattr(mod, "fpu_symbols", {})
-            cls._instructions = list(getattr(mod, "fpu_ucode", []))
-            cls._total_instructions_count = len(cls._instructions)
-            cls._using_ucode_py = True
-        else:
-            flash_path = _locate_flash_bin()
-            with open(flash_path, "rb") as f:
-                data = f.read(cls.MAX_MICRO_INSTRUCTIONS * 4)
 
-            num_words = len(data) // 4
-            words = struct.unpack(f"<{num_words}I", data[: num_words * 4])
-            cls._instructions = [MicroInstruction.from_int(w) for w in words]
-            if len(cls._instructions) < cls.MAX_MICRO_INSTRUCTIONS:
-                cls._instructions.extend(
-                    [MicroInstruction(op=MicroOp.NOP)]
-                    * (cls.MAX_MICRO_INSTRUCTIONS - len(cls._instructions))
-                )
+class EbrMicroCode(MicroCodeSource):
+    """Hardware-accurate microcode store backed by EBR Block 0 (CODE_ROM)."""
 
-            # Find last non-NOP / non-zero word for total instructions count
-            nop_word = 0x79FFE000
-            last_active = 0
-            for i in range(len(words) - 1, -1, -1):
-                if words[i] != nop_word and words[i] != 0:
-                    last_active = i + 1
-                    break
-            cls._total_instructions_count = last_active if last_active > 0 else len(words)
-            cls._using_ucode_py = False
+    EBR_BLOCK: int = 0
+    MAX_MICRO_INSTRUCTIONS: int = CODE_ROM_WORDS
 
-    @classmethod
-    def set_override(cls, instructions: Optional[List[MicroInstruction]]) -> None:
-        """Sets a temporary override instruction list (e.g. for testing)."""
-        cls._override = instructions
+    def __init__(
+        self,
+        memory: Memory,
+        rom_map: Optional[Mapping[UserOpcode, int]] = None,
+    ) -> None:
+        self._memory = memory
+        self._rom_map: Mapping[UserOpcode, int] = rom_map if rom_map is not None else USER_OPCODE_MAP
 
-    @classmethod
-    def get_address(cls, opcode: UserOpcode) -> int:
+    def get_address(self, opcode: UserOpcode) -> int:
         """Returns the start UPC address for an opcode in the microcode ROM."""
-        if cls._using_ucode_py:
-            sym = f"USER_{opcode.name}"
-            if sym in cls._symbols:
-                return cls._symbols[sym]
-        from fpu_emu.rom.fpu_rom_map import USER_OPCODE_MAP
+        return self._rom_map.get(opcode, 0)
 
-        return USER_OPCODE_MAP.get(opcode, 0)
-
-    @classmethod
-    def has_instruction(cls, address: int) -> bool:
-        """Returns True if the address is within the active microcode bounds."""
-        if cls._override is not None:
-            return 0 <= address < len(cls._override)
-        return 0 <= address < cls._total_instructions_count
-
-    @classmethod
     @fpga_resource(
         approach="Cascaded Single-Port SysMEM EBR (EBR 0-5, 1536x32) for runtime microcode execution store",
         luts=0,
@@ -119,28 +68,59 @@ class MicroCode:
         cycles=1,
         shared_unit="ebr_microcode_rom",
     )
-    def get_instruction(cls, address: int) -> MicroInstruction:
-        """Returns the micro-instruction at the given microcode ROM address."""
-        if cls._override is not None:
-            if 0 <= address < len(cls._override):
-                return cls._override[address]
+    def get_instruction(self, address: int) -> MicroInstruction:
+        """Reads a 32-bit word from EBR Block 0 and decodes into a MicroInstruction."""
+        if not (0 <= address < self.MAX_MICRO_INSTRUCTIONS):
             return MicroInstruction(op=MicroOp.HALT)
+        word = self._memory.read(self.EBR_BLOCK, address)
+        return MicroInstruction.from_int(word)
 
-        if 0 <= address < len(cls._instructions):
-            return cls._instructions[address]
+
+class ListMicroCode(MicroCodeSource):
+    """In-memory microcode sequence for isolated unit testing."""
+
+    def __init__(
+        self,
+        instructions: Sequence[MicroInstruction],
+        rom_map: Optional[Mapping[UserOpcode, int]] = None,
+    ) -> None:
+        self._instructions = list(instructions)
+        self._rom_map: Mapping[UserOpcode, int] = rom_map if rom_map is not None else {}
+
+    def get_address(self, opcode: UserOpcode) -> int:
+        """Returns the start UPC address for an opcode (defaults to 0)."""
+        return self._rom_map.get(opcode, 0)
+
+    def get_instruction(self, address: int) -> MicroInstruction:
+        """Returns the micro-instruction at the given index, or HALT if out of bounds."""
+        if 0 <= address < len(self._instructions):
+            return self._instructions[address]
         return MicroInstruction(op=MicroOp.HALT)
 
-    # @classmethod
-    # def get(cls, opcode: UserOpcode) -> List[MicroInstruction]:
-    #     """Returns the instruction sequence (retained for backward compatibility)."""
-    #     if cls._override is not None:
-    #         return cls._override
-    #     return cls._instructions
+
+class MicroCode(EbrMicroCode):
+    """Microcode ROM capacity budget tracker and EbrMicroCode specialization."""
+
+    # 1536 words (EBR 0-5) for runtime microcode execution store (6 KB Code ROM)
+    HARD_MAX_MICRO_INSTRUCTIONS: int = CODE_ROM_WORDS
+    MAX_MICRO_INSTRUCTIONS: int = HARD_MAX_MICRO_INSTRUCTIONS
 
     @classmethod
-    def total_instructions(cls) -> int:
-        """Returns the total number of micro-instructions across all defined opcodes."""
-        return cls._total_instructions_count
+    def total_instructions(cls, flash_path: Optional[Path] = None) -> int:
+        """Returns the total number of active micro-instructions in the flash ROM image."""
+        path = flash_path if flash_path is not None else _locate_flash_bin()
+        with open(path, "rb") as f:
+            data = f.read(cls.HARD_MAX_MICRO_INSTRUCTIONS * WORD_BYTES)
+
+        num_words = len(data) >> 2
+        words = struct.unpack(f"<{num_words}I", data[: num_words << 2])
+
+        last_active = 0
+        for i in range(len(words) - 1, -1, -1):
+            if words[i] != NOP_WORD and words[i] != 0:
+                last_active = i + 1
+                break
+        return last_active if last_active > 0 else len(words)
 
     @classmethod
     def remaining_capacity(cls) -> int:
@@ -157,6 +137,5 @@ class MicroCode:
             )
 
 
-# Initialize microcode at module import time
-MicroCode._load()
+# Validate microcode budget at module import time
 MicroCode.validate_budget()

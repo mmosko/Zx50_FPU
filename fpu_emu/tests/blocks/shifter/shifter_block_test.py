@@ -621,5 +621,3 @@ def test_shifter_unsupported_op(fpga: FpgaModel):
     instr.to_register(fpga.reg_file.instr, fpga.reg_file.imm)
     with pytest.raises(HardwareBusError, match="Unsupported opcode"):
         fpga.shifter_block.execute()
-
-

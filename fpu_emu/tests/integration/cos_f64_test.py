@@ -1,59 +1,22 @@
 """Integration tests for 64-bit IEEE-754 double precision cosine (COS_F64)."""
 
 import math
-import tempfile
-from pathlib import Path
-from typing import Any
 
 import pytest
 
-from fpu_asm.assembler import Assembler
 from fpu_emu.fpga_model import FpgaModel
 from fpu_emu.hardware.registers import StatusFlag
-from fpu_emu.hardware.rom import Rom
 from fpu_emu.tests.test_helpers import bits_to_f64, f64_to_bits, user_pop64, user_push64
-
-TRIG_F64_SOURCE = """
-.include "fpu_emu/asm/pop_two_64.asm"
-.include "fpu_emu/asm/align_f64.asm"
-.include "fpu_emu/asm/normalize_f64.asm"
-.include "fpu_emu/asm/add_f64.asm"
-.include "fpu_emu/asm/sub_f64.asm"
-.include "fpu_emu/asm/mul_f64.asm"
-.include "fpu_emu/asm/div_f64.asm"
-.include "fpu_emu/asm/trig_f64.asm"
-"""
-
-
-@pytest.fixture(scope="module")
-def cos_f64_program() -> tuple[list[Any], int, Any]:
-    """Assembles the COS_F64 microcode routine once for all tests in this module."""
-    asm = Assembler()
-    assembled = asm.assemble(TRIG_F64_SOURCE)
-    instructions = [instr for _, instr in assembled]
-    entry = asm.symbols["USER_COS_F64"]
-    tmp_dir = tempfile.TemporaryDirectory()
-    return instructions, entry, tmp_dir
-
-
-@pytest.fixture
-def fpga(cos_f64_program: tuple[list[Any], int, Any]) -> FpgaModel:
-    """Creates a fresh FPGA model with an empty ROM."""
-    _, _, tmp_dir = cos_f64_program
-    rom = Rom(size=1024, rom_path=Path(tmp_dir.name) / "dummy.rom")
-    return FpgaModel(rom=rom)
+from fpu_emu.user_opcodes import UserOpcode
 
 
 def run_cos_f64(
     fpga: FpgaModel,
-    instructions: list[Any],
-    entry: int,
     theta: float,
 ) -> tuple[float | None, int]:
     """Pushes theta and executes USER_COS_F64."""
     user_push64(fpga, f64_to_bits(theta))
-    fpga.reg_file.upc.write(entry)
-    fpga.dispatcher._run(instructions)
+    fpga.dispatcher.execute(UserOpcode.COS_F64)
 
     status = fpga.reg_file.status.read_int()
     sp = fpga.reg_file.sp.read_int()
@@ -108,12 +71,10 @@ def run_cos_f64(
 )
 def test_cos_f64_normals(
     fpga: FpgaModel,
-    cos_f64_program: tuple[list[Any], int, Any],
     theta: float,
 ):
     """Verifies cos(theta) against math.cos to within 1 ULP (~1e-15)."""
-    instructions, entry, _ = cos_f64_program
-    act, status = run_cos_f64(fpga, instructions, entry, theta)
+    act, status = run_cos_f64(fpga, theta)
 
     assert act is not None
     exp = math.cos(theta)
@@ -123,27 +84,21 @@ def test_cos_f64_normals(
 
 def test_cos_f64_zero_returns_one(
     fpga: FpgaModel,
-    cos_f64_program: tuple[list[Any], int, Any],
 ):
     """Verifies cos(+0.0) = 1.0 and cos(-0.0) = 1.0."""
-    instructions, entry, _ = cos_f64_program
-
-    act_pos, _ = run_cos_f64(fpga, instructions, entry, 0.0)
+    act_pos, _ = run_cos_f64(fpga, 0.0)
     assert act_pos == 1.0
 
-    act_neg, _ = run_cos_f64(fpga, instructions, entry, -0.0)
+    act_neg, _ = run_cos_f64(fpga, -0.0)
     assert act_neg == 1.0
 
 
 def test_cos_f64_infinity_domain_error(
     fpga: FpgaModel,
-    cos_f64_program: tuple[list[Any], int, Any],
 ):
     """Verifies cos(+/-Inf) sets ERR=1 and returns Quiet NaN."""
-    instructions, entry, _ = cos_f64_program
-
     for inf_val in [float("inf"), float("-inf")]:
-        act, status = run_cos_f64(fpga, instructions, entry, inf_val)
+        act, status = run_cos_f64(fpga, inf_val)
         assert (status & (1 << StatusFlag.ERR.value)) != 0
         assert act is not None
         assert math.isnan(act)
@@ -151,12 +106,9 @@ def test_cos_f64_infinity_domain_error(
 
 def test_cos_f64_nan_propagation(
     fpga: FpgaModel,
-    cos_f64_program: tuple[list[Any], int, Any],
 ):
     """Verifies cos(NaN) returns NaN without error."""
-    instructions, entry, _ = cos_f64_program
-
-    act, status = run_cos_f64(fpga, instructions, entry, float("nan"))
+    act, status = run_cos_f64(fpga, float("nan"))
     assert (status & (1 << StatusFlag.ERR.value)) == 0
     assert act is not None
     assert math.isnan(act)
@@ -164,14 +116,11 @@ def test_cos_f64_nan_propagation(
 
 def test_cos_f64_stack_underflow(
     fpga: FpgaModel,
-    cos_f64_program: tuple[list[Any], int, Any],
 ):
     """Verifies stack underflow (< 8 bytes) sets ERR=1 and does not execute."""
-    instructions, entry, _ = cos_f64_program
     # Push only 1 word (4 bytes < 8 bytes required)
     fpga.reg_file.sp.write(1)
-    fpga.reg_file.upc.write(entry)
-    fpga.dispatcher._run(instructions)
+    fpga.dispatcher.execute(UserOpcode.COS_F64)
 
     status = fpga.reg_file.status.read_int()
     assert (status & (1 << StatusFlag.ERR.value)) != 0

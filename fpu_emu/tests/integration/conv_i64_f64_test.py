@@ -3,10 +3,9 @@
 import math
 import pytest
 
-from fpu_asm.assembler import Assembler
+from fpu_emu.dispatcher import UserOpcode
 from fpu_emu.fpga_model import FpgaModel
 from fpu_emu.hardware.registers import StatusFlag
-from fpu_emu.hardware.rom import Rom
 from fpu_emu.tests.test_helpers import (
     bits_to_f64,
     f64_to_bits,
@@ -17,35 +16,11 @@ from fpu_emu.tests.test_helpers import (
 )
 
 
-@pytest.fixture(scope="module")
-def conv_i64_f64_rom_and_entry(tmp_path_factory):
-    """Assembles CONV_I64_F64 with required subroutines into an in-memory instruction list."""
-    tmp_path = tmp_path_factory.mktemp("rom_i64")
-    asm = Assembler()
-    source = """
-    .include "fpu_emu/asm/pop_two_64.asm"
-    .include "fpu_emu/asm/normalize_f64.asm"
-    .include "fpu_emu/asm/conv_int_f64.asm"
-    """
-    assembled = asm.assemble(source)
-    instructions = [instr for _, instr in assembled]
-    entry_addr = asm.symbols["USER_CONV_I64_F64"]
-    return instructions, entry_addr, tmp_path
-
-
-@pytest.fixture
-def fpga(conv_i64_f64_rom_and_entry):
-    _, _, tmp_path = conv_i64_f64_rom_and_entry
-    rom = Rom(size=1024, rom_path=tmp_path / "dummy.rom")
-    return FpgaModel(rom=rom)
-
-
-def run_conv_i64_f64(fpga, instructions, entry, val_i64):
+def run_conv_i64_f64(fpga: FpgaModel, val_i64: int) -> tuple[int, int]:
     """Executes CONV_I64_F64 on the FPGA model with the given signed 64-bit int."""
     u64_bits = val_i64 if val_i64 >= 0 else (1 << 64) + val_i64
     user_push64(fpga, u64_bits)
-    fpga.reg_file.upc.write(entry)
-    fpga.dispatcher._run(instructions)
+    fpga.dispatcher.execute(UserOpcode.CONV_I64_F64)
     result_bits = user_pop64(fpga)
     status = fpga.reg_file.status.read_int()
     return result_bits, status
@@ -95,9 +70,8 @@ class TestConvI64F64Normals:
             -0x123456789ABCDEF0,
         ],
     )
-    def test_i64_values(self, fpga, conv_i64_f64_rom_and_entry, val):
-        instructions, entry, _ = conv_i64_f64_rom_and_entry
-        res_bits, status = run_conv_i64_f64(fpga, instructions, entry, val)
+    def test_i64_values(self, fpga: FpgaModel, val: int) -> None:
+        res_bits, status = run_conv_i64_f64(fpga, val)
         res_float = bits_to_f64(res_bits)
         expected_float = float(val)
 
@@ -117,11 +91,10 @@ class TestConvI64F64Normals:
         assert bool(status & (1 << StatusFlag.ERR.value)) is False
 
     @pytest.mark.parametrize("p", list(range(63)))
-    def test_powers_of_two_positive(self, fpga, conv_i64_f64_rom_and_entry, p):
+    def test_powers_of_two_positive(self, fpga: FpgaModel, p: int) -> None:
         """All positive powers of 2 from 2^0 to 2^62 are exactly representable."""
-        instructions, entry, _ = conv_i64_f64_rom_and_entry
         val = 1 << p
-        res_bits, status = run_conv_i64_f64(fpga, instructions, entry, val)
+        res_bits, status = run_conv_i64_f64(fpga, val)
         expected_float = float(val)
 
         assert res_bits == f64_to_bits(expected_float)
@@ -130,11 +103,10 @@ class TestConvI64F64Normals:
         assert bool(status & (1 << StatusFlag.ZERO.value)) is False
 
     @pytest.mark.parametrize("p", list(range(63)))
-    def test_powers_of_two_negative(self, fpga, conv_i64_f64_rom_and_entry, p):
+    def test_powers_of_two_negative(self, fpga: FpgaModel, p: int) -> None:
         """All negative powers of 2 from -2^0 to -2^62 are exactly representable."""
-        instructions, entry, _ = conv_i64_f64_rom_and_entry
         val = -(1 << p)
-        res_bits, status = run_conv_i64_f64(fpga, instructions, entry, val)
+        res_bits, status = run_conv_i64_f64(fpga, val)
         expected_float = float(val)
 
         assert res_bits == f64_to_bits(expected_float)
@@ -142,11 +114,10 @@ class TestConvI64F64Normals:
         assert bool(status & (1 << StatusFlag.SIGN.value)) is True
         assert bool(status & (1 << StatusFlag.ZERO.value)) is False
 
-    def test_min_i64(self, fpga, conv_i64_f64_rom_and_entry):
+    def test_min_i64(self, fpga: FpgaModel) -> None:
         """Tests the most negative 64-bit integer (-2^63)."""
-        instructions, entry, _ = conv_i64_f64_rom_and_entry
         val = -0x8000000000000000
-        res_bits, status = run_conv_i64_f64(fpga, instructions, entry, val)
+        res_bits, status = run_conv_i64_f64(fpga, val)
         expected_float = float(val)
 
         assert res_bits == f64_to_bits(expected_float)
@@ -158,9 +129,8 @@ class TestConvI64F64Normals:
 class TestConvI64F64Zeros:
     """Tests zero conversion to +0.0 with ZERO=1 and SIGN=0."""
 
-    def test_zero(self, fpga, conv_i64_f64_rom_and_entry):
-        instructions, entry, _ = conv_i64_f64_rom_and_entry
-        res_bits, status = run_conv_i64_f64(fpga, instructions, entry, 0)
+    def test_zero(self, fpga: FpgaModel) -> None:
+        res_bits, status = run_conv_i64_f64(fpga, 0)
 
         assert res_bits == 0x0000000000000000
         assert bits_to_f64(res_bits) == 0.0
@@ -174,8 +144,7 @@ class TestConvI64F64Zeros:
 class TestConvI64F64Stack:
     """Tests stack depth invariants and underflow handling."""
 
-    def test_net_stack_depth(self, fpga, conv_i64_f64_rom_and_entry):
-        instructions, entry, _ = conv_i64_f64_rom_and_entry
+    def test_net_stack_depth(self, fpga: FpgaModel) -> None:
         # Push sentinel word, then 64-bit int
         user_push32(fpga, 0xCAFEBABE)
         user_push64(fpga, 0xFFFFFFFFFFFFFFFE)  # -2
@@ -183,8 +152,7 @@ class TestConvI64F64Stack:
         # Initial stack depth = 3 words (1 sentinel + 2 for int64)
         assert fpga.reg_file.sp.read_int() == 3
 
-        fpga.reg_file.upc.write(entry)
-        fpga.dispatcher._run(instructions)
+        fpga.dispatcher.execute(UserOpcode.CONV_I64_F64)
 
         # In-place conversion: net depth remains 3 words (1 sentinel + 2 for float64)
         assert fpga.reg_file.sp.read_int() == 3
@@ -197,22 +165,18 @@ class TestConvI64F64Stack:
         sentinel = user_pop32(fpga)
         assert sentinel == 0xCAFEBABE
 
-    def test_stack_underflow_empty(self, fpga, conv_i64_f64_rom_and_entry):
-        instructions, entry, _ = conv_i64_f64_rom_and_entry
-        fpga.reg_file.upc.write(entry)
-        fpga.dispatcher._run(instructions)
+    def test_stack_underflow_empty(self, fpga: FpgaModel) -> None:
+        fpga.dispatcher.execute(UserOpcode.CONV_I64_F64)
 
         assert bool(fpga.reg_file.status.read_int() & (1 << StatusFlag.ERR.value)) is True
         assert fpga.reg_file.sp.read_int() == 0
 
-    def test_stack_underflow_partial(self, fpga, conv_i64_f64_rom_and_entry):
-        instructions, entry, _ = conv_i64_f64_rom_and_entry
+    def test_stack_underflow_partial(self, fpga: FpgaModel) -> None:
         # Only push 1 word (4 bytes) when 2 words (8 bytes) are required
         user_push32(fpga, 0x12345678)
         assert fpga.reg_file.sp.read_int() == 1
 
-        fpga.reg_file.upc.write(entry)
-        fpga.dispatcher._run(instructions)
+        fpga.dispatcher.execute(UserOpcode.CONV_I64_F64)
 
         assert bool(fpga.reg_file.status.read_int() & (1 << StatusFlag.ERR.value)) is True
         assert fpga.reg_file.sp.read_int() == 0

@@ -7,12 +7,9 @@ from lark.exceptions import LarkError, VisitError
 from fpu_asm.preprocessor import (
     AssemblerError,
     AssemblySyntaxError,
-    IncludeError,
-    CircularIncludeError,
     UndefinedSymbolError,
     Preprocessor,
     PreprocessedSource,
-    SourceLocation,
 )
 from fpu_emu.hardware.reg import Reg
 from fpu_emu.hardware.register import StatusFlag
@@ -59,6 +56,7 @@ TABLE_MAP = {
 @dataclass(frozen=True)
 class IndirectReg:
     """Represents a register used for indirect memory addressing, e.g. [C]."""
+
     reg: Reg
 
 
@@ -70,22 +68,35 @@ class Pass1SymbolCollector(Visitor):
         self.current_address: int = 0
 
     def dir_org(self, tree: Tree):
-        token = tree.children[0].children[-1]
+        child = tree.children[0]
+        assert isinstance(child, Tree)
+        token = child.children[-1]
+        assert isinstance(token, Token)
         self.current_address = self._parse_int(token)
 
     def dir_equ(self, tree: Tree):
-        name = str(tree.children[0].value)
-        token = tree.children[1].children[-1]
+        first = tree.children[0]
+        assert isinstance(first, Token)
+        name = str(first.value)
+        second = tree.children[1]
+        assert isinstance(second, Tree)
+        token = second.children[-1]
+        assert isinstance(token, Token)
         self.symbols[name] = self._parse_int(token)
 
     def dir_align(self, tree: Tree):
-        token = tree.children[0].children[-1]
+        child = tree.children[0]
+        assert isinstance(child, Tree)
+        token = child.children[-1]
+        assert isinstance(token, Token)
         n = self._parse_int(token)
         if n > 0 and self.current_address % n != 0:
             self.current_address = ((self.current_address + n - 1) // n) * n
 
     def label(self, tree: Tree):
-        name = str(tree.children[0].value)
+        first = tree.children[0]
+        assert isinstance(first, Token)
+        name = str(first.value)
         self.symbols[name] = self.current_address
 
     def instruction(self, _tree: Tree):
@@ -113,13 +124,13 @@ class Pass2Encoder(Transformer):
         self.preprocessed = preprocessed
         self.current_address = 0
 
-    def HEX_INT(self, token: Union[str | Tree]):
+    def HEX_INT(self, token: Token):
         return int(token.value, 16)
 
-    def BIN_INT(self, token: Union[str | Tree]):
+    def BIN_INT(self, token: Token):
         return int(token.value, 2)
 
-    def SIGNED_INT(self, token):
+    def SIGNED_INT(self, token: Token):
         return int(token.value, 10)
 
     def SYMBOL(self, token):
@@ -254,9 +265,7 @@ class Pass2Encoder(Transformer):
             return norm_reg, 0, is_64
         return Reg.IMM, int(val), False
 
-    def _parse_ternary_sources(
-        self, s1_child, s2_child
-    ) -> Tuple[Reg, Reg, int, bool, bool]:
+    def _parse_ternary_sources(self, s1_child, s2_child) -> Tuple[Reg, Reg, int, bool, bool]:
         src1_cand, imm1, is_64_s1 = self._parse_reg_or_imm(s1_child)
         src2_cand, imm2, is_64_s2 = self._parse_reg_or_imm(s2_child)
         if src1_cand == Reg.IMM and src2_cand == Reg.IMM:
@@ -284,9 +293,7 @@ class Pass2Encoder(Transformer):
 
         rem = len(children) - idx
         if rem == 2:
-            src1, src2, imm, is_64_s1, is_64_s2 = self._parse_ternary_sources(
-                children[idx], children[idx + 1]
-            )
+            src1, src2, imm, is_64_s1, is_64_s2 = self._parse_ternary_sources(children[idx], children[idx + 1])
         else:
             src1 = Reg.NONE
             is_64_s1 = False
@@ -382,9 +389,7 @@ class Pass2Encoder(Transformer):
 
         rem = len(children) - idx
         if rem == 2:
-            src1, src2, imm, is_64_s1, is_64_s2 = self._parse_ternary_sources(
-                children[idx], children[idx + 1]
-            )
+            src1, src2, imm, is_64_s1, is_64_s2 = self._parse_ternary_sources(children[idx], children[idx + 1])
         else:
             src1 = Reg.NONE
             is_64_s1 = False
@@ -415,9 +420,7 @@ class Pass2Encoder(Transformer):
 
         rem = len(children) - idx
         if rem == 2:
-            src1, src2, imm, is_64_s1, is_64_s2 = self._parse_ternary_sources(
-                children[idx], children[idx + 1]
-            )
+            src1, src2, imm, is_64_s1, is_64_s2 = self._parse_ternary_sources(children[idx], children[idx + 1])
         else:
             src1 = Reg.NONE
             is_64_s1 = False
@@ -775,9 +778,7 @@ class Assembler:
         preprocessed = self.preprocessor.process_string(source_code, base_dir=base_dir)
         return self._assemble_preprocessed(preprocessed)
 
-    def _assemble_preprocessed(
-        self, preprocessed: PreprocessedSource
-    ) -> List[Tuple[int, MicroInstruction]]:
+    def _assemble_preprocessed(self, preprocessed: PreprocessedSource) -> List[Tuple[int, MicroInstruction]]:
         # Parse into Lark AST
         try:
             tree = self.parser.parse(preprocessed.text)

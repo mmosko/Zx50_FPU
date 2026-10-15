@@ -30,7 +30,6 @@ def bits_to_f64(val: int) -> float:
     return struct.unpack(">d", struct.pack(">Q", val & MASK_64))[0]
 
 
-
 def user_push32(fpga: FpgaModel, val: int) -> None:
     """Simulates a user pushing a 32-bit word onto the math stack."""
     fpga.reg_file.al.write(val & MASK_32)

@@ -37,9 +37,10 @@ def test_user_opcode_abs_i32(
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ZERO) == exp_zf
     assert fpga.reg_file.status.is_bit_set(StatusFlag.SIGN) == exp_sf
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW) == exp_vf, desc
 
     res = user_pop32(fpga)
-    assert res == expected_res
+    assert res == expected_res, desc
 
 
 def test_user_opcode_abs_i32_underflow(fpga: FpgaModel) -> None:
@@ -78,9 +79,10 @@ def test_user_opcode_abs_i64(
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ZERO) == exp_zf
     assert fpga.reg_file.status.is_bit_set(StatusFlag.SIGN) == exp_sf
+    assert fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW) == exp_vf, desc
 
     res = user_pop64(fpga)
-    assert res == expected_res
+    assert res == expected_res, desc
 
 
 def test_user_opcode_abs_i64_underflow(fpga: FpgaModel) -> None:

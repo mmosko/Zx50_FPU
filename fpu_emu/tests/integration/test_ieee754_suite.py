@@ -28,6 +28,7 @@ IEEE754_SUITE_DIR = Path(__file__).resolve().parent.parent.parent.parent / "ieee
 # 1. Vector Parser Tests
 # ==============================================================================
 
+
 def test_parse_operand_bits_specials():
     """Verifies that special IEEE-754 bit patterns are parsed correctly."""
     # 32-bit specials
@@ -91,22 +92,27 @@ def test_parse_fptest_line_trapped():
 # 2. Opcode Matcher Tests
 # ==============================================================================
 
+
 def test_opcode_matcher_implemented():
     """Tests matching supported ProgrammersGuide opcodes."""
     line_add = "b32+ =0 +1.000000P0 +1.000000P0 -> +1.000000P1"
     vec_add = parse_fptest_line(line_add)
+    assert vec_add is not None
     assert match_test_vector(vec_add) == UserOpcode.ADD_F32
 
     line_mul = "b32* =0 +1.000000P0 +1.000000P0 -> +1.000000P0"
     vec_mul = parse_fptest_line(line_mul)
+    assert vec_mul is not None
     assert match_test_vector(vec_mul) == UserOpcode.MUL_F32
 
     line_chs = "b32~ =0 +1.000000P0 -> -1.000000P0"
     vec_chs = parse_fptest_line(line_chs)
+    assert vec_chs is not None
     assert match_test_vector(vec_chs) == UserOpcode.CHS_F32
 
     line_abs = "b32A =0 -1.000000P0 -> +1.000000P0"
     vec_abs = parse_fptest_line(line_abs)
+    assert vec_abs is not None
     assert match_test_vector(vec_abs) == UserOpcode.ABS_F32
 
 
@@ -114,6 +120,7 @@ def test_opcode_matcher_div_f64():
     """Verifies that DIV_F64 is matched and recognized as fully implemented."""
     line_div64 = "b64/ =0 +1.0000000000000P0 +1.0000000000000P0 -> +1.0000000000000P0"
     vec_div64 = parse_fptest_line(line_div64)
+    assert vec_div64 is not None
     opcode = match_test_vector(vec_div64)
     assert opcode == UserOpcode.DIV_F64
     assert is_stubbed_pass_through(opcode) is False
@@ -123,6 +130,7 @@ def test_opcode_matcher_unsupported_rounding():
     """Vectors with rounding modes other than =0 must not be matched."""
     line = "b32+ > +1.000000P0 +1.000000P0 -> +1.000000P1"
     vec = parse_fptest_line(line)
+    assert vec is not None
     assert match_test_vector(vec) is None
 
 
@@ -145,16 +153,19 @@ def test_opcode_matcher_unsupported_ops():
     """
     line_fma = "b32*+ =0 +1.0P0 +1.0P0 +1.0P0 -> +1.0P1"
     vec_fma = parse_fptest_line(line_fma)
+    assert vec_fma is not None
     assert match_test_vector(vec_fma) is None
 
     line_cls = "b32?f =0 -Inf -> 0x0"
     vec_cls = parse_fptest_line(line_cls)
+    assert vec_cls is not None
     assert match_test_vector(vec_cls) is None
 
 
 # ==============================================================================
 # 3. ProgrammersGuide Program Generation Tests
 # ==============================================================================
+
 
 def test_programmersguide_z80_program_generation():
     """Verifies that generate_z80_program generates the canonical ProgrammersGuide Z80 sequence."""
@@ -172,6 +183,7 @@ def test_programmersguide_z80_program_generation():
 # 4. Integration Tests Running Actual Test Vectors
 # ==============================================================================
 
+
 def test_ieee754_div_f64_execution(fpga: FpgaModel):
     """Verifies that DIV_F64 executes real IEEE-754 double precision division on FpgaModel."""
     vectors = [
@@ -186,6 +198,7 @@ def test_ieee754_div_f64_execution(fpga: FpgaModel):
     ]
     for line in vectors:
         vec = parse_fptest_line(line)
+        assert vec is not None
         opcode = match_test_vector(vec)
         assert opcode == UserOpcode.DIV_F64
 
@@ -199,19 +212,28 @@ def test_ieee754_syntax_canonical_vectors(fpga: FpgaModel):
     # Addition example
     line_add = "b32+ =0 i  -1.6E9177P49 -1.7FFFFFP127 -> -1.7FFFFFP127 x"
     vec_add = parse_fptest_line(line_add)
-    res_add = execute_test_vector(fpga, vec_add, match_test_vector(vec_add))
+    assert vec_add is not None
+    op_add = match_test_vector(vec_add)
+    assert op_add is not None
+    res_add = execute_test_vector(fpga, vec_add, op_add)
     assert res_add.success is True, res_add.error_message
 
     # SQRT domain error (negative input) with invalid exception
     line_sqrt = "b32V =0  -1.7FFFFFP127 -> Q i"
     vec_sqrt = parse_fptest_line(line_sqrt)
-    res_sqrt = execute_test_vector(fpga, vec_sqrt, match_test_vector(vec_sqrt))
+    assert vec_sqrt is not None
+    op_sqrt = match_test_vector(vec_sqrt)
+    assert op_sqrt is not None
+    res_sqrt = execute_test_vector(fpga, vec_sqrt, op_sqrt)
     assert res_sqrt.success is True, res_sqrt.error_message
 
     # SQRT with trapped invalid exception (#)
     line_sqrt_trap = "b32V =0 i -Inf -> # i"
     vec_sqrt_trap = parse_fptest_line(line_sqrt_trap)
-    res_sqrt_trap = execute_test_vector(fpga, vec_sqrt_trap, match_test_vector(vec_sqrt_trap))
+    assert vec_sqrt_trap is not None
+    op_sqrt_trap = match_test_vector(vec_sqrt_trap)
+    assert op_sqrt_trap is not None
+    res_sqrt_trap = execute_test_vector(fpga, vec_sqrt_trap, op_sqrt_trap)
     assert res_sqrt_trap.success is True, res_sqrt_trap.error_message
 
 

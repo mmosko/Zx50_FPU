@@ -9,7 +9,6 @@ from fpu_asm.preprocessor import (
     UndefinedSymbolError,
 )
 from fpu_emu.micro_opcodes import MicroOp
-from fpu_emu.hardware.reg import Reg
 
 
 def test_preprocessor_no_includes():
@@ -38,11 +37,11 @@ def test_preprocessor_quoted_and_unquoted_includes(tmp_path: Path):
 
     main = tmp_path / "main.fasm"
     main.write_text(
-        'ADD AL, BL\n'
+        "ADD AL, BL\n"
         '.include "sub/inc1.fasm"\n'
         ".include 'sub/inc2.fasm'   ; single quote with comment\n"
-        '.include sub/inc3.fasm ; unquoted\n'
-        'HALT\n',
+        ".include sub/inc3.fasm ; unquoted\n"
+        "HALT\n",
         encoding="utf-8",
     )
 
@@ -155,19 +154,13 @@ def test_preprocessor_malformed_include(tmp_path: Path):
 def test_assembler_end_to_end_includes(tmp_path: Path):
     sub = tmp_path / "sub.fasm"
     sub.write_text(
-        "sub_routine:\n"
-        "    SUB AL, BL\n"
-        "    RET\n",
+        "sub_routine:\n    SUB AL, BL\n    RET\n",
         encoding="utf-8",
     )
 
     main = tmp_path / "main.fasm"
     main.write_text(
-        "entry:\n"
-        "    ADD AL, BL\n"
-        "    CALL sub_routine\n"
-        "    HALT\n"
-        ".include sub.fasm\n",
+        "entry:\n    ADD AL, BL\n    CALL sub_routine\n    HALT\n.include sub.fasm\n",
         encoding="utf-8",
     )
 
@@ -186,17 +179,13 @@ def test_assembler_end_to_end_includes(tmp_path: Path):
 def test_assembler_syntax_error_provenance(tmp_path: Path):
     sub = tmp_path / "broken_sub.fasm"
     sub.write_text(
-        "; line 1\n"
-        "; line 2\n"
-        "SYNTAX ERROR HERE\n",
+        "; line 1\n; line 2\nSYNTAX ERROR HERE\n",
         encoding="utf-8",
     )
 
     main = tmp_path / "main.fasm"
     main.write_text(
-        "ADD AL, BL\n"
-        ".include broken_sub.fasm\n"
-        "HALT\n",
+        "ADD AL, BL\n.include broken_sub.fasm\nHALT\n",
         encoding="utf-8",
     )
 
@@ -219,9 +208,7 @@ def test_assembler_undefined_symbol_provenance(tmp_path: Path):
 
     main = tmp_path / "main.fasm"
     main.write_text(
-        "NOP\n"
-        "NOP\n"
-        ".include bad_sym.fasm\n",
+        "NOP\nNOP\n.include bad_sym.fasm\n",
         encoding="utf-8",
     )
 

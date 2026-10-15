@@ -15,11 +15,29 @@ from fpu_emu.user_opcodes import UserOpcode
         (100, 200, 300, False, False, False, False, "100 + 200"),
         # Carry propagation across 32-bit boundary into high word
         (0x00000001_FFFFFFFF, 1, 0x00000002_00000000, False, False, False, False, "low word carry to high word"),
-        (0x00000000_00000001, 0x00000001_00000000, 0x00000001_00000001, False, False, False, False, "low and high non-zero"),
+        (
+            0x00000000_00000001,
+            0x00000001_00000000,
+            0x00000001_00000001,
+            False,
+            False,
+            False,
+            False,
+            "low and high non-zero",
+        ),
         (0x00000001_00000000, 0x00000002_00000000, 0x00000003_00000000, False, False, False, False, "high words only"),
         # Unsigned boundary & carry out (64-bit)
         (0xFFFFFFFFFFFFFFFF, 1, 0, True, True, False, False, "max uint64 + 1"),
-        (0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFE, True, False, True, False, "max uint64 + max uint64"),
+        (
+            0xFFFFFFFFFFFFFFFF,
+            0xFFFFFFFFFFFFFFFF,
+            0xFFFFFFFFFFFFFFFE,
+            True,
+            False,
+            True,
+            False,
+            "max uint64 + max uint64",
+        ),
         # Signed positive overflow
         (0x7FFFFFFFFFFFFFFF, 1, 0x8000000000000000, False, False, True, True, "max int64 + 1"),
         (0x7FFFFFFFFFFFFFFF, 0x7FFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFE, False, False, True, True, "max int64 + max int64"),
@@ -33,7 +51,15 @@ from fpu_emu.user_opcodes import UserOpcode
     ],
 )
 def test_user_opcode_add_i64(
-    fpga: FpgaModel, a: int, b: int, expected_res: int, exp_cf: bool, exp_zf: bool, exp_sf: bool, exp_vf: bool, desc: str
+    fpga: FpgaModel,
+    a: int,
+    b: int,
+    expected_res: int,
+    exp_cf: bool,
+    exp_zf: bool,
+    exp_sf: bool,
+    exp_vf: bool,
+    desc: str,
 ) -> None:
     """Tests executing UserOpcode.ADD_I64 via dispatcher with 64-bit stack operands."""
     # Push operand a then operand b
@@ -58,7 +84,7 @@ def test_user_opcode_add_i64(
 
     # Pop result from stack
     res = user_pop64(fpga)
-    assert res == expected_res
+    assert res == expected_res, desc
     assert fpga.reg_file.sp.read_int() == 0
 
 

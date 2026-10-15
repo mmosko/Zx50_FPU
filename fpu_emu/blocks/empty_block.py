@@ -13,4 +13,3 @@ class EmptyBlock(FunctionalBlock):
         self._clock.tick()
         # would set the EXEC_DONE flag, but that is implicit in returning
         self._outputs.exec_done.set(1)
-

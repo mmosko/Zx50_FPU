@@ -40,8 +40,7 @@ class Bus(Readable):
             raw_val = buf
         else:
             assert len(buf) == self._num_bytes, (
-                f"Bus {self._name}: Expected {self._num_bytes} bytes for "
-                f"{self._size_in_bits}-bit bus, got {len(buf)}"
+                f"Bus {self._name}: Expected {self._num_bytes} bytes for {self._size_in_bits}-bit bus, got {len(buf)}"
             )
             raw_val = int.from_bytes(buf, byteorder="little")
 

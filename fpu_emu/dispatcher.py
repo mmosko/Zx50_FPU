@@ -1,7 +1,7 @@
 """Command Dispatcher and Micro-sequencer execution engine."""
 
 import logging
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 from fpu_emu.blocks.functional_block import FunctionalBlock
 from fpu_emu.fpga_resource import fpga_resource
@@ -11,7 +11,7 @@ from fpu_emu.hardware.mux import Mux
 from fpu_emu.hardware.reg import Reg
 from fpu_emu.hardware.register import Register, StatusRegister
 from fpu_emu.hardware.registers import StatusFlag, UpcOverflowError
-from fpu_emu.micro_code import MicroCode
+from fpu_emu.micro_code import EbrMicroCode, ListMicroCode, MicroCodeSource
 from fpu_emu.micro_instruction import MicroInstruction
 from fpu_emu.micro_opcodes import MicroOp
 from fpu_emu.user_opcodes import UserOpcode
@@ -29,26 +29,24 @@ logger = logging.getLogger(__name__)
     shared_unit="dispatcher_sequencer",
 )
 class Dispatcher:
-    """
-    Dispatches user opcodes and executes microcode instruction streams.
+    """Dispatches user opcodes and executes microcode instruction streams."""
 
-    NOTE: Does not use Memory for microcode.  Currently, micro_code.py directly loads the
-    MicroInstructions from a generated file output by `fpu_asm`.
-    """
-
-    def __init__(self,
-                 blocks: List[FunctionalBlock],
-                 upc: Register,
-                 status: StatusRegister,
-                 sp: Register,
-                 osp: Register,
-                 instr_reg: Register,
-                 imm_reg: Register,
-                 memory: Memory,
-                 clock: Clock,
-                 writeback_mux: WritebackMux,
-                 upc_mux: Mux,
-                 c_reg: Register):
+    def __init__(
+        self,
+        blocks: List[FunctionalBlock],
+        upc: Register,
+        status: StatusRegister,
+        sp: Register,
+        osp: Register,
+        instr_reg: Register,
+        imm_reg: Register,
+        memory: Memory,
+        clock: Clock,
+        writeback_mux: WritebackMux,
+        upc_mux: Mux,
+        c_reg: Register,
+        microcode: Optional[MicroCodeSource] = None,
+    ):
         self._blocks = blocks
         self._memory = memory
         self._clock = clock
@@ -62,9 +60,9 @@ class Dispatcher:
         self._halted: bool = False
         self._batch_mode: bool = False
         self._blocking_mode: bool = True
-        self._zero = bytes(0)
         self._writeback_mux = writeback_mux
         self._c_reg = c_reg
+        self._microcode: MicroCodeSource = microcode if microcode is not None else EbrMicroCode(memory=self._memory)
 
     @property
     def upc(self) -> int:
@@ -134,7 +132,7 @@ class Dispatcher:
         """Executes a single computational opcode immediately with BUSY management."""
         self._status.set_bit(StatusFlag.BUSY, True)
         try:
-            start_addr = MicroCode.get_address(user_opcode)
+            start_addr = self._microcode.get_address(user_opcode)
 
             # The lower nibble of the UserOpcode is often a count
             self._c_reg.write(user_opcode.value & 0x0F)
@@ -145,7 +143,7 @@ class Dispatcher:
             if self._status.is_bit_set(StatusFlag.BUSY):
                 self._status.set_bit(StatusFlag.BUSY, False)
 
-    def _run(self, microcode: Optional[List[MicroInstruction]] = None):
+    def _run(self, microcode: Optional[Sequence[MicroInstruction]] = None):
         """Micro-sequencer execution loop.
 
         Fetches each micro-instruction (pipelined), then executes it.
@@ -154,8 +152,7 @@ class Dispatcher:
         Cycle T1..TN: execute reg.instr, update UPC from upc_mux on writeback edge,
         and latch next fetched instruction into reg.instr.
         """
-        if microcode is not None:
-            MicroCode.set_override(microcode)
+        active_microcode: MicroCodeSource = ListMicroCode(microcode) if microcode is not None else self._microcode
 
         saved_halted = self._halted
         self._halted = False
@@ -164,7 +161,7 @@ class Dispatcher:
         current_upc = self._upc.read_int()
 
         # Cycle T0: Fetch instruction at _upc, calculate _upc_next
-        fetch_instr = MicroCode.get_instruction(current_upc)
+        fetch_instr = active_microcode.get_instruction(current_upc)
 
         # The UpcAdder is always executing in parallel
         self._upc_mux.select(0)
@@ -213,8 +210,6 @@ class Dispatcher:
 
                 if is_jump:
                     branch_target = upc_next & 0x7FF
-                    if self._halted or not MicroCode.has_instruction(branch_target):
-                        break
                     # Branch taken:
                     # 1. UPC <= branch_target (from UPC_MUX input 1, no second adder)
                     self._upc.write(branch_target)
@@ -222,19 +217,14 @@ class Dispatcher:
                     nop_instr.to_register(self._instr_reg, self._imm_reg)
                 else:
                     current_upc = self._upc.read_int()
-                    if self._halted or not MicroCode.has_instruction(current_upc):
-                        break
                     # Latch fetched instruction into reg.instr
-                    fetch_instr = MicroCode.get_instruction(current_upc)
+                    fetch_instr = active_microcode.get_instruction(current_upc)
                     fetch_instr.to_register(self._instr_reg, self._imm_reg)
                     # UPC <= UPC + 1 (from UpcAdder)
                     self._upc.write(upc_next & 0x7FF)
 
         finally:
-            if microcode is not None:
-                MicroCode.set_override(None)
             self._halted = saved_halted
-
 
     # def _execute_batch(self):
     #     """Executes all queued commands in RAM sequentially with BUSY held high."""

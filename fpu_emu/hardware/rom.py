@@ -21,6 +21,11 @@ class Rom:
             self._data = bytearray([0xFF] * size)
 
     @property
+    def rom_path(self) -> Path:
+        """Returns the path to the backing ROM binary image."""
+        return self._rom_path
+
+    @property
     def size(self) -> int:
         """Returns the total ROM capacity in bytes."""
         return len(self._data)
@@ -36,5 +41,7 @@ class Rom:
         if length <= 0:
             raise ValueError(f"length must be positive, got {length}")
         if not (0 <= addr and addr + length <= len(self._data)):
-            raise IndexError(f"ROM access at 0x{addr:04X} with length {length} exceeds ROM bounds (size={len(self._data)})")
+            raise IndexError(
+                f"ROM access at 0x{addr:04X} with length {length} exceeds ROM bounds (size={len(self._data)})"
+            )
         return bytearray(self._data[addr : addr + length])

@@ -30,12 +30,14 @@ def test_control_jmp(fpga: FpgaModel):
         MicroInstruction(op=MicroOp.ADD, w=IW.W32, dst=Reg.AL, src2=Reg.BL),
         # 2: Target
         MicroInstruction(op=MicroOp.ADD, w=IW.W32, dst=Reg.AL, src2=Reg.DL),
+        # 3: Halt
+        MicroInstruction(op=MicroOp.HALT),
     ]
 
     fpga.dispatcher._run(microcode)
     # AL should be 0x10 + 0x50 = 0x60 (instruction 1 skipped)
     assert fpga.reg_file.al.read_int() == 0x60
-    assert fpga.dispatcher.upc == 3
+    assert fpga.dispatcher.upc == 4
 
 
 def test_control_jz_branch_taken_and_not_taken(fpga: FpgaModel):
@@ -123,7 +125,7 @@ def test_control_jnz_all_flags(fpga: FpgaModel, flag: StatusFlag, bit_set: bool,
     ]
     fpga.dispatcher._run(microcode)
     expected_al = 0x60 if should_branch else 0x80
-    assert fpga.reg_file.al.read_int() == expected_al
+    assert fpga.reg_file.al.read_int() == expected_al, desc
 
 
 @pytest.mark.parametrize(
@@ -157,7 +159,7 @@ def test_control_jz_all_flags(fpga: FpgaModel, flag: StatusFlag, bit_set: bool, 
     ]
     fpga.dispatcher._run(microcode)
     expected_al = 0x60 if should_branch else 0x80
-    assert fpga.reg_file.al.read_int() == expected_al
+    assert fpga.reg_file.al.read_int() == expected_al, desc
 
 
 def test_control_djnz_loop(fpga: FpgaModel):
@@ -214,9 +216,9 @@ def test_control_nop(fpga: FpgaModel):
     """NOP executes as a 1-cycle bubble with no writeback or status changes."""
     fpga.reg_file.al.write(0x12345678)
     initial_cycles = fpga.clock.cycles
-    fpga.dispatcher._run([MicroInstruction(op=MicroOp.NOP)])
-    # Pipeline T0 (1 cycle) + NOP execute (1 cycle) = 2 cycles elapsed
-    assert fpga.clock.cycles - initial_cycles == 2
+    fpga.dispatcher._run([MicroInstruction(op=MicroOp.NOP), MicroInstruction(op=MicroOp.HALT)])
+    # Pipeline T0 (1 cycle) + NOP execute (1 cycle) + HALT execute (1 cycle) = 3 cycles elapsed
+    assert fpga.clock.cycles - initial_cycles == 3
     assert fpga.reg_file.al.read_int() == 0x12345678
     assert fpga.reg_file.status.read_int() == 0
 
@@ -244,4 +246,3 @@ def test_control_unsupported_opcode_raises(fpga: FpgaModel):
     MicroInstruction(op=MicroOp.ADD).to_register(fpga.reg_file.instr, fpga.reg_file.imm)
     with pytest.raises(HardwareBusError, match="Unsupported opcode"):
         fpga.control_block.execute()
-

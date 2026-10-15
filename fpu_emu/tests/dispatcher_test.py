@@ -1,7 +1,6 @@
 import pytest
 from pathlib import Path
 
-from fpu_emu.blocks.functional_block import FunctionalBlock
 from fpu_emu.fpga_model import FpgaModel
 from fpu_emu.hardware.reg import Reg
 from fpu_emu.hardware.registers import StatusFlag, UpcOverflowError
@@ -18,46 +17,48 @@ def fpga(tmp_path: Path):
 
 
 def test_dispatcher_single_instruction_pipeline(fpga: FpgaModel):
-    """Pipelined single instruction execution: T0 (fetch/prime), T1 (execute/writeback)."""
+    """Pipelined single instruction execution: T0 (fetch/prime), T1 (execute/writeback), T2 (execute HALT)."""
     fpga.reg_file.al.write(0x10)
     fpga.reg_file.bl.write(0x25)
 
     microcode = [
-        MicroInstruction(op=MicroOp.ADD, w=IW.W32, dst=Reg.AL, src2=Reg.BL)
+        MicroInstruction(op=MicroOp.ADD, w=IW.W32, dst=Reg.AL, src2=Reg.BL),
+        MicroInstruction(op=MicroOp.HALT),
     ]
 
     start_cycle = fpga.clock.cycles
     fpga.dispatcher._run(microcode)
     elapsed = fpga.clock.cycles - start_cycle
 
-    # 1 cycle for T0 (fetch prime) + 1 cycle for T1 (execute) = 2 cycles total
-    assert elapsed == 2
+    # 1 cycle for T0 (fetch prime) + 1 cycle for T1 (execute ADD) + 1 cycle for T2 (execute HALT) = 3 cycles total
+    assert elapsed == 3
     assert fpga.reg_file.al.read_int() == 0x35
-    # UPC should have advanced to 1
-    assert fpga.dispatcher.upc == 1
+    # UPC advances at T0 (to 1) and T1 (to 2 when HALT is fetched)
+    assert fpga.dispatcher.upc == 2
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
 
 
 def test_dispatcher_multi_instruction_pipeline(fpga: FpgaModel):
-    """Pipelined multi-instruction execution: N instructions complete in N + 1 cycles."""
+    """Pipelined multi-instruction execution: N instructions + HALT complete in N + 2 cycles."""
     fpga.reg_file.al.write(0x100)
     fpga.reg_file.bl.write(0x50)
     fpga.reg_file.dl.write(0x30)
 
-    # microcode: AL = AL + BL (0x150), then AL = AL - DL (0x120)
+    # microcode: AL = AL + BL (0x150), then AL = AL - DL (0x120), then HALT
     microcode = [
         MicroInstruction(op=MicroOp.ADD, w=IW.W32, dst=Reg.AL, src2=Reg.BL),
         MicroInstruction(op=MicroOp.SUB, w=IW.W32, dst=Reg.AL, src2=Reg.DL),
+        MicroInstruction(op=MicroOp.HALT),
     ]
 
     start_cycle = fpga.clock.cycles
     fpga.dispatcher._run(microcode)
     elapsed = fpga.clock.cycles - start_cycle
 
-    # T0 (fetch I0), T1 (exec I0, fetch I1), T2 (exec I1) = 3 cycles total
-    assert elapsed == 3
+    # T0 (fetch I0), T1 (exec I0, fetch I1), T2 (exec I1, fetch HALT), T3 (exec HALT) = 4 cycles total
+    assert elapsed == 4
     assert fpga.reg_file.al.read_int() == 0x120
-    assert fpga.dispatcher.upc == 2
+    assert fpga.dispatcher.upc == 3
 
 
 def test_dispatcher_branch_updates_upc(fpga: FpgaModel):
@@ -75,13 +76,15 @@ def test_dispatcher_branch_updates_upc(fpga: FpgaModel):
         MicroInstruction(op=MicroOp.ADD, w=IW.W32, dst=Reg.AL, src2=Reg.BL),
         # 2: Target of jump: add DL (0x50) to AL (0x10)
         MicroInstruction(op=MicroOp.ADD, w=IW.W32, dst=Reg.AL, src2=Reg.DL),
+        # 3: Halt
+        MicroInstruction(op=MicroOp.HALT),
     ]
 
     fpga.dispatcher._run(microcode)
 
     # AL should be 0x10 + 0x50 = 0x60 (instruction 1 skipped)
     assert fpga.reg_file.al.read_int() == 0x60
-    assert fpga.dispatcher.upc == 3
+    assert fpga.dispatcher.upc == 4
 
 
 def test_dispatcher_upc_overflow_raises_error(fpga: FpgaModel):
@@ -131,5 +134,3 @@ def test_dispatcher_latches_opcode_low_nibble_into_c(fpga: FpgaModel):
     user_push32(fpga, f32_to_bits(678.90))
     fpga.dispatcher.execute(UserOpcode.CP_MEM13_TOS)
     assert fpga.reg_file.c.read_int() == 0x0D
-
-

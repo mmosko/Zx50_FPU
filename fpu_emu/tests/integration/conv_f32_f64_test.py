@@ -1,12 +1,10 @@
 """Integration tests for CONV_F32_F64 (0xC9) microcode operation."""
 
-from pathlib import Path
 import struct
 import pytest
-from fpu_asm.assembler import Assembler
+from fpu_emu.dispatcher import UserOpcode
 from fpu_emu.fpga_model import FpgaModel
 from fpu_emu.hardware.registers import StatusFlag
-from fpu_emu.hardware.rom import Rom
 from fpu_emu.tests.test_helpers import (
     bits_to_f64,
     f32_to_bits,
@@ -15,34 +13,14 @@ from fpu_emu.tests.test_helpers import (
 )
 
 
-@pytest.fixture(scope="module")
-def conv_f32_f64_ucode():
-    """Assembles the CONV_F32_F64 routine with its dependencies in-memory."""
-    asm = Assembler()
-    source = """
-.include "fpu_emu/asm/pop_two_32.asm"
-.include "fpu_emu/asm/normalize_f64.asm"
-.include "fpu_emu/asm/conv_f32_f64.asm"
-"""
-    assembled = asm.assemble(source)
-    instructions = [instr for _, instr in assembled]
-    entry_addr = asm.symbols["USER_CONV_F32_F64"]
-    return instructions, entry_addr
-
-
-def run_conv_f32_f64(tmp_path: Path, ucode_bundle, input_bits: int):
+def run_conv_f32_f64(fpga: FpgaModel, input_bits: int) -> tuple[int, int]:
     """Executes CONV_F32_F64 on FpgaModel with input_bits on the stack."""
-    instructions, entry_addr = ucode_bundle
-    rom = Rom(size=1024, rom_path=tmp_path / "dummy.rom")
-    fpga = FpgaModel(rom=rom)
-
     user_push32(fpga, input_bits)
-    fpga.reg_file.upc.write(entry_addr)
-    fpga.dispatcher._run(instructions)
+    fpga.dispatcher.execute(UserOpcode.CONV_F32_F64)
 
     result_bits = user_pop64(fpga)
     status_reg = fpga.reg_file.status.read_int()
-    return result_bits, status_reg, fpga
+    return result_bits, status_reg
 
 
 @pytest.mark.parametrize(
@@ -73,35 +51,35 @@ def run_conv_f32_f64(tmp_path: Path, ucode_bundle, input_bits: int):
         1e-37,
     ],
 )
-def test_conv_f32_f64_normal_numbers(tmp_path: Path, conv_f32_f64_ucode, val: float):
+def test_conv_f32_f64_normal_numbers(fpga: FpgaModel, val: float) -> None:
     input_bits = f32_to_bits(val)
-    result_bits, _, _ = run_conv_f32_f64(tmp_path, conv_f32_f64_ucode, input_bits)
+    result_bits, _ = run_conv_f32_f64(fpga, input_bits)
     actual_f64 = bits_to_f64(result_bits)
     expected_f64 = struct.unpack(">d", struct.pack(">d", struct.unpack(">f", struct.pack(">f", val))[0]))[0]
     assert actual_f64 == expected_f64
 
 
-def test_conv_f32_f64_signed_zeros(tmp_path: Path, conv_f32_f64_ucode):
+def test_conv_f32_f64_signed_zeros(fpga: FpgaModel) -> None:
     # Positive zero
-    pos_res, pos_status, _ = run_conv_f32_f64(tmp_path, conv_f32_f64_ucode, 0x00000000)
+    pos_res, pos_status = run_conv_f32_f64(fpga, 0x00000000)
     assert pos_res == 0x0000000000000000
     assert (pos_status & (1 << StatusFlag.ZERO.value)) != 0
     assert (pos_status & (1 << StatusFlag.SIGN.value)) == 0
 
     # Negative zero
-    neg_res, neg_status, _ = run_conv_f32_f64(tmp_path, conv_f32_f64_ucode, 0x80000000)
+    neg_res, neg_status = run_conv_f32_f64(fpga, 0x80000000)
     assert neg_res == 0x8000000000000000
     assert (neg_status & (1 << StatusFlag.ZERO.value)) != 0
     assert (neg_status & (1 << StatusFlag.SIGN.value)) != 0
 
 
-def test_conv_f32_f64_infinities(tmp_path: Path, conv_f32_f64_ucode):
+def test_conv_f32_f64_infinities(fpga: FpgaModel) -> None:
     # +Infinity
-    pos_inf, _, _ = run_conv_f32_f64(tmp_path, conv_f32_f64_ucode, 0x7F800000)
+    pos_inf, _ = run_conv_f32_f64(fpga, 0x7F800000)
     assert pos_inf == 0x7FF0000000000000
 
     # -Infinity
-    neg_inf, _, _ = run_conv_f32_f64(tmp_path, conv_f32_f64_ucode, 0xFF800000)
+    neg_inf, _ = run_conv_f32_f64(fpga, 0xFF800000)
     assert neg_inf == 0xFFF0000000000000
 
 
@@ -118,8 +96,8 @@ def test_conv_f32_f64_infinities(tmp_path: Path, conv_f32_f64_ucode):
         0x807FFFFF,  # Largest negative subnormal
     ],
 )
-def test_conv_f32_f64_subnormals(tmp_path: Path, conv_f32_f64_ucode, subnormal_u32: int):
-    result_bits, _, _ = run_conv_f32_f64(tmp_path, conv_f32_f64_ucode, subnormal_u32)
+def test_conv_f32_f64_subnormals(fpga: FpgaModel, subnormal_u32: int) -> None:
+    result_bits, _ = run_conv_f32_f64(fpga, subnormal_u32)
     actual_f64 = bits_to_f64(result_bits)
     expected_f64 = struct.unpack(">d", struct.pack(">d", struct.unpack(">f", struct.pack(">I", subnormal_u32))[0]))[0]
     assert actual_f64 == expected_f64
@@ -136,20 +114,15 @@ def test_conv_f32_f64_subnormals(tmp_path: Path, conv_f32_f64_ucode, subnormal_u
         (0x7FA55A55, 0x7FF4AB4AA0000000),  # SNaN with pattern
     ],
 )
-def test_conv_f32_f64_nans(tmp_path: Path, conv_f32_f64_ucode, nan_u32: int, expected_u64: int):
-    result_bits, _, _ = run_conv_f32_f64(tmp_path, conv_f32_f64_ucode, nan_u32)
+def test_conv_f32_f64_nans(fpga: FpgaModel, nan_u32: int, expected_u64: int) -> None:
+    result_bits, _ = run_conv_f32_f64(fpga, nan_u32)
     assert result_bits == expected_u64
 
 
-def test_conv_f32_f64_stack_underflow(tmp_path: Path, conv_f32_f64_ucode):
+def test_conv_f32_f64_stack_underflow(fpga: FpgaModel) -> None:
     """Verifies that an empty stack triggers ERR and halts without pushing."""
-    instructions, entry_addr = conv_f32_f64_ucode
-    rom = Rom(size=1024, rom_path=tmp_path / "dummy.rom")
-    fpga = FpgaModel(rom=rom)
-
     # Empty stack
-    fpga.reg_file.upc.write(entry_addr)
-    fpga.dispatcher._run(instructions)
+    fpga.dispatcher.execute(UserOpcode.CONV_F32_F64)
 
     # Error flag must be set
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR)

@@ -121,7 +121,9 @@ class AdderBlock(FunctionalBlock):
         assert instr.src2 is not Reg.NONE
         assert isinstance(instr.src2, Reg)
         assert instr.dst is not Reg.NONE
+        assert isinstance(instr.dst, Reg)
         src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
+        assert isinstance(src1, Reg)
 
         self._validate_src64(instr.dst)
         self._validate_src64(src1)
@@ -191,6 +193,7 @@ class AdderBlock(FunctionalBlock):
         assert isinstance(instr.src2, Reg)
         assert instr.dst is not Reg.NONE
         src1 = instr.src1 if instr.src1 is not Reg.NONE else instr.dst
+        assert isinstance(src1, Reg)
         self._validate_src64(instr.src2)
         self._validate_src64(src1)
 
@@ -330,6 +333,8 @@ class AdderBlock(FunctionalBlock):
         dst_reg = instr.dst
         exp_reg = instr.src1
         src_reg = instr.src2 if instr.src2 is not Reg.NONE else instr.dst
+        assert isinstance(dst_reg, Reg)
+        assert isinstance(exp_reg, Reg)
         assert isinstance(src_reg, Reg)
 
         return dst_reg, exp_reg, src_reg

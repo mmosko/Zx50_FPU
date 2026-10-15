@@ -41,7 +41,7 @@ def test_user_opcode_sub_u64(
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
 
     res = user_pop64(fpga)
-    assert res == expected_res
+    assert res == expected_res, desc
     assert fpga.reg_file.sp.read_int() == 0
 
 

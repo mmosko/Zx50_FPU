@@ -36,7 +36,7 @@ def test_bus():
     assert bus.read() == (0x0ABC).to_bytes(2, "little")
 
     # Set using bytes
-    bus.set(b"\xFF\x0F")  # 0x0FFF & 0x0FFF == 0x0FFF
+    bus.set(b"\xff\x0f")  # 0x0FFF & 0x0FFF == 0x0FFF
     assert bus.read_int() == 0x0FFF
 
     # Assert byte length mismatch
@@ -241,4 +241,3 @@ def test_datapath_muxes():
         muxes.hb_mux.select(Reg.UPC.value)
     with pytest.raises(AssertionError):
         muxes.hb_mux.select(Reg.NONE.value)
-

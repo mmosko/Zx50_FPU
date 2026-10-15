@@ -243,6 +243,7 @@ def test_fchs_64(fpga: FpgaModel):
 # New Ternary and Binary Tests
 # -------------------------------------------------------------------------
 
+
 def test_and_32_ternary(fpga: FpgaModel):
     # AND CL, AL, BL: CL = AL & BL, AL & BL unmodified
     fpga.reg_file.al.write(0x0000FFFF)

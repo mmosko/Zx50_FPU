@@ -62,9 +62,9 @@ class BoothMulCore:
                 case 1 | 2:
                     p += m_val
                 case 3:
-                    p += (m_val << 1)
+                    p += m_val << 1
                 case 4:
-                    p -= (m_val << 1)
+                    p -= m_val << 1
                 case 5 | 6:
                     p -= m_val
                 case _:

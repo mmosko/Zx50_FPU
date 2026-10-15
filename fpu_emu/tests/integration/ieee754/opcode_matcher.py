@@ -17,7 +17,6 @@ VECTOR_OPCODE_MAP: Dict[Tuple[int, str], UserOpcode] = {
     (32, "~"): UserOpcode.CHS_F32,
     (32, "A"): UserOpcode.ABS_F32,
     (32, "b64cff"): UserOpcode.CONV_F32_F64,
-
     # 64-bit Double-Precision
     (64, "+"): UserOpcode.ADD_F64,
     (64, "-"): UserOpcode.SUB_F64,

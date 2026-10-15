@@ -87,9 +87,7 @@ class Preprocessor:
     MALFORMED_INCLUDE_PATTERN = re.compile(r"^\s*\.include\b", re.IGNORECASE)
 
     def __init__(self, include_paths: Optional[List[Union[str, Path]]] = None):
-        self.include_paths: List[Path] = [
-            Path(p).resolve() for p in (include_paths or [])
-        ]
+        self.include_paths: List[Path] = [Path(p).resolve() for p in (include_paths or [])]
 
     def process_file(self, file_path: Union[str, Path]) -> PreprocessedSource:
         """Preprocesses a file from disk."""

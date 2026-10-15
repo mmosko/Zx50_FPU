@@ -3,7 +3,7 @@
 import math
 import pytest
 from fpu_emu.fpga_model import FpgaModel
-from fpu_emu.hardware.registers import Reg, StatusFlag
+from fpu_emu.hardware.registers import StatusFlag
 from fpu_emu.tests.test_helpers import bits_to_f32, bits_to_f64, user_pop32, user_pop64
 from fpu_emu.user_opcodes import UserOpcode
 
@@ -39,9 +39,7 @@ def test_push_const_f32(fpga: FpgaModel, opcode: UserOpcode, expected: float, de
     res_float = bits_to_f32(res_bits)
     assert fpga.reg_file.sp.read_int() == 0
 
-    assert pytest.approx(res_float, rel=1e-6) == expected, (
-        f"Failed {desc}: got {res_float}, expected {expected}"
-    )
+    assert pytest.approx(res_float, rel=1e-6) == expected, f"Failed {desc}: got {res_float}, expected {expected}"
 
 
 @pytest.mark.parametrize(
@@ -77,6 +75,4 @@ def test_push_const_f64(fpga: FpgaModel, opcode: UserOpcode, expected: float, de
     res_float = bits_to_f64(res_bits)
     assert fpga.reg_file.sp.read_int() == 0
 
-    assert pytest.approx(res_float, rel=1e-15) == expected, (
-        f"Failed {desc}: got {res_float}, expected {expected}"
-    )
+    assert pytest.approx(res_float, rel=1e-15) == expected, f"Failed {desc}: got {res_float}, expected {expected}"

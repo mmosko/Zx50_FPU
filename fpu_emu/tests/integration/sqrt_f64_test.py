@@ -1,49 +1,17 @@
 """Integration tests for SQRT_F64 microcode routine."""
 
 import math
-from pathlib import Path
-import tempfile
-from typing import Any
 import pytest
-from fpu_asm.assembler import Assembler
+from fpu_emu.dispatcher import UserOpcode
 from fpu_emu.fpga_model import FpgaModel
 from fpu_emu.hardware.registers import StatusFlag
-from fpu_emu.hardware.rom import Rom
 from fpu_emu.tests.test_helpers import bits_to_f64, f64_to_bits, user_pop64, user_push64
 
-SQRT_F64_TEST_ASM = """
-.include "fpu_emu/asm/pop_two_64.asm"
-.include "fpu_emu/asm/normalize_f64.asm"
-.include "fpu_emu/asm/sqrt_f64.asm"
-"""
 
-
-@pytest.fixture(scope="module")
-def sqrt_f64_program() -> tuple[list[Any], int, Any]:
-    """Assembles the SQRT_F64 test program once for all tests."""
-    asm = Assembler()
-    assembled = asm.assemble(SQRT_F64_TEST_ASM)
-    instructions = [instr for _, instr in assembled]
-    entry = asm.symbols["USER_SQRT_F64"]
-    tmp_dir = tempfile.TemporaryDirectory()
-    return instructions, entry, tmp_dir
-
-
-@pytest.fixture
-def fpga(sqrt_f64_program: tuple[list[Any], int, Any]) -> FpgaModel:
-    """Creates a fresh FpgaModel for each test."""
-    _, _, tmp_dir = sqrt_f64_program
-    rom = Rom(size=1024, rom_path=Path(tmp_dir.name) / "dummy.rom")
-    return FpgaModel(rom=rom)
-
-
-def run_sqrt_f64(
-    fpga: FpgaModel, instructions: list[Any], entry: int, x: float
-) -> tuple[float | None, int]:
+def run_sqrt_f64(fpga: FpgaModel, x: float) -> tuple[float | None, int]:
     """Executes SQRT_F64 on the FPGA model with the given float."""
     user_push64(fpga, f64_to_bits(x))
-    fpga.reg_file.upc.write(entry)
-    fpga.dispatcher._run(instructions)
+    fpga.dispatcher.execute(UserOpcode.SQRT_F64)
     st = fpga.reg_file.status.read_int()
     err = bool(st & (1 << StatusFlag.ERR.value))
     if err:
@@ -98,14 +66,12 @@ def run_sqrt_f64(
 )
 def test_sqrt_f64_normal_numbers(
     fpga: FpgaModel,
-    sqrt_f64_program: tuple[list[Any], int, Any],
     x: float,
     expected: float,
     desc: str,
 ) -> None:
     """Verifies that SQRT_F64 computes square root within 1 ULP of Python math.sqrt."""
-    instructions, entry, _ = sqrt_f64_program
-    result, st = run_sqrt_f64(fpga, instructions, entry, x)
+    result, st = run_sqrt_f64(fpga, x)
     assert result is not None
     assert not bool(st & (1 << StatusFlag.ERR.value)), f"Unexpected ERR flag for {desc}"
 
@@ -130,27 +96,20 @@ def test_sqrt_f64_normal_numbers(
 )
 def test_sqrt_f64_special_cases(
     fpga: FpgaModel,
-    sqrt_f64_program: tuple[list[Any], int, Any],
     x: float,
     expected: float,
     desc: str,
 ) -> None:
     """Verifies special cases for +/-0.0 and +infinity."""
-    instructions, entry, _ = sqrt_f64_program
-    result, st = run_sqrt_f64(fpga, instructions, entry, x)
+    result, st = run_sqrt_f64(fpga, x)
     assert result is not None
     assert not bool(st & (1 << StatusFlag.ERR.value))
-    assert f64_to_bits(result) == f64_to_bits(expected), (
-        f"{desc}: got {result}, expected {expected}"
-    )
+    assert f64_to_bits(result) == f64_to_bits(expected), f"{desc}: got {result}, expected {expected}"
 
 
-def test_sqrt_f64_nan(
-    fpga: FpgaModel, sqrt_f64_program: tuple[list[Any], int, Any]
-) -> None:
+def test_sqrt_f64_nan(fpga: FpgaModel) -> None:
     """Verifies that sqrt(NaN) returns NaN."""
-    instructions, entry, _ = sqrt_f64_program
-    result, st = run_sqrt_f64(fpga, instructions, entry, float("nan"))
+    result, st = run_sqrt_f64(fpga, float("nan"))
     assert result is not None
     assert not bool(st & (1 << StatusFlag.ERR.value))
     assert math.isnan(result), f"Expected NaN, got {result}"
@@ -167,16 +126,12 @@ def test_sqrt_f64_nan(
         float("-inf"),
     ],
 )
-def test_sqrt_f64_negative_domain_error(
-    fpga: FpgaModel, sqrt_f64_program: tuple[list[Any], int, Any], x: float
-) -> None:
+def test_sqrt_f64_negative_domain_error(fpga: FpgaModel, x: float) -> None:
     """Verifies that negative numbers produce a domain error (ERR=1) and do not push."""
-    instructions, entry, _ = sqrt_f64_program
     user_push64(fpga, f64_to_bits(x))
     assert fpga.reg_file.sp.read_int() == 2
 
-    fpga.reg_file.upc.write(entry)
-    fpga.dispatcher._run(instructions)
+    fpga.dispatcher.execute(UserOpcode.SQRT_F64)
 
     st = fpga.reg_file.status.read_int()
     err = bool(st & (1 << StatusFlag.ERR.value))
@@ -184,14 +139,10 @@ def test_sqrt_f64_negative_domain_error(
     assert fpga.reg_file.sp.read_int() == 0
 
 
-def test_sqrt_f64_stack_underflow(
-    fpga: FpgaModel, sqrt_f64_program: tuple[list[Any], int, Any]
-) -> None:
+def test_sqrt_f64_stack_underflow(fpga: FpgaModel) -> None:
     """Verifies that executing with an empty stack asserts ERR."""
-    instructions, entry, _ = sqrt_f64_program
     assert fpga.reg_file.sp.read_int() == 0
 
-    fpga.reg_file.upc.write(entry)
-    fpga.dispatcher._run(instructions)
+    fpga.dispatcher.execute(UserOpcode.SQRT_F64)
 
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR)

@@ -131,8 +131,8 @@ def test_push_pop_32_roundtrip(fpga: FpgaModel, src, dst, val, desc):
 
     fpga.dispatcher._run(microcode)
 
-    assert fpga.reg_file.sp.read_int() == initial_sp
-    assert get_reg(fpga, dst).read_int() == val
+    assert fpga.reg_file.sp.read_int() == initial_sp, desc
+    assert get_reg(fpga, dst).read_int() == val, desc
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
@@ -163,9 +163,9 @@ def test_push_pop_64_roundtrip(fpga: FpgaModel, src_lo, dst_lo, val_lo, val_hi, 
 
     fpga.dispatcher._run(microcode)
 
-    assert fpga.reg_file.sp.read_int() == initial_sp
-    assert get_reg(fpga, dst_lo).read_int() == val_lo
-    assert get_reg(fpga, dst_hi).read_int() == val_hi
+    assert fpga.reg_file.sp.read_int() == initial_sp, desc
+    assert get_reg(fpga, dst_lo).read_int() == val_lo, desc
+    assert get_reg(fpga, dst_hi).read_int() == val_hi, desc
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW)
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.UNDERFLOW)
     assert not fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
@@ -672,6 +672,7 @@ def test_ldi_flag_set_and_clear(fpga: FpgaModel):
 def test_ldc_immediate_const_pi_f32(fpga: FpgaModel):
     """LDC AL, CONST, PI_F32 loads 32-bit float pi (0x40490FDB) from EBR 2/3."""
     from fpu_emu.rom.fpu_rom_map import FpuTable, FpuConst
+
     microcode = [
         MicroInstruction(
             op=MicroOp.LDC,
@@ -913,6 +914,3 @@ def test_memory_halt_push_preserves_preexisting_err(fpga: FpgaModel):
     assert fpga.reg_file.status.is_bit_set(StatusFlag.BUSY) is False
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR) is True
     assert fpga.reg_file.status.is_bit_set(StatusFlag.OVERFLOW) is True
-
-
-

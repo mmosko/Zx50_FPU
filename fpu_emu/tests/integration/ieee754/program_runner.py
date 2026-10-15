@@ -22,6 +22,7 @@ from fpu_emu.user_opcodes import UserOpcode
 @dataclass
 class ProgramResult:
     """Outcome of running a ProgrammersGuide-style test program."""
+
     success: bool
     actual_bits: Optional[int]
     expected_bits: Optional[int]
@@ -47,31 +48,35 @@ def generate_z80_program(opcode: UserOpcode, operands: List[int], precision: int
     for idx, op in enumerate(operands):
         name = "A (NOS)" if idx == 0 and len(operands) > 1 else ("B (TOS)" if idx == 1 else f"Op{idx}")
         hex_fmt = f"0x{op:08X}" if precision == 32 else f"0x{op:016X}"
-        lines.extend([
-            f"; Step {idx + 1}: Push Operand {name}: {hex_fmt}",
-            f"    LD   HL, OP_{idx}_BUFFER",
-            f"    LD   B, {byte_width}",
-            f"    LD   C, 0x70",
-            "    OTIR                    ; Stream bytes little-endian to Port 0x70",
-        ])
+        lines.extend(
+            [
+                f"; Step {idx + 1}: Push Operand {name}: {hex_fmt}",
+                f"    LD   HL, OP_{idx}_BUFFER",
+                f"    LD   B, {byte_width}",
+                "    LD   C, 0x70",
+                "    OTIR                    ; Stream bytes little-endian to Port 0x70",
+            ]
+        )
 
     step_exec = len(operands) + 1
     step_status = step_exec + 1
     step_pop = step_status + 1
 
-    lines.extend([
-        f"; Step {step_exec}: Execute Opcode via Port 0x71",
-        f"    LD   A, 0x{opcode.value:02X}           ; {opcode.name}",
-        "    OUT  (0x71), A          ; Coprocessor asserts ~WAIT in blocking mode",
-        f"; Step {step_status}: Read Status Flags from Port 0x71",
-        "    IN   A, (0x71)          ; A <- STATUS (BUSY, ERR, SIGN, CARRY, V, U, DF, ZERO)",
-        f"; Step {step_pop}: Pop Computed Result from Port 0x70",
-        "    LD   DE, RESULT_BUFFER",
-        f"    LD   B, {byte_width}",
-        f"    LD   C, 0x70",
-        "    INIR                    ; Pop result bytes LSB to MSB",
-        "    RET",
-    ])
+    lines.extend(
+        [
+            f"; Step {step_exec}: Execute Opcode via Port 0x71",
+            f"    LD   A, 0x{opcode.value:02X}           ; {opcode.name}",
+            "    OUT  (0x71), A          ; Coprocessor asserts ~WAIT in blocking mode",
+            f"; Step {step_status}: Read Status Flags from Port 0x71",
+            "    IN   A, (0x71)          ; A <- STATUS (BUSY, ERR, SIGN, CARRY, V, U, DF, ZERO)",
+            f"; Step {step_pop}: Pop Computed Result from Port 0x70",
+            "    LD   DE, RESULT_BUFFER",
+            f"    LD   B, {byte_width}",
+            "    LD   C, 0x70",
+            "    INIR                    ; Pop result bytes LSB to MSB",
+            "    RET",
+        ]
+    )
 
     return "\n".join(lines)
 
@@ -180,7 +185,9 @@ def execute_test_vector(fpga: FpgaModel, vector: TestVector, opcode: UserOpcode)
         )
 
     # If an invalid operation or div-by-zero occurred and coprocessor set ERR
-    if ("i" in vector.expected_flags or "z" in vector.expected_flags) and fpga.reg_file.status.is_bit_set(StatusFlag.ERR):
+    if ("i" in vector.expected_flags or "z" in vector.expected_flags) and fpga.reg_file.status.is_bit_set(
+        StatusFlag.ERR
+    ):
         return ProgramResult(
             success=True,
             actual_bits=actual_bits,
@@ -281,8 +288,5 @@ def execute_test_vector(fpga: FpgaModel, vector: TestVector, opcode: UserOpcode)
         expected_bits=vector.expected,
         status_reg=status,
         z80_program=z80_prog,
-        error_message=(
-            f"Bit mismatch: actual=0x{actual_bits:X} ({act_f}), "
-            f"expected=0x{vector.expected:X} ({exp_f})"
-        ),
+        error_message=(f"Bit mismatch: actual=0x{actual_bits:X} ({act_f}), expected=0x{vector.expected:X} ({exp_f})"),
     )

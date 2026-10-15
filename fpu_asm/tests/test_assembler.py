@@ -787,6 +787,3 @@ def test_halt_syntax_variants():
     assert prog[4].op == MicroOp.HALT
     assert prog[4].w == IW.W32
     assert prog[4].src1 == Reg.AL
-
-
-

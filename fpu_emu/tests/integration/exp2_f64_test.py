@@ -1,54 +1,17 @@
 """Integration tests for EXP2_F64 microcode routine."""
 
 import math
-from pathlib import Path
-import tempfile
-from typing import Any
 import pytest
-from fpu_asm.assembler import Assembler
 from fpu_emu.fpga_model import FpgaModel
 from fpu_emu.hardware.registers import StatusFlag
-from fpu_emu.hardware.rom import Rom
 from fpu_emu.tests.test_helpers import bits_to_f64, f64_to_bits, user_pop64, user_push64
-
-EXP2_F64_TEST_ASM = """
-.include "fpu_emu/asm/pop_two_64.asm"
-.include "fpu_emu/asm/align_f64.asm"
-.include "fpu_emu/asm/normalize_f64.asm"
-.include "fpu_emu/asm/add_f64.asm"
-.include "fpu_emu/asm/sub_f64.asm"
-.include "fpu_emu/asm/mul_f64.asm"
-.include "fpu_emu/asm/div_f64.asm"
-.include "fpu_emu/asm/exp2_f64.asm"
-"""
+from fpu_emu.user_opcodes import UserOpcode
 
 
-@pytest.fixture(scope="module")
-def exp2_f64_program() -> tuple[list[Any], int, Any]:
-    """Assembles the EXP2_F64 test program once for all tests."""
-    asm = Assembler()
-    assembled = asm.assemble(EXP2_F64_TEST_ASM)
-    instructions = [instr for _, instr in assembled]
-    entry = asm.symbols["USER_EXP2_F64"]
-    tmp_dir = tempfile.TemporaryDirectory()
-    return instructions, entry, tmp_dir
-
-
-@pytest.fixture
-def fpga(exp2_f64_program: tuple[list[Any], int, Any]) -> FpgaModel:
-    """Creates a fresh FpgaModel for each test."""
-    _, _, tmp_dir = exp2_f64_program
-    rom = Rom(size=1024, rom_path=Path(tmp_dir.name) / "dummy.rom")
-    return FpgaModel(rom=rom)
-
-
-def run_exp2_f64(
-    fpga: FpgaModel, instructions: list[Any], entry: int, x: float
-) -> tuple[float | None, int]:
+def run_exp2_f64(fpga: FpgaModel, x: float) -> tuple[float | None, int]:
     """Executes EXP2_F64 on the FPGA model with the given float."""
     user_push64(fpga, f64_to_bits(x))
-    fpga.reg_file.upc.write(entry)
-    fpga.dispatcher._run(instructions)
+    fpga.dispatcher.execute(UserOpcode.EXP2_F64)
     st = fpga.reg_file.status.read_int()
     err = bool(st & (1 << StatusFlag.ERR.value))
     if err:
@@ -107,14 +70,12 @@ def run_exp2_f64(
 )
 def test_exp2_f64_normals(
     fpga: FpgaModel,
-    exp2_f64_program: tuple[list[Any], int, Any],
     x: float,
     expected: float,
     desc: str,
 ) -> None:
     """Verifies that EXP2_F64 computes 2^x with high precision (<= 2 ULP)."""
-    instructions, entry, _ = exp2_f64_program
-    result, st = run_exp2_f64(fpga, instructions, entry, x)
+    result, st = run_exp2_f64(fpga, x)
     assert result is not None
     assert not bool(st & (1 << StatusFlag.ERR.value)), f"Unexpected ERR flag for {desc}"
 
@@ -123,36 +84,32 @@ def test_exp2_f64_normals(
 
     diff = abs(res_bits - expected_bits)
     assert diff <= 16, (
-        f"{desc}: got {result} (0x{res_bits:016x}), "
-        f"expected {expected} (0x{expected_bits:016x}), "
-        f"diff = {diff} ULP"
+        f"{desc}: got {result} (0x{res_bits:016x}), expected {expected} (0x{expected_bits:016x}), diff = {diff} ULP"
     )
 
 
 def test_exp2_f64_infinity(
-    fpga: FpgaModel, exp2_f64_program: tuple[list[Any], int, Any]
+    fpga: FpgaModel,
 ) -> None:
     """Verifies that 2^(+inf) returns +inf, and 2^(-inf) returns +0.0."""
-    instructions, entry, _ = exp2_f64_program
     # +inf
-    res_pos, st_pos = run_exp2_f64(fpga, instructions, entry, float("inf"))
+    res_pos, st_pos = run_exp2_f64(fpga, float("inf"))
     assert res_pos is not None
     assert not bool(st_pos & (1 << StatusFlag.ERR.value))
     assert math.isinf(res_pos) and res_pos > 0
 
     # -inf
-    res_neg, st_neg = run_exp2_f64(fpga, instructions, entry, float("-inf"))
+    res_neg, st_neg = run_exp2_f64(fpga, float("-inf"))
     assert res_neg is not None
     assert not bool(st_neg & (1 << StatusFlag.ERR.value))
     assert res_neg == 0.0
 
 
 def test_exp2_f64_nan(
-    fpga: FpgaModel, exp2_f64_program: tuple[list[Any], int, Any]
+    fpga: FpgaModel,
 ) -> None:
     """Verifies that 2^NaN returns NaN."""
-    instructions, entry, _ = exp2_f64_program
-    result, st = run_exp2_f64(fpga, instructions, entry, float("nan"))
+    result, st = run_exp2_f64(fpga, float("nan"))
     assert result is not None
     assert not bool(st & (1 << StatusFlag.ERR.value))
     assert math.isnan(result)
@@ -168,12 +125,9 @@ def test_exp2_f64_nan(
         1e10,
     ],
 )
-def test_exp2_f64_overflow(
-    fpga: FpgaModel, exp2_f64_program: tuple[list[Any], int, Any], x: float
-) -> None:
+def test_exp2_f64_overflow(fpga: FpgaModel, x: float) -> None:
     """Verifies that large positive inputs overflow to +inf and set OVERFLOW flag."""
-    instructions, entry, _ = exp2_f64_program
-    result, st = run_exp2_f64(fpga, instructions, entry, x)
+    result, st = run_exp2_f64(fpga, x)
     assert result is not None
     assert math.isinf(result) and result > 0
     assert bool(st & (1 << StatusFlag.OVERFLOW.value)), f"Expected OVERFLOW for x={x}"
@@ -188,25 +142,20 @@ def test_exp2_f64_overflow(
         -1e10,
     ],
 )
-def test_exp2_f64_underflow(
-    fpga: FpgaModel, exp2_f64_program: tuple[list[Any], int, Any], x: float
-) -> None:
+def test_exp2_f64_underflow(fpga: FpgaModel, x: float) -> None:
     """Verifies that large negative inputs underflow to +0.0 and set UNDERFLOW flag."""
-    instructions, entry, _ = exp2_f64_program
-    result, st = run_exp2_f64(fpga, instructions, entry, x)
+    result, st = run_exp2_f64(fpga, x)
     assert result is not None
     assert result == 0.0
     assert bool(st & (1 << StatusFlag.UNDERFLOW.value)), f"Expected UNDERFLOW for x={x}"
 
 
 def test_exp2_f64_stack_underflow(
-    fpga: FpgaModel, exp2_f64_program: tuple[list[Any], int, Any]
+    fpga: FpgaModel,
 ) -> None:
     """Verifies that executing with an empty stack asserts ERR."""
-    instructions, entry, _ = exp2_f64_program
     assert fpga.reg_file.sp.read_int() == 0
 
-    fpga.reg_file.upc.write(entry)
-    fpga.dispatcher._run(instructions)
+    fpga.dispatcher.execute(UserOpcode.EXP2_F64)
 
     assert fpga.reg_file.status.is_bit_set(StatusFlag.ERR)
